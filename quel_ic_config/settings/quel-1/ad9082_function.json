@@ -1,0 +1,104 @@
+{
+    "meta": {
+        "version": "1.99.0"
+    },
+    "tx": {
+        "jesd204": {
+            "l": 8,
+            "f": 4,
+            "m": 16,
+            "s": 1,
+            "hd": 0,
+            "k": 64,
+            "n": 16,
+            "np": 16,
+            "cf": 0,
+            "cs": 0,
+            "did": 0,
+            "bid": 0,
+            "lid0": 0,
+            "subclass": 0,
+            "scr": 1,
+            "duallink": 0,
+            "jesdv": 2,
+            "mode_id": 16,
+            "mode_c2r_en": 0,
+            "mode_s_sel": 0
+        },
+        "lane_xbar": [0, 1, 2, 3, 4, 5, 6, 7],
+        "interpolation_rate": {
+            "channel": 3,
+            "main": 8
+        },
+        "shift_freq": {
+            "channel": [0, 0, 0, 0, 0, 0, 0, 0],
+            "main": [0, 0, 0, 0]
+        },
+        "fullscale_current": 40520
+    },
+    "rx": {
+        "jesd204": [
+            {
+                "l": 8,
+                "f": 4,
+                "m": 16,
+                "s": 1,
+                "hd": 0,
+                "k": 64,
+                "n": 16,
+                "np": 16,
+                "cf": 0,
+                "cs": 0,
+                "did": 0,
+                "bid": 0,
+                "lid0": 0,
+                "subclass": 0,
+                "scr": 1,
+                "duallink": 0,
+                "jesdv": 2,
+                "mode_id": 17,
+                "mode_c2r_en": 0,
+                "mode_s_sel": 0
+            },
+            {
+                "l": 8,
+                "f": 4,
+                "m": 16,
+                "s": 1,
+                "hd": 0,
+                "k": 64,
+                "n": 16,
+                "np": 16,
+                "cf": 0,
+                "cs": 0,
+                "did": 0,
+                "bid": 0,
+                "lid0": 0,
+                "subclass": 0,
+                "scr": 1,
+                "duallink": 0,
+                "jesdv": 2,
+                "mode_id": 17,
+                "mode_c2r_en": 0,
+                "mode_s_sel": 0
+            }
+        ],
+        "lane_xbar": [0, 1, 2, 3, 4, 5, 6, 7],
+        "converter_mappings": [
+            [2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        ],
+        "decimation_rate": {
+            "channel": [2, 2, 2, 2, 2, 2, 2, 2],
+            "main": [6, 6, 6, 6]
+        },
+        "shift_freq": {
+            "channel": [0, 0, 0, 0, 0, 0, 0, 0],
+            "main": [0, 0, 0, 0]
+        },
+        "c2r_enable": {
+            "channel": [0, 0, 0, 0, 0, 0, 0, 0],
+            "main": [0, 0, 0, 0]
+        }
+    }
+}

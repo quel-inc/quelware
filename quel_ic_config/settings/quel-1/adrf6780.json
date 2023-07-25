@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "version": "1.1.0",
+    "#": "software reset is conducted within initialization code."
+  },
+  "registers": {
+    "Control": {
+      "parity_en": false,
+      "soft_reset": false
+    },
+    "Enable": {
+      "vga_buffer_enable": true,
+      "detector_enable": false,
+      "lo_buffer_enable": true,
+      "if_mode_enable": true,
+      "iq_mode_enable": false,
+      "lo_x2_enable": false,
+      "lo_ppf_enable": true,
+      "lo_enable": true,
+      "uc_bias_enable": true
+    }
+  }
+}
