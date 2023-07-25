@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "version": "1.1.0",
+    "#": "You should not specify the value of Update register here. Update register will be handled properly in an automatic way."
+  },
+  "registers": {
+    "Config": {
+      "gain_e_h": false,
+      "gain_a_d": false,
+      "buf_e_h": true,
+      "buf_a_d": true,
+      "vdd_e_h": false,
+      "vdd_a_d": false
+    },
+    "PowerDown": {
+      "a": false,
+      "b": false,
+      "c": false,
+      "d": false,
+      "e": false,
+      "f": false,
+      "g": false,
+      "h": false
+    },
+    "DacA": {
+      "data": 0
+    },
+    "DacB": {
+      "data": 0
+    },
+    "DacC": {
+      "data": 0
+    },
+    "DacD": {
+      "data": 0
+    },
+    "DacE": {
+      "data": 0
+    },
+    "DacF": {
+      "data": 0
+    },
+    "DacG": {
+      "data": 0
+    },
+    "DacH": {
+      "data": 0
+    }
+  }
+}

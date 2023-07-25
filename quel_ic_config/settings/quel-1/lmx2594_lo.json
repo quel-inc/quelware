@@ -1,0 +1,24 @@
+{
+    "meta": {
+        "version": "1.1.0"
+    },
+    "registers": {
+        "R0": {"out_mute": true},
+        "R4": {"acal_cmp_dly": 27, "#": "TODO: check if default value is fine for us"},
+        "#R17": {"vco_daciset_strt": 300, "#": "TODO: should be added"},
+        "R20": {"vco_sel": 1, "#": "TODO: this should be 4 for 11.9--12.1GHz or 7 otherwise, should be FIXED"},
+        "R78": {"vco_capctrl_strt": 0, "#": "TODO: should be FIXED"},
+        "R14": {"cpg": 1, "#": "note: this is determined by using PLLATINUM based on our desired phase margin"},
+        "R31": {"chdiv_div2": true, "#": "TODO: not necessary for LO, should be REMOVED after test"},
+        "R75": {"chdiv": 1, "#": "TODO: not necessary for LO, should be REMOVED after test" },
+        "R34": {"pll_n_18_16": 0},
+        "R36": {"pll_n": 120},
+        "#R37": {"pfd_dly_sel": 1, "#": "TODO: should be added. note: 1 because pll_n <= 125"},
+        "R38": {"pll_den_31_16": 0, "#": "TODO: not necessary. should be REMOVED after test"},
+        "R39": {"pll_den_15_0": 1, "#": "TODO: not necessary. should be REMOVED after test"},
+        "R44": {"outa_pwr": 50, "outb_pd": true, "outa_pd": false, "mash_reset_n": true, "mash_order": 0},
+        "R45": {"outa_mux": 1, "out_iset": 0, "outb_pwr": 31, "#": "TODO: outb_pwr should be 0?"},
+        "R46": {"outb_mux": 1},
+        "R72": {"sysref_div": 0, "#": "TODO: not required. should be REMOVED after test"}
+    }
+}

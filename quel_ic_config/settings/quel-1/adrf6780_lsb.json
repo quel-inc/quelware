@@ -1,0 +1,12 @@
+{
+  "meta": {
+    "version": "1.1.0"
+  },
+  "registers": {
+    "LoPath": {
+      "lo_sideband": 1,
+      "q_path_phase_accuracy": 0,
+      "i_path_phase_accuracy": 0
+    }
+  }
+}

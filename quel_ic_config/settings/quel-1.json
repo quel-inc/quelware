@@ -1,0 +1,55 @@
+{
+  "meta": {
+    "version": "1.99.0"
+  },
+  "ad9082": [
+    [
+      "quel-1/ad9082_device.json",
+      "quel-1/ad9082_function.json",
+      "quel-1/ad9082_0_function.json",
+      {"file": "quel-1/ad9082_function_monitor.json", "option": "use_monitor_in_mxfe0"},
+      {"file": "quel-1/ad9082_function_read.json", "option": "use_read_in_mxfe0", "boxtype": "type-a"}
+    ],
+    [
+      "quel-1/ad9082_device.json",
+      "quel-1/ad9082_function.json",
+      "quel-1/ad9082_1_function.json",
+      {"file": "quel-1/ad9082_function_monitor.json", "option": "use_monitor_in_mxfe1"},
+      {"file": "quel-1/ad9082_function_read.json", "option": "use_read_in_mxfe1", "boxtype": "type-a"}
+    ]
+  ],
+  "lmx2594": [
+    [
+      {"file": "quel-1/lmx2594_lo_with_rx.json", "boxtype": "type-a"},
+      {"file": "quel-1/lmx2594_lo.json", "boxtype": "type-b"}
+    ],
+    "quel-1/lmx2594_lo_with_rx.json",
+    "quel-1/lmx2594_lo.json",
+    "quel-1/lmx2594_lo.json",
+    "quel-1/lmx2594_lo.json",
+    "quel-1/lmx2594_lo.json",
+    "quel-1/lmx2594_lo_with_rx.json",
+    [
+      {"file": "quel-1/lmx2594_lo_with_rx.json", "boxtype": "type-a"},
+      {"file": "quel-1/lmx2594_lo.json", "boxtype": "type-b"}
+    ],
+    "quel-1/lmx2594_refclk.json",
+    "quel-1/lmx2594_refclk.json"
+  ],
+  "adrf6780": [
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"],
+    ["quel-1/adrf6780.json", "quel-1/adrf6780_lsb.json"]
+  ],
+  "ad5328": [
+    "quel-1/ad5328.json"
+  ],
+  "gpio": [
+    "quel-1/rfswitch.json"
+  ]
+}
