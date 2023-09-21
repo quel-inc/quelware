@@ -1,6 +1,6 @@
 # 測定自動化ツール
-E4405Bをリモートから使用するためのツール。
-近いうちに、アンリツのスペアナにも対応したい。
+E4405B, E4407B, MS2720Tをリモートから使用するためのツール。
+MS2720Tのチュートリアルは[こちら](./MS2720T.ipynb)。
 
 ## インストール
 Ubuntu20.04にインストールする手順を示す。
@@ -26,8 +26,11 @@ Ubuntu20.04にインストールする手順を示す。
 
 ### Qt5
 次に、PC上にスペアナ画面を出すためのGUIで使用するライブラリをインストールする。
+PyQt5 は quel_inst_tool のパッケージのインストールのときに、依存ライブラリとして自動に追加されるが、pipのバージョンが
+古いとエラーが発生するので、確実に最新版にしておくこと。
 ```shell
 sudo apt install python3-pyqt5
+pip install -U pip
 ```
 とすればよい。
 
@@ -98,3 +101,18 @@ libGL error: failed to load driver: swrast
  [ 1.00075200e+10 -6.60309982e+01]]
 
 ```
+## MS2720TとE440xBの違いについて
+
+上記cliはまだないが，MS2720Tに関してもAPIがある。現時点でのE440xBとの違いを述べる。
+
+### TRACEモード
+
+TRACEモードがMAXHOLDとMINHOLDのとき，E440xBではTRACEモードを設定してからTRACEを取得するまでのMAX(MIN)値をとるようになっている。一方で，MS2720Tでは別のパラメタholdmode_nsweepsの設定値の回数だけsweepを行い，そのsweep回数の中でのMAX(MIN)値をとる。また，MS2720Tでは，TRACEモードに平均（AVER）が選択でき，この場合はパラメタaverage_count分のsweep数のアベレージとなる。一方，E440xBではアベレージカウントの設定が上手く行っておらず今後修正したい。
+
+### SWEEP点数
+
+SWEEP点数がMS2720Tは551固定のため，設定しようとするとValueErrorを返す。
+
+### Peak値取得
+
+MS2720Tではpeak_threshold（default 10 %）で設定したピーク定義のピーク値情報をすべて取得できる。
