@@ -249,14 +249,30 @@ class Thermistor(metaclass=ABCMeta):
 # the following two classws will be moved to the right place.
 class Quel1NormalThermistor(Thermistor):
     def convert(self, v: int) -> float:
+        # Notes: 7303 comes from strange Vdd of 4.45V.
         return _TfpltConv.convert(v / (7307 - v))
 
 
 class Quel1PathSelectorThermistor(Thermistor):
     def convert(self, v: int) -> float:
+        # Notes: thermistor is read by AD7490 on power board v13.
         return _TfpltConv.convert(v / (7307 - v) * 3.0303)
+
+
+class Quel1SeProtoThermistor(Thermistor):
+    def convert(self, v: int) -> float:
+        # TODO: check whether this is OK or not.
+        # Notes: Vref = 2.5V, range = Vref
+        return _TfpltConv.convert(v / (8192 - v) * 3.0303)
+
+
+class Quel1SeProtoExternalThermistor(Thermistor):
+    def convert(self, v: int) -> float:
+        # Notes: Vref = 2.5V, range = 2 * Vref
+        return _TfpltConv.convert(v / (4096 - v))
 
 
 if __name__ == "__main__":
     th00 = Quel1NormalThermistor("th00")
     th26 = Quel1PathSelectorThermistor("th26")
+    thse = Quel1SeProtoThermistor("thse")

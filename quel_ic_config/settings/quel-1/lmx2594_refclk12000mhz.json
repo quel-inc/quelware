@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "version": "1.1.0",
+    "#": "note: R31 and R75 set the ratio of the channel divider to 4 (SEG0=2, SEG1=2)",
+    "#2": "default"
+  },
+  "registers": {
+    "R31": {"chdiv_div2": true},
+    "R75": {"chdiv": 1},
+    "R34": {"pll_n_18_16": 0},
+    "R36": {"pll_n": 30},
+    "R45": {"outa_mux": 1, "out_iset": 0, "#": "note: outb_pwr is kept at its default value, 31"}
+  }
+}

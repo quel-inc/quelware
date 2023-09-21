@@ -4,7 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from quel_ic_config.exstickge_proxy import ExstickgeProxyQuel1, LsiKindId
+from quel_ic_config.exstickge_proxy import LsiKindId
+from quel_ic_config.quel1_config_subsystem import ExstickgeProxyQuel1
 
 
 # jig for unittest

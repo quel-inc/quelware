@@ -225,11 +225,12 @@ class RfSwitchArrayConfigHelper(AbstractIcConfigHelper):
     def flush(self, discard_after_flush=True):
         # notes: load all the virtual registers
         if 0 not in self.updated or 1 not in self.updated:
-            v = self._read_reg(0, True).build()
             if 0 not in self.updated:
-                self.updated[0] = v & 0b00000001111111
+                v0 = self._read_reg(0, True).build()
+                self.updated[0] = v0 & 0b00000001111111
             if 1 not in self.updated:
-                self.updated[1] = v & 0b11111110000000
+                v1 = self._read_reg(1, True).build()
+                self.updated[1] = v1 & 0b11111110000000
 
         self.ic.write_reg(0, self.updated[0] | self.updated[1])  # address is not used, actually.
         if discard_after_flush:

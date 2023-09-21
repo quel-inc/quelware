@@ -26,20 +26,17 @@ class Ad9082V106Dummy(Ad9082V106Mixin):
 
 @pytest.fixture(scope="session")
 def ad9082_obj_3x8():
-    with open("settings/quel-1/ad9082_device.json") as f:
-        device_setting: Dict[str, Any] = json.load(f)
+    with open("settings/quel-1/ad9082.json") as f:
+        base_setting: Dict[str, Any] = json.load(f)
 
-    with open("settings/quel-1/ad9082_function.json") as f:
-        function_setting: Dict[str, Any] = json.load(f)
+    with open("settings/quel-1/ad9082_tx_channel_assign_for_mxfe0.json") as f:
+        additional_setting: Dict[str, Any] = json.load(f)
 
-    with open("settings/quel-1/ad9082_0_function.json") as f:
-        function_setting_additional: Dict[str, Any] = json.load(f)
-
-    default_setting = copy.copy(device_setting)
-    default_setting = deep_update(default_setting, function_setting)
-    default_setting = deep_update(default_setting, function_setting_additional)
-    del default_setting["meta"]
-    cfg_obj = Ad9082Config.parse_obj(default_setting)
+    setting = copy.copy(base_setting)
+    setting = deep_update(setting, base_setting)
+    setting = deep_update(setting, additional_setting)
+    del setting["meta"]
+    cfg_obj = Ad9082Config.parse_obj(setting)
     ic_obj = Ad9082V106Dummy("dummy", cfg_obj)
     ic_obj.initialize()
     return ic_obj

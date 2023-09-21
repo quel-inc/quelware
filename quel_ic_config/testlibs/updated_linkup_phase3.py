@@ -1,5 +1,6 @@
 import copy
 import logging
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Collection, Dict, Final, List, Set, Tuple, Union
 
@@ -7,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 from e7awgsw import CaptureCtrl, CaptureModule, CaptureParam, CaptureUnitTimeoutError
 
-from quel_ic_config import Quel1BoxType, Quel1ConfigObjects
+from quel_ic_config import Quel1ConfigSubsystem
 from testlibs.updated_linkup_phase2 import Quel1WaveGen
 
 logger = logging.getLogger(__name__)
@@ -20,12 +21,14 @@ class Quel1WaveCap:
     DEFAULT_NUM_WORDS: Final[int] = 16384
     DEFAULT_DELAY: Final[int] = 100
     DEFAULT_CAPTURE_TIMEOUT: Final[float] = 0.5
+    DEFAULT_MAX_RETRY_FOR_TIMEOUT: Final[int] = 3
+    DEFAULT_SLEEP_AFTER_TIMEOUT: Final[float] = 5.0
 
-    def __init__(self, wss_addr: str, qco: Quel1ConfigObjects, group: int):
+    def __init__(self, wss_addr: str, qco: Quel1ConfigSubsystem, group: int):
         self.wss_addr = wss_addr
         self.cap_ctrl = CaptureCtrl(self.wss_addr)
 
-        self.qco: Final[Quel1ConfigObjects] = qco
+        self.qco: Final[Quel1ConfigSubsystem] = qco
 
         self.group = group
         if self.group == 0:
@@ -42,59 +45,40 @@ class Quel1WaveCap:
     def phase3a(self, input_port: str, enable_internal_loop: bool) -> None:
         if input_port == "r":
             if enable_internal_loop:
-                self.activate_readloop()
+                self.activate_read_loop()
             else:
-                self.deactivate_readloop()
+                self.deactivate_read_loop()
         elif input_port == "m":
             if enable_internal_loop:
-                self.close_monitor_out()
+                self.activate_monitor_loop()
             else:
-                self.open_monitor_out()
+                self.deactivate_monitor_loop()
         else:
             raise ValueError(f"invalid input port: {input_port}")
 
     def phase3b(self, input_port: str, lo_mhz: Union[int, None] = None, cnco_mhz: Union[float, None] = None):
         if input_port == "r":
             line: int = 0
-            adc_ch: int = 3
         elif input_port == "m":
             line = 1
-            adc_ch = 2
         else:
             raise ValueError(f"invalid input port: '{input_port}'")
 
+        # Notes: basically it is not a good idea to setup LO frequency here because it is shared with an output line.
         # set LO
         if lo_mhz is not None:
-            if lo_mhz % 100 != 0 or lo_mhz < 8000 or lo_mhz > 15000:
-                ValueError("lo_mhz must be multiple of 100, from 8000 to 15000")
-            self.qco.set_lo_freq(self.group, line, lo_mhz // 100)
+            if lo_mhz % 100 != 0:
+                ValueError("lo_mhz must be multiple of 100")
+            self.qco.set_lo_multiplier(self.group, line, lo_mhz // 100)
 
         # set CNCO
         if cnco_mhz is not None:
-            ftw = self.qco.ad9082[self.group].calc_adc_cnco_ftw(int(cnco_mhz * 1000000 + 0.5), fractional_mode=False)
-            logger.info(
-                f"CNCO{adc_ch} of ADCs of {self.qco.ipaddr_css} is set to {cnco_mhz}MHz "
-                f"(ftw = {ftw.ftw}, {ftw.modulus_a}, {ftw.modulus_b})"
-            )
-            self.qco.ad9082[self.group].set_adc_cnco({adc_ch}, ftw)
+            self.qco.set_adc_cnco(self.group, input_port, freq_in_hz=int(cnco_mhz * 1000000 + 0.5))
 
     def phase3c(self, input_port: str, fnco_mhz: Union[float, None] = None):
-        if input_port == "r":
-            # for both groups 0 and 1
-            fnco_ch = 5
-        elif input_port == "m":
-            # for both groups 0 and 1
-            fnco_ch = 4
-        else:
-            raise ValueError(f"invalid input port: '{input_port}'")
-
+        # set FNCO
         if fnco_mhz is not None:
-            ftw = self.qco.ad9082[self.group].calc_adc_fnco_ftw(int(fnco_mhz * 1000000 + 0.5), fractional_mode=False)
-            logger.info(
-                f"FNCO{fnco_ch} of ADCs of {self.qco.ipaddr_css} is set to {fnco_mhz}MHz "
-                f"(ftw = {ftw.ftw}, {ftw.modulus_a}, {ftw.modulus_b})"
-            )
-            self.qco.ad9082[self.group].set_adc_fnco({fnco_ch}, ftw)
+            self.qco.set_adc_fnco(self.group, input_port, freq_in_hz=int(fnco_mhz * 1000000 + 0.5))
 
     # this function comes from phase1d(), and modifies to support "awg triggering".
     # TODO: the design of phase3d depends on the limitation that　only receiving from a single unit at the same time.
@@ -165,10 +149,18 @@ class Quel1WaveCap:
         cpuns: Collection[int],
         timeout: float,
     ) -> Union[Dict[int, npt.NDArray[np.complexfloating]], None]:
-        try:
-            self.cap_ctrl.wait_for_capture_units_to_stop(timeout, *cpuns)
-        except CaptureUnitTimeoutError:
-            logger.warning(f"timeout for waiting capture units {','.join([str(cpun) for cpun in cpuns])} to stop")
+        for i in range(self.DEFAULT_MAX_RETRY_FOR_TIMEOUT):
+            if i > 0:
+                time.sleep(self.DEFAULT_SLEEP_AFTER_TIMEOUT)
+            try:
+                self.cap_ctrl.wait_for_capture_units_to_stop(timeout, *cpuns)
+                break
+            except CaptureUnitTimeoutError:
+                logger.warning(f"timeout for waiting capture units {','.join([str(cpun) for cpun in cpuns])} to stop")
+        else:
+            logger.error(
+                f"too many timeout of capture units {','.join([str(cpun) for cpun in cpuns])} to stop, give up"
+            )
             return None
 
         errdict: Dict[int, List[Any]] = self.cap_ctrl.check_err(*cpuns)
@@ -242,48 +234,37 @@ class Quel1WaveCap:
             data = self.phase3z()
         return data
 
-    def open_monitor_out(self):
-        self.qco.open_monitor(self.group)
-
-    def close_monitor_out(self):
+    def activate_monitor_loop(self):
         self.qco.activate_monitor_loop(self.group)
 
-    def activate_readloop(self):
+    def deactivate_monitor_loop(self):
+        self.qco.open_monitor(self.group)
+
+    def activate_read_loop(self):
         self.qco.activate_read_loop(self.group)
 
-    def deactivate_readloop(self):
+    def deactivate_read_loop(self):
         self.qco.open_read(self.group)
 
 
 if __name__ == "__main__":
     import argparse
 
-    logging.basicConfig(format="%(asctime)s %(name)-8s %(message)s", level=logging.DEBUG)
+    from testlibs.common_arguments import add_common_arguments
 
+    logging.basicConfig(format="%(asctime)s %(name)-8s %(message)s", level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="check the sanity of a pair of input/output ports of QuEL-1")
-    parser.add_argument(
-        "--ipaddr_wss",
-        type=str,
-        required=True,
-        help="IP address of the wave generation/capture subsystem of the target box",
-    )
-    parser.add_argument(
-        "--ipaddr_css", type=str, required=True, help="IP address of the configuration subsystem of the target box"
-    )
-    parser.add_argument(
-        "--boxtype",
-        type=str,
-        choices=["quel1-a", "quel1-b", "qube-a", "qube-b"],
-        required=False,
-        default="nonexistent",
-        help="IGNORED",
-    )
-    parser.add_argument("--monitor", action="store_true", help="IGNORED")
+    add_common_arguments(parser, use_ipaddr_sss=False)
     args = parser.parse_args()
 
-    qco_ = Quel1ConfigObjects(args.ipaddr_css, Quel1BoxType.fromstr(args.boxtype), args.config_root)
-    css_p3_g0 = Quel1WaveCap(args.ipaddr_wss, qco_, 0)
-    css_p3_g1 = Quel1WaveCap(args.ipaddr_wss, qco_, 1)
+    qco_ = Quel1ConfigSubsystem(
+        css_addr=str(args.ipaddr_css),
+        boxtype=args.boxtype,
+        config_path=args.config_root,
+        config_options=args.config_options,
+    )
+    css_p3_g0 = Quel1WaveCap(str(args.ipaddr_wss), qco_, 0)
+    css_p3_g1 = Quel1WaveCap(str(args.ipaddr_wss), qco_, 1)
     print(
         "How to use: data = css_p3_g0.run('m', False), you'll capture wave data from monitor-in port "
         "(i.e., port 5 of quel-1x). To use internal loopback, pass True to the second argument."

@@ -167,3 +167,4 @@ requirements.txt
 # common generated directory
 log/
 artifacts/
+*.orig/

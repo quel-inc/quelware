@@ -6,7 +6,7 @@ from typing import Any, Dict, Set
 import pytest
 from pydantic.utils import deep_update
 
-from quel_ic_config import Quel1BoxType, Quel1ConfigObjects, QuelConfigOption
+from quel_ic_config import Quel1BoxType, Quel1ConfigOption, Quel1ConfigSubsystem
 
 
 def _remove_comments(settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -20,7 +20,7 @@ def _remove_comments(settings: Dict[str, Any]) -> Dict[str, Any]:
     return s1
 
 
-def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[QuelConfigOption]) -> Dict[str, Any]:
+def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1ConfigOption]) -> Dict[str, Any]:
     NUM_AD9082 = 2
     NUM_LMX2594 = 10
     NUM_ADRF6780 = 8
@@ -53,25 +53,23 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[QuelConf
     # TODO: loading root file tree from "quel-1.json" to find other json files to load.
     #       (currently, files are loaded in an ad hoc manner.)
     for idx in range(NUM_AD9082):
-        with open(_config_path / boxtype_main / "ad9082_device.json") as f:
+        with open(_config_path / boxtype_main / "ad9082.json") as f:
             setting: Dict[str, Any] = json.load(f)
-        with open(_config_path / boxtype_main / "ad9082_function.json") as f:
-            setting = deep_update(setting, json.load(f))
-        with open(_config_path / boxtype_main / f"ad9082_{idx:d}_function.json") as f:
+        with open(_config_path / boxtype_main / f"ad9082_tx_channel_assign_for_mxfe{idx:d}.json") as f:
             setting = deep_update(setting, json.load(f))
         if idx == 0:
-            if QuelConfigOption.USE_READ_IN_MXFE0 in config_options:
-                with open(_config_path / boxtype_main / "ad9082_function_read.json") as f:
+            if Quel1ConfigOption.USE_READ_IN_MXFE0 in config_options:
+                with open(_config_path / boxtype_main / "ad9082_read.json") as f:
                     setting = deep_update(setting, json.load(f))
             else:
-                with open(_config_path / boxtype_main / "ad9082_function_monitor.json") as f:
+                with open(_config_path / boxtype_main / "ad9082_monitor.json") as f:
                     setting = deep_update(setting, json.load(f))
         elif idx == 1:
-            if QuelConfigOption.USE_READ_IN_MXFE1 in config_options:
-                with open(_config_path / boxtype_main / "ad9082_function_read.json") as f:
+            if Quel1ConfigOption.USE_READ_IN_MXFE1 in config_options:
+                with open(_config_path / boxtype_main / "ad9082_read.json") as f:
                     setting = deep_update(setting, json.load(f))
             else:
-                with open(_config_path / boxtype_main / "ad9082_function_monitor.json") as f:
+                with open(_config_path / boxtype_main / "ad9082_monitor.json") as f:
                     setting = deep_update(setting, json.load(f))
         root["meta"]["ad9082"].append(setting["meta"])
         del setting["meta"]
@@ -131,20 +129,20 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[QuelConf
 @pytest.mark.parametrize(
     ("boxtype", "config_options"),
     [
-        (Quel1BoxType.QuEL1_TypeA, {QuelConfigOption.USE_READ_IN_MXFE0, QuelConfigOption.USE_READ_IN_MXFE1}),
-        (Quel1BoxType.QuEL1_TypeA, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_READ_IN_MXFE1}),
-        (Quel1BoxType.QuEL1_TypeA, {QuelConfigOption.USE_READ_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
-        (Quel1BoxType.QuEL1_TypeA, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
-        (Quel1BoxType.QuEL1_TypeB, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
-        (Quel1BoxType.QuBE_TypeA, {QuelConfigOption.USE_READ_IN_MXFE0, QuelConfigOption.USE_READ_IN_MXFE1}),
-        (Quel1BoxType.QuBE_TypeA, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_READ_IN_MXFE1}),
-        (Quel1BoxType.QuBE_TypeA, {QuelConfigOption.USE_READ_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
-        (Quel1BoxType.QuBE_TypeA, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
-        (Quel1BoxType.QuBE_TypeB, {QuelConfigOption.USE_MONITOR_IN_MXFE0, QuelConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuEL1_TypeA, {Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1}),
+        (Quel1BoxType.QuEL1_TypeA, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1}),
+        (Quel1BoxType.QuEL1_TypeA, {Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuEL1_TypeA, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuEL1_TypeB, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuBE_TypeA, {Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1}),
+        (Quel1BoxType.QuBE_TypeA, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1}),
+        (Quel1BoxType.QuBE_TypeA, {Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuBE_TypeA, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
+        (Quel1BoxType.QuBE_TypeB, {Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1}),
     ],
 )
-def test_config_loader(boxtype: Quel1BoxType, config_options: Set[QuelConfigOption]):
-    qco = Quel1ConfigObjects("10.255.0.253", boxtype, Path("settings"), config_options)
+def test_config_loader(boxtype: Quel1BoxType, config_options: Set[Quel1ConfigOption]):
+    qco = Quel1ConfigSubsystem("241.3.5.6", boxtype, Path("settings"), config_options)
 
     target = copy.copy(qco._param)
     del target["meta"]

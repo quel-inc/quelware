@@ -25,7 +25,7 @@
 #define AD9081_DAC_CLK_FREQ_HZ_MIN 2850000000ULL
 #define AD9081_DAC_CLK_FREQ_HZ_MAX 12600000000ULL
 #define AD9081_ADC_CLK_FREQ_HZ_MIN 1425000000ULL
-#define AD9081_ADC_CLK_FREQ_HZ_MAX 6200000000ULL
+#define AD9081_ADC_CLK_FREQ_HZ_MAX 6300000000ULL
 #define AD9081_REF_CLK_FREQ_HZ_MIN 100000000ULL
 #define AD9081_REF_CLK_FREQ_HZ_MAX 2000000000ULL
 
@@ -963,6 +963,19 @@ int32_t adi_ad9081_device_nco_sync_pre(adi_ad9081_device_t *device);
  * @return <0                                   Failed. @see adi_cms_error_e for details.
  */
 int32_t adi_ad9081_device_nco_sync_post(adi_ad9081_device_t *device);
+
+/**
+ * @brief  Get Device Temperature
+ *
+ * @param  device         Pointer to the device structure
+ * @param  max    Pointer to the maximum temperature
+ * @param  min    Pointer to the minimum temperature
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_device_get_temperature(adi_ad9081_device_t *device, 
+					int16_t *max, int16_t *min);
 
 /**
  * @brief  Startup Tx
@@ -3156,7 +3169,7 @@ adi_ad9081_adc_pfir_coeffs_set(adi_ad9081_device_t *device,
  *                            bit 2: real_cross_i load, bit 3: real_cross_q load
  *                            bit 4: complex load
  * @param  coeffs         Coefficient value array pointer
- * @param  coeffs_num     Coefficient value array(coeffs) size
+ * @param  coeffs_size     Coefficient value array(coeffs) size
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
@@ -3168,7 +3181,7 @@ int32_t adi_ad9081_adc_pfir_config_set(
 	adi_ad9081_adc_pfir_q_mode_e q_mode, adi_ad9081_adc_pfir_gain_e ix_gain,
 	adi_ad9081_adc_pfir_gain_e iy_gain, adi_ad9081_adc_pfir_gain_e qx_gain,
 	adi_ad9081_adc_pfir_gain_e qy_gain, uint8_t coeff_load_sel,
-	uint16_t *coeffs, uint8_t coeffs_num);
+	uint16_t *coeffs, uint8_t coeffs_size);
 
 /**
  * @brief  Set Fine DDC Samples Status Selection

@@ -1,13 +1,12 @@
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
-from pathlib import Path
-from typing import Dict, Final, List, Set, Tuple, Union
+from typing import Final, List, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 from e7awgsw import AWG, AwgCtrl, AwgTimeoutError, WaveSequence
 
-from quel_ic_config import Adrf6780LoSideband, Quel1BoxType, Quel1ConfigObjects
+from quel_ic_config import Quel1ConfigSubsystem
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +23,11 @@ class Quel1WaveGen:
 
     AWG_STOP_TIMEOUT_AFTER_TERMINATE: Final[float] = 1.0  # [sec]
 
-    def __init__(self, wss_addr: str, qco: Quel1ConfigObjects, group: int):
+    def __init__(self, wss_addr: str, qco: Quel1ConfigSubsystem, group: int):
         self.wss_addr = wss_addr
         self.awg_ctrl = AwgCtrl(self.wss_addr)
 
-        self.qco: Final[Quel1ConfigObjects] = qco
+        self.qco: Final[Quel1ConfigSubsystem] = qco
 
         if group not in {0, 1}:
             raise ValueError(f"invalid group '{group}', must be either 0 or 1.")
@@ -47,16 +46,8 @@ class Quel1WaveGen:
         :param line: the index of target line.
         :return: None
         """
-        ic, helper = self.qco.gpio[0]
-        current_sw = ic.read_reg(0)
-        helper.write_field(f"Group{self.group}", **{f"path{line}": False})
-        helper.flush()
-
-        altered_sw = ic.read_reg(0)
+        self.qco.pass_line(self.group, line)
         self.opened_line.add(line)
-        logger.info(
-            f"alter the state of RF switch array of {self.qco.ipaddr_css} from {current_sw:014b} to {altered_sw:014b}"
-        )
 
     def phase2b(
         self,
@@ -77,77 +68,27 @@ class Quel1WaveGen:
         if not (0 <= line <= 3):
             raise ValueError(f"invalid index of line: {line}")
 
-        if self.group == 0:
-            dac_ch = line
-            mixer_idx = line
-            vatt_idx = line
-        elif self.group == 1:
-            dac_ch = 3 - line
-            mixer_idx = 7 - line
-            vatt_idx = 7 - line
-        else:
-            raise AssertionError
-
-        # set sideband
-        if sideband == "L":
-            logger.info(f"ADRF6780[{mixer_idx}] is set to LSB mode")
-            ic, _ = self.qco.adrf6780[mixer_idx]
-            ic.set_lo_sideband(Adrf6780LoSideband.Lsb)
-        elif sideband == "U":
-            logger.info(f"ADRF6780[{mixer_idx}] is set to USB mode")
-            ic, _ = self.qco.adrf6780[mixer_idx]
-            ic.set_lo_sideband(Adrf6780LoSideband.Usb)
-        elif sideband is None:
-            pass
-        else:
-            raise ValueError(f"unexpected sideband value: '{sideband}'")
+        if sideband is not None:
+            self.qco.set_sideband(self.group, line, sideband)
 
         # set LO
         if lo_mhz is not None:
-            if lo_mhz % 100 != 0 or lo_mhz < 8000 or lo_mhz > 15000:
-                ValueError("lo_mhz must be multiple of 100, from 8000 to 15000")
-            self.qco.set_lo_freq(self.group, line, lo_mhz // 100)
+            if lo_mhz % 100 != 0:
+                raise ValueError("lo_mhz must be multiple of 100")
+            self.qco.set_lo_multiplier(self.group, line, lo_mhz // 100)
 
         # set CNCO
         if cnco_mhz is not None:
-            ftw = self.qco.ad9082[self.group].calc_dac_cnco_ftw(int(cnco_mhz * 1000000 + 0.5), fractional_mode=False)
-            logger.info(
-                f"CNCO{dac_ch} of DACs is set to {cnco_mhz}MHz " f"(ftw = {ftw.ftw}, {ftw.modulus_a}, {ftw.modulus_b})"
-            )
-            self.qco.ad9082[self.group].set_dac_cnco({dac_ch}, ftw)
+            self.qco.set_dac_cnco(self.group, line, freq_in_hz=int(cnco_mhz * 1000000 + 0.5))
 
         # set VATT
         if vatt is not None:
-            if not (0 <= vatt < 4096):
-                raise ValueError("invalid vatt value")
-            if vatt > self.MAX_VATT:
-                vatt = self.MAX_VATT
-                logger.warning(f"vatt is clipped to 0xC9B that is corresponding to {self.MAX_VATT}")
-
-            logger.info(f"VATT{vatt_idx} is set to 0x{vatt:03x}")
-            ad5328, _ = self.qco.ad5328[0]
-            ad5328.set_output(vatt_idx, vatt, update_dac=True)
+            self.qco.set_vatt(self.group, line, vatt)
 
     def phase2c(self, line: int, awg_idx: int, fnco_mhz: Union[float, None] = None):
-        if self.group == 0:
-            fnco_chs: Tuple[int, ...] = [(0,), (1,), (4, 3, 2), (7, 6, 5)][line]
-        elif self.group == 1:
-            fnco_chs = [(7,), (6,), (5, 4, 3), (2, 1, 0)][line]
-        else:
-            raise AssertionError
-
-        if awg_idx < len(fnco_chs):
-            fnco_ch = fnco_chs[awg_idx]
-        else:
-            raise ValueError(f"the index of awg is out of range: {awg_idx} >= {len(fnco_chs)}")
-
         # set FNCO
         if fnco_mhz is not None:
-            ftw = self.qco.ad9082[self.group].calc_dac_fnco_ftw(int(fnco_mhz * 1000000 + 0.5), fractional_mode=False)
-            logger.info(
-                f"FNCO{fnco_ch} of DACs is set to {fnco_mhz}MHz (ftw = {ftw.ftw}, {ftw.modulus_a}, {ftw.modulus_b})"
-            )
-            self.qco.ad9082[self.group].set_dac_fnco({fnco_ch}, ftw)
+            self.qco.set_dac_fnco(self.group, line, awg_idx, freq_in_hz=int(fnco_mhz * 1000000 + 0.5))
 
     def get_awg_unit(self, line: int, awg_idx: int) -> int:
         # choose AWG to activate
@@ -263,25 +204,12 @@ class Quel1WaveGen:
             self.activated_awgs.clear()
 
     def phase2z(self):
-        update: Dict[str, bool] = {}
-
         if len(self.opened_line) > 0:
             logger.info(
                 f"closing RF switches of group {self.group} " f"line {', '.join([str(x) for x in self.opened_line])}..."
             )
-            ic, helper = self.qco.gpio[0]
-
-            current_sw: int = ic.read_reg(0)
-            for sw in self.opened_line:
-                update[f"path{sw:d}"] = True
-            helper.write_field(f"Group{self.group}", **update)
-            helper.flush()
+            self.qco.block_lines(self.group, self.opened_line)
             self.opened_line.clear()
-            altered_sw: int = ic.read_reg(0)
-            logger.info(
-                f"alter the state of RF switch array of {self.qco.ipaddr_css} "
-                f"from {current_sw:014b} to {altered_sw:014b}"
-            )
         else:
             logger.info("no open RF switches")
 
@@ -339,60 +267,38 @@ class Quel1WaveGen:
             self.awg_ctrl.terminate_awgs(AWG.U7, AWG.U6, AWG.U5, AWG.U4, AWG.U3, AWG.U2, AWG.U1, AWG.U0)
         else:
             raise AssertionError
-
-        logger.info(f"force to close all the RF switches of group {self.qco.ipaddr_css}:{self.group}")
-        _, helper = self.qco.gpio[0]
-        helper.write_field(f"Group{self.group}", path0=True, path1=True, path2=True, path3=True, monitor=True)
-        helper.flush()
         self.activated_awgs.clear()
 
-    def open_monitor_out(self):
+        logger.info(f"force to close all the RF switches of group {self.qco.ipaddr_css}:{self.group}")
+        self.qco.block_lines(self.group, {0, 1, 2, 3})
+        self.qco.activate_monitor_loop(self.group)
+        self.opened_line.clear()
+
+    def open_monitor(self):
         self.qco.open_monitor(self.group)
 
-    def close_monitor_out(self):
-        self.qco.activate_monitor_loop(self.group)
-
-    def activate_readloop(self):
-        self.qco.activate_read_loop(self.group)
-
-    def deactivate_readloop(self):
-        self.qco.open_read(self.group)
+    def block_monitor(self):
+        self.qco.block_monitor(self.group)
 
 
 if __name__ == "__main__":
     import argparse
 
-    logging.basicConfig(format="%(asctime)s %(name)-8s %(message)s", level=logging.DEBUG)
+    from testlibs.common_arguments import add_common_arguments
 
+    logging.basicConfig(format="%(asctime)s %(name)-8s %(message)s", level=logging.DEBUG)
     parser = argparse.ArgumentParser(description="check the sanity of a pair of input/output ports of QuEL-1")
-    parser.add_argument(
-        "--ipaddr_wss",
-        type=str,
-        required=True,
-        help="IP address of the wave generation/capture subsystem of the target box",
-    )
-    parser.add_argument(
-        "--ipaddr_css", type=str, required=True, help="IP address of the configuration subsystem of the target box"
-    )
-    parser.add_argument(
-        "--boxtype",
-        type=str,
-        choices=["quel1-a", "quel1-b", "qube-a", "qube-b"],
-        required=True,
-        help="a box type of the target box",
-    )
-    parser.add_argument("--monitor", action="store_true", help="IGNORED")
-    parser.add_argument(
-        "--config_root",
-        type=Path,
-        default="settings",
-        help="path to configuration file root",
-    )
+    add_common_arguments(parser, use_ipaddr_sss=False)
     args = parser.parse_args()
 
-    qco_ = Quel1ConfigObjects(args.ipaddr_css, Quel1BoxType.fromstr(args.boxtype), args.config_root)
-    css_p2_g0 = Quel1WaveGen(args.ipaddr_wss, qco_, 0)
-    css_p2_g1 = Quel1WaveGen(args.ipaddr_wss, qco_, 1)
+    qco_ = Quel1ConfigSubsystem(
+        css_addr=str(args.ipaddr_css),
+        boxtype=args.boxtype,
+        config_path=args.config_root,
+        config_options=args.config_options,
+    )
+    css_p2_g0 = Quel1WaveGen(str(args.ipaddr_wss), qco_, 0)
+    css_p2_g1 = Quel1WaveGen(str(args.ipaddr_wss), qco_, 1)
     print("How to use: css_p2_g0.run(2, 0), you'll see 10GHz signal on ports 2(3) of QuEL-1 Type-A(B) box.")
     print("          : css_p2_g1.run(2, 0), you'll see 10GHz signal on ports 9(10) of QuEL-1 Type-A(B) box.")
     print("          : css_p2_g0.stop(), for stopping activated channel.")

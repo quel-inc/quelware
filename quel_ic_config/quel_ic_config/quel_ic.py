@@ -5,7 +5,8 @@ from typing import Any, Dict, Tuple, Union
 from quel_ic_config.ad5328 import Ad5328Mixin
 from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
 from quel_ic_config.adrf6780 import Adrf6780Mixin
-from quel_ic_config.exstickge_proxy import ExstickgeProxyQuel1, LsiKindId
+from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
+from quel_ic_config.generic_gpio import GenericGpioMixin
 from quel_ic_config.lmx2594 import Lmx2594Mixin
 from quel_ic_config.rfswitcharray import (
     QubeRfSwitchArrayMixin,
@@ -17,25 +18,25 @@ logger = logging.getLogger(__name__)
 
 
 class Quel1Ic(metaclass=ABCMeta):
-    def __init__(self, proxy: ExstickgeProxyQuel1, kind: LsiKindId, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, kind: LsiKindId, idx: int):
         self.proxy = proxy
         self.kind = kind
         self.idx = idx
-        # TODO: it may be fine if ExstickgeProxyQuel1 conducts range check of (kind, idx) here.
+        # TODO: it may be fine if ExstickgeProxyBase conducts range check of (kind, idx) here.
 
     def _read_reg(self, addr: int) -> int:
-        """A universal method for reading registers of the corresponding ADRF6780 IC. You should not use this method
+        """A universal method for reading registers of the corresponding IC. You should not use this method
         if an equivalent specialized method is available.
         :param addr: the address of the register to read
         :return: the reading of the register
         """
         v = self.proxy.read_reg(self.kind, self.idx, addr)
         if v is None:
-            raise RuntimeError(f"failed to read register 0x{addr:02x} of ADRF6780[{self.idx}]")
+            raise RuntimeError(f"failed to read register 0x{addr:02x} of {self.kind.name}[{self.idx}]")
         return v & 0xFFFF
 
     def _read_reg_no_except(self, addr: int) -> Union[None, int]:
-        """A universal method for reading registers of the corresponding ADRF6780 IC. You should not use this method
+        """A universal method for reading registers of the corresponding IC. You should not use this method
         if an equivalent specialized method is available.
         :param addr: the address of the register to read
         :return: the reading of the register, it can be None for failure.
@@ -47,18 +48,20 @@ class Quel1Ic(metaclass=ABCMeta):
             return v & 0xFFFF
 
     def _write_reg(self, addr: int, data: int) -> None:
-        """A universal method for writing registers of the corresponding ADRF6780 IC. You should not use this method
+        """A universal method for writing registers of the corresponding IC. You should not use this method
         if an equivalent specialized method is available.
         :param addr: the address of the register to write
         :param data: a value to be written into the specified register
         """
         r = self.proxy.write_reg(self.kind, self.idx, addr, data & 0xFFFF)
         if not r:
-            raise RuntimeError(f"failed to write 0x{data:0x4} into register 0x{addr:02x} of ADRF6780[{self.idx}]")
+            raise RuntimeError(
+                f"failed to write 0x{data:04x} into register 0x{addr:02x} of {self.kind.name}[{self.idx}]"
+            )
         return
 
     def _write_reg_no_except(self, addr: int, data: int) -> bool:
-        """A universal method for writing registers of the corresponding ADRF6780 IC. You should not use this method
+        """A universal method for writing registers of the corresponding IC. You should not use this method
         if an equivalent specialized method is available.
         :param addr: the address of the register to write
         :param data: a value to be written into the specified register
@@ -68,7 +71,7 @@ class Quel1Ic(metaclass=ABCMeta):
 
 
 class Adrf6780(Adrf6780Mixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         Adrf6780Mixin.__init__(self, f"ADRF6780[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.ADRF6780, idx)
 
@@ -80,7 +83,7 @@ class Adrf6780(Adrf6780Mixin, Quel1Ic):
 
 
 class Ad5328(Ad5328Mixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         Ad5328Mixin.__init__(self, f"AD5328[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.AD5328, idx)
 
@@ -93,7 +96,7 @@ class Ad5328(Ad5328Mixin, Quel1Ic):
 
 # TODO: consider to subclass it into ForLo and ForRefClk or not.
 class Lmx2594(Lmx2594Mixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         Lmx2594Mixin.__init__(self, f"LMX2594[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.LMX2594, idx)
 
@@ -105,7 +108,7 @@ class Lmx2594(Lmx2594Mixin, Quel1Ic):
 
 
 class Ad9082V106(Ad9082V106Mixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int, param_in: Union[str, Dict[str, Any], Ad9082Config]):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int, param_in: Union[str, Dict[str, Any], Ad9082Config]):
         Ad9082V106Mixin.__init__(self, f"AD9082[{idx}]", param_in)
         Quel1Ic.__init__(self, proxy, LsiKindId.AD9082, idx)
 
@@ -124,7 +127,7 @@ class Ad9082V106(Ad9082V106Mixin, Quel1Ic):
 
 
 class QubeRfSwitchArray(QubeRfSwitchArrayMixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         QubeRfSwitchArrayMixin.__init__(self, f"QubeRfSwitchArray[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
 
@@ -140,7 +143,7 @@ class QubeRfSwitchArray(QubeRfSwitchArrayMixin, Quel1Ic):
 
 
 class Quel1TypeARfSwitchArray(Quel1TypeARfSwitchArrayMixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         Quel1TypeARfSwitchArrayMixin.__init__(self, f"Quel1TypeARfSwitchArray[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
 
@@ -156,7 +159,7 @@ class Quel1TypeARfSwitchArray(Quel1TypeARfSwitchArrayMixin, Quel1Ic):
 
 
 class Quel1TypeBRfSwitchArray(Quel1TypeBRfSwitchArrayMixin, Quel1Ic):
-    def __init__(self, proxy: ExstickgeProxyQuel1, idx: int):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         Quel1TypeBRfSwitchArrayMixin.__init__(self, f"Quel1TypeBRfSwitchArray[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
 
@@ -169,3 +172,15 @@ class Quel1TypeBRfSwitchArray(Quel1TypeBRfSwitchArrayMixin, Quel1Ic):
         if addr != 0:
             raise ValueError(f"invalid address of {self.name}: {addr}")
         Quel1Ic._write_reg(self, addr, data)
+
+
+class GenericGpio(GenericGpioMixin, Quel1Ic):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        GenericGpioMixin.__init__(self, f"GenericGpio[{idx}]")
+        Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
+
+    def read_reg(self, addr: int) -> int:
+        return Quel1Ic._read_reg(self, addr)
+
+    def write_reg(self, addr: int, data: int) -> None:
+        return Quel1Ic._write_reg(self, addr, data)

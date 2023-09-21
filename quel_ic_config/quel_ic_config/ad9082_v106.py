@@ -7,7 +7,7 @@ from typing import Any, Collection, Dict, Final, List, Sequence, Tuple, Union
 
 import adi_ad9081_v106 as ad9081
 import numpy as np
-from adi_ad9081_v106 import CmsError, Device, NcoFtw
+from adi_ad9081_v106 import ChipTemperatures, CmsError, Device, NcoFtw
 from numpy.typing import NDArray
 from pydantic import BaseModel, Extra
 
@@ -15,6 +15,7 @@ from quel_ic_config.abstract_ic import AbstractIcMixin
 
 logger = logging.getLogger(__name__)
 
+# TODO: this depends on Clock Setting.
 MAX_CNCO_SHIFT = 6000000000
 MIN_CNCO_SHIFT = -6000000000
 
@@ -357,7 +358,7 @@ class Ad9082TxConfig(NoExtraBaseModel):
     channel_assign: Ad9082ChannelAssignConfig
     interpolation_rate: Ad9082InterpolationRateConfig
     shift_freq: Ad9082ShiftFreqConfig
-    fullscale_current: int
+    fullscale_current: Tuple[int, int, int, int]
 
 
 class _Ad9082VirtualConverterConfigEnum(IntEnum):
@@ -738,11 +739,8 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(f"{CmsError(rc).name}")
 
-        # TODO: should be reduced to 37750uA, with using adi_ad9081_dac_fsc_set() API.
-        assert param_tx.fullscale_current == 40520, "currently tx -> fullscale_current must be fixed to 40520"
-        self.hal_reg_set(0x001B, 0x0F)
-        self.hal_reg_set(0x0117, 0xA0)
-        self.hal_reg_set(0x0118, 0xFF)
+        for i in range(4):
+            self.set_fullscale_current(1 << i, param_tx.fullscale_current[i])
 
     def _startup_rx(self, param_rx: Ad9082RxConfig) -> None:
         logger.info("starting up ADCs")
@@ -814,11 +812,11 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if fractional_mode:
             rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
         else:
             rc = ad9081.hal_calc_tx_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.hal_calc_tx_nco_ftw() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.hal_calc_tx_nco_ftw() failed with error code: {rc}")
         return ftw
 
     def calc_dac_fnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
@@ -891,10 +889,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if dac_mask != ad9081.DAC_NONE:
             rc = ad9081.dac_duc_nco_enable_set(self.device, int(dac_mask), int(ad9081.DAC_CH_NONE), 1)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
             rc = ad9081.dac_duc_nco_ftw_set(self.device, int(dac_mask), int(ad9081.DAC_CH_NONE), ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
 
     def set_dac_fnco(self, channels: Collection[int], ftw: NcoFtw) -> None:
         ch_mask: ad9081.DacChannelSelect = ad9081.DAC_CH_NONE
@@ -904,10 +902,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if ch_mask != ad9081.DAC_CH_NONE:
             rc = ad9081.dac_duc_nco_enable_set(self.device, int(ad9081.DAC_NONE), int(ch_mask), 1)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
             rc = ad9081.dac_duc_nco_ftw_set(self.device, int(ad9081.DAC_NONE), int(ch_mask), ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
 
     # Notes: the calculation and set of ftw are separated for the integration of DAC and ADC in QuEL-1
     #        this class should not implement QuEL-1 specific features, but provide the flexibility for them.
@@ -919,20 +917,21 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if fractional_mode:
             rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
         else:
             rc = ad9081.hal_calc_rx_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.hal_calc_rx_nco_ftw() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.hal_calc_rx_nco_ftw() failed with error code: {rc}")
         return ftw
 
     def calc_adc_fnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
         # TODO: take index of ADC in the case that different decimation rates are used among ADCs.
+        # TODO: double shift value when c2r is enabled (low priority).
         logger.warning(
             "be aware the current implementation works only when all the ADCs shares identical decimation rate."
         )
         # Notes: be aware that rounding error may be induced here.
-        return self.calc_adc_cnco_ftw(int(shift_hz / self.param.rx.decimation_rate.main[0] + 0.5), fractional_mode)
+        return self.calc_adc_cnco_ftw(int(shift_hz * self.param.rx.decimation_rate.main[0] + 0.5), fractional_mode)
 
     def set_adc_cnco(self, adcs: Collection[int], ftw: NcoFtw) -> None:
         adc_mask: ad9081.AdcCoarseDdcSelect = ad9081.ADC_CDDC_NONE
@@ -947,10 +946,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
                 ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.modulus_a == 0 else ad9081.ADC_NCO_VIF,
             )
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.adc_ddc_coarse_nco_mode_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.adc_ddc_coarse_nco_mode_set() failed with error code: {rc}")
             rc = ad9081.adc_ddc_coarse_nco_ftw_set(self.device, int(adc_mask), ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.adc_ddc_nco_ftw_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.adc_ddc_nco_ftw_set() failed with error code: {rc}")
 
     def set_adc_fnco(self, channels: Collection[int], ftw: NcoFtw) -> None:
         ch_mask: ad9081.AdcFineDdcSelect = ad9081.ADC_FDDC_NONE
@@ -965,7 +964,30 @@ class Ad9082V106Mixin(AbstractIcMixin):
                 ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.modulus_a == 0 else ad9081.ADC_NCO_VIF,
             )
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.adc_ddc_nco_mode_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.adc_ddc_nco_mode_set() failed with error code: {rc}")
             rc = ad9081.adc_ddc_fine_nco_ftw_set(self.device, int(ch_mask), ftw)
             if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError("ad9081.adc_ddc_fine_nco_set() failed with error code: {rc}")
+                raise RuntimeError(f"ad9081.adc_ddc_fine_nco_set() failed with error code: {rc}")
+
+    def set_fullscale_current(self, dacs: int, current: int):
+        if dacs == 0 or (dacs & 0x0F) != dacs:
+            raise ValueError("wrong specifier of DACs {dacs:x}")
+        if not 0 <= current <= 40520:
+            raise ValueError("invalid current {current}uA")
+
+        if current == 40520:
+            # TODO: should be reduced to 37750uA, with using adi_ad9081_dac_fsc_set() API.
+            # Notes: this implementation is kept for the historical reason.
+            logger.info("setting fullscale current to 40520uA, that is the conventional value for QuEL-1")
+            self.hal_reg_set(0x001B, dacs)
+            self.hal_reg_set(0x0117, 0xA0)
+            self.hal_reg_set(0x0118, 0xFF)
+        else:
+            rc = ad9081.dac_fsc_set(self.device, dacs, current)
+            if rc != CmsError.API_CMS_ERROR_OK:
+                raise RuntimeError(f"{CmsError(rc).name}")
+
+    def get_temperatures(self) -> Tuple[int, int]:
+        temperatures = ChipTemperatures()
+        ad9081.device_get_temperature(self.device, temperatures)
+        return temperatures.temp_max, temperatures.temp_min

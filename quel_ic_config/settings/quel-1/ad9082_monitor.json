@@ -1,6 +1,7 @@
 {
   "meta": {
-    "version": "1.99.0"
+    "version": "1.99.0",
+    "#": "default"
   },
   "rx": {
     "converter_mappings": [

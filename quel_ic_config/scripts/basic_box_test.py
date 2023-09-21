@@ -1,35 +1,28 @@
 import logging
 import time
+from argparse import ArgumentParser
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any, Collection, Dict, Final, List, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from e7awgsw import AWG, AwgCtrl, CaptureCtrl, CaptureModule, CaptureParam, WaveSequence
 from e7awgsw.exception import CaptureUnitTimeoutError
-from quel_inst_tool import (  # noqa: F401
-    E440xb,
-    E440xbTraceMode,
-    E4405b,
-    E4407b,
-    ExpectedSpectrumPeaks,
-    InstDevManager,
-    MeasuredSpectrumPeak,
-)
 
-from quel_ic_config import Quel1AnyConfigSubsystem, Quel1BoxType, Quel1ConfigOption, Quel1ConfigSubsystem
+from quel_ic_config import (
+    QUEL1_BOXTYPE_ALIAS,
+    Quel1BoxType,
+    Quel1ConfigOption,
+    Quel1ConfigSubsystem,
+    Quel1ConfigSubsystemRoot,
+)
 from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemAd9082Mixin
-from testlibs.updated_linkup_phase2 import Quel1WaveGen
-from testlibs.updated_linkup_phase3 import Quel1WaveCap
 
 logger = logging.getLogger(__name__)
 
 MAX_CAPTURE_RETRY = 5
-
-DEFAULT_FREQ_CENTER = 9e9
-DEFAULT_FREQ_SPAN = 5e9
-DEFAULT_SWEEP_POINTS = 4001
-DEFAULT_RESOLUTION_BANDWIDTH = 1e5
 
 
 # TODO: consider the right place for this class.
@@ -93,9 +86,6 @@ class Quel1E7ResourceMapping:
         self._validate_group(group)
         return [v for k, v in self._AWGS_FROM_FDUC.items() if k[0] == group]
 
-    def get_capture_module(self, group: int) -> int:
-        return self._CAPTURE_MODULE_FROM_MXFE[group]
-
     def get_capture_units_of_group(self, group: int):
         self._validate_group(group)
         return CaptureModule.get_units(self._CAPTURE_MODULE_FROM_MXFE[group])
@@ -115,11 +105,12 @@ class Quel1WaveSubsystem:
         self._cap_ctrl: Final[CaptureCtrl] = CaptureCtrl(self._wss_addr)
         self._rmap: Final[Quel1E7ResourceMapping] = rmap
 
-    def initialize_awg_cap(self, group: int):
+    def initialize_awg(self, group: int):
         awgs = self._rmap.get_all_awgs_of_group(group)
         self._awg_ctrl.initialize(*awgs)
         self._awg_ctrl.terminate_awgs(*awgs)
 
+    def initialize_cap(self, group: int):
         cpuns = self._rmap.get_capture_units_of_group(group)
         self._cap_ctrl.initialize(*cpuns)
 
@@ -193,9 +184,9 @@ class Quel1WaveSubsystem:
 class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
     _CAPTURE_TIMEOUT_MAX_RETRY: Final[int] = 3
-    _BACKGROUND_NOISE_THRESHOLD: Final[float] = 256.0
+    _BACKGROUND_NOISE_THRESHOLD: Final[float] = 200.0
 
-    def __init__(self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem):
+    def __init__(self, css: Quel1ConfigSubsystemRoot, wss: Quel1WaveSubsystem):
         self._css = css
         self._wss = wss
 
@@ -233,7 +224,6 @@ class LinkupFpgaMxfe:
                     is_valid_cap, cap_data = self._wss.simple_capture(mxfe, 16384)
                 except CaptureUnitTimeoutError as e:
                     logger.warning(e)
-                    self._wss.initialize_awg_cap(mxfe)
                     continue
 
                 if is_valid_cap:
@@ -242,7 +232,7 @@ class LinkupFpgaMxfe:
                     if max_backgroud_amplitude < background_noise_threshold:
                         logger.info(f"successful link-up of mxfe-{mxfe}")
                         return True
-                break  # need to link up again to make the captured data fine
+                break  # need to link-up again
 
         return False
 
@@ -271,7 +261,7 @@ class SimpleBoxTest:
         },
     }
 
-    # TODO: should be derived from settings in the proper object.
+    # TODO: should be drived from settings in the proper object.
     _LINE2NUM_CHANNELS: Final[Dict[Tuple[int, int], int]] = {
         (0, 0): 1,
         (0, 1): 1,
@@ -313,6 +303,8 @@ class SimpleBoxTest:
             self.config_port(9, lo_freq=11.5e9, cnco_freq=1.75e9, vatt=0xA00, sideband="L")  # 9.75GHz
             self.config_port(10, lo_freq=8.5e9, cnco_freq=1.2e9, vatt=0xA00, sideband="U")  # 9.7GHz
             self.config_port(11, lo_freq=11.5e9, cnco_freq=1.85e9, vatt=0xA00, sideband="L")  # 9.65GHz
+            self.config_adc(0, 1.5e9)
+            self.config_adc(1, 1.3e9)
         elif self._boxtype == Quel1BoxType.QuEL1_TypeB:
             self.config_port(1, lo_freq=11.5e9, cnco_freq=1.5e9, vatt=0xA00, sideband="L")  # 10GHz
             self.config_port(2, lo_freq=11.5e9, cnco_freq=1.55e9, vatt=0xA00, sideband="L")  # 9.95GHz
@@ -322,6 +314,8 @@ class SimpleBoxTest:
             self.config_port(9, lo_freq=11.5e9, cnco_freq=1.75e9, vatt=0xA00, sideband="L")  # 9.75GHz
             self.config_port(10, lo_freq=11.5e9, cnco_freq=1.8e9, vatt=0xA00, sideband="L")  # 9.7GHz
             self.config_port(11, lo_freq=11.5e9, cnco_freq=1.85e9, vatt=0xA00, sideband="L")  # 9.65GHz
+            self.config_adc(0, 1.5e9)
+            self.config_adc(1, 1.7e9)
         else:
             raise AssertionError
 
@@ -339,6 +333,22 @@ class SimpleBoxTest:
             self.close_port(p)
             self.stop_channel(p)
             time.sleep(wait * 0.5)
+
+    def open_all(self) -> None:
+        for p in (1, 2, 3, 4, 8, 9, 10, 11):
+            self.open_port(p)
+
+    def close_all(self) -> None:
+        for p in (1, 2, 3, 4, 8, 9, 10, 11):
+            self.close_port(p)
+
+    def start_all(self) -> None:
+        for p in (1, 2, 3, 4, 8, 9, 10, 11):
+            self.start_channel(p)
+
+    def stop_all(self) -> None:
+        for p in (1, 2, 3, 4, 8, 9, 10, 11):
+            self.stop_channel(p)
 
     def config_port(
         self,
@@ -380,28 +390,104 @@ class SimpleBoxTest:
         if fnco_freq is not None:
             self._css.set_dac_fnco(mxfe, line, channel, int(fnco_freq + 0.5))
 
-    def open_port(self, port):
+    def open_port(self, port) -> None:
+        """open RF switch of the output port
+        :param port: port to open
+        :return:
+        """
         mxfe, line = self._convert_port(port)
         self._css.pass_line(mxfe, line)
 
     def close_port(self, port):
+        """close RF switch of the output port
+        :param port: port to close
+        :return:
+        """
         mxfe, line = self._convert_port(port)
         self._css.block_line(mxfe, line)
 
+    def _active_input_port(self, mxfe: int) -> str:
+        if mxfe == 0:
+            if Quel1ConfigOption.USE_READ_IN_MXFE0 in self._css._config_options:
+                input_port: str = "r"
+            else:
+                input_port = "m"
+        elif mxfe == 1:
+            if Quel1ConfigOption.USE_READ_IN_MXFE1 in self._css._config_options:
+                input_port = "r"
+            else:
+                input_port = "m"
+        else:
+            raise ValueError(f"invalid mxfe: {mxfe}")
+        return input_port
+
+    def config_adc(self, mxfe: int, cnco_freq: Union[float, None]):
+        input_port: str = self._active_input_port(mxfe)
+        if cnco_freq is not None:
+            self._css.set_adc_cnco(mxfe, input_port, freq_in_hz=int(cnco_freq + 0.5))
+
+    def activate_loopback(self, mxfe: int) -> None:
+        input_port: str = self._active_input_port(mxfe)
+        if input_port == "r":
+            self._css.activate_read_loop(mxfe)
+            logger.info(f"the output of port {1 if mxfe == 0 else 8} is blocked to activate read loop")
+        elif input_port == "m":
+            self._css.activate_monitor_loop(mxfe)
+        else:
+            raise AssertionError
+
     def start_channel(
-        self, port: int, channel: int = 0, amplitude: float = 16384.0, num_repeat: Tuple[int, int] = (1, 0xFFFFFFFF)
+        self,
+        port: int,
+        channel: int = 0,
+        amplitude: float = 16384.0,
+        num_repeat: Tuple[int, int] = (0xFFFFFFFF, 0xFFFFFFFF),
     ):
+        """start to emit CW from the given port.
+        :param port: port to emit CW
+        :param channel: index of a channelizer to start.
+        :param amplitude: amplitude of the CW
+        :param num_repeat: number of repeats, see the specification of AWG units for details.
+        :return: None
+        """
         mxfe, line = self._convert_port(port)
         self._validate_channel(port, channel)
         self._wss.emit_cw(mxfe, line, channel, amplitude, num_repeat)
 
-    def stop_channel(self, port: int, channel: Union[int, None] = None):
+    def stop_channel(self, port: int, channel: Union[int, None] = None) -> None:
+        """stop to emit CW.
+        :param port: port to stop CW
+        :param channel: index of channelizer to stop. all the channelizers of the given port are stopped if omitted.
+        :return: None
+        """
         mxfe, line = self._convert_port(port)
         if channel is None:
             for ch in range(self._LINE2NUM_CHANNELS[mxfe, line]):
                 self._wss.stop_emission(mxfe, line, ch)
         else:
             self._wss.stop_emission(mxfe, line, channel)
+
+    def loopback_fft(self, mxfe: int, graph_filename: Union[str, None]) -> npt.NDArray[np.complex128]:
+        self.activate_loopback(mxfe)
+        for _ in range(5):
+            try:
+                is_valid_cap, cap_data = self._wss.simple_capture(mxfe, 16384)
+                if is_valid_cap:
+                    break
+            except CaptureUnitTimeoutError as e:
+                logger.warning(e)
+        else:
+            raise RuntimeError("failed to capture the data repeatedly, abandoned")
+
+        fp = np.abs(np.fft.fft(cap_data))
+        ff = np.fft.fftfreq(len(cap_data)) * 500e6
+
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(ff, fp)
+        plt.savefig(graph_filename)
+
+        return np.vstack((ff, fp))
 
 
 def init_box(
@@ -412,19 +498,7 @@ def init_box(
     mxfe_combination: str,
     config_root: Path,
     config_options: Collection[Quel1ConfigOption],
-    config_clock_groupwise: bool = False,
-) -> Tuple[
-    bool,
-    bool,
-    Quel1AnyConfigSubsystem,
-    Quel1WaveSubsystem,
-    LinkupFpgaMxfe,
-    Union[Quel1WaveGen, None],
-    Union[Quel1WaveGen, None],
-    Union[Quel1WaveCap, None],
-    Union[Quel1WaveCap, None],
-    Union[SimpleBoxTest, None],
-]:
+) -> Tuple[bool, bool, Quel1ConfigSubsystemRoot, Quel1WaveSubsystem, LinkupFpgaMxfe, SimpleBoxTest]:
     """create QuEL testing objects and initialize ICs
     :param ipaddr_wss: IP address of the wave generation subsystem of the target box
     :param ipaddr_sss: IP address of the sequencer subsystem of the target box
@@ -441,7 +515,7 @@ def init_box(
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuEL1_TypeB,
     }:
-        css: Quel1AnyConfigSubsystem = Quel1ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
+        css: Quel1ConfigSubsystem = Quel1ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     else:
         raise ValueError(f"unsupported boxtype: {boxtype}")
 
@@ -452,27 +526,11 @@ def init_box(
 
     wss = Quel1WaveSubsystem(ipaddr_wss, rmap)
     linkupper = LinkupFpgaMxfe(css, wss)
-
-    if isinstance(css, Quel1ConfigSubsystem):
-        p2_g0: Union[Quel1WaveGen, None] = Quel1WaveGen(ipaddr_wss, css, 0)
-        p2_g1: Union[Quel1WaveGen, None] = Quel1WaveGen(ipaddr_wss, css, 1)
-        p3_g0: Union[Quel1WaveCap, None] = Quel1WaveCap(ipaddr_wss, css, 0)
-        p3_g1: Union[Quel1WaveCap, None] = Quel1WaveCap(ipaddr_wss, css, 1)
-    else:
-        p2_g0 = None
-        p2_g1 = None
-        p3_g0 = None
-        p3_g1 = None
-
-    if isinstance(css, Quel1ConfigSubsystem):
-        box: Union[SimpleBoxTest, None] = SimpleBoxTest(css, wss)
-    else:
-        box = None
+    box: SimpleBoxTest = SimpleBoxTest(css, wss)
 
     linkup_ok = [False, False]
     css.configure_peripherals()
-    if not config_clock_groupwise:
-        css.configure_all_mxfe_clocks()
+    css.configure_all_mxfe_clocks()
 
     if mxfe_combination == "0":
         mxfe_list: Tuple[int, ...] = (0,)
@@ -486,90 +544,149 @@ def init_box(
         raise AssertionError
 
     for mxfe in mxfe_list:
-        wss.initialize_awg_cap(mxfe)
-        linkup_ok[mxfe] = linkupper.linkup_and_check(mxfe, configure_clock=config_clock_groupwise)
+        wss.initialize_awg(mxfe)
+        wss.initialize_cap(mxfe)
 
+    for mxfe in mxfe_list:
+        linkup_ok[mxfe] = linkupper.linkup_and_check(mxfe)
+
+        # TODO: to be modified not to rely on box, namely should be written in terms of mxfe and line.
         if mxfe == 0:
-            if p2_g0 is not None:
-                p2_g0.force_stop()
+            box.stop_channel(1)
+            box.stop_channel(2)
+            box.stop_channel(3)
+            box.stop_channel(4)
         elif mxfe == 1:
-            if p2_g1 is not None:
-                p2_g1.force_stop()
+            box.stop_channel(8)
+            box.stop_channel(9)
+            box.stop_channel(10)
+            box.stop_channel(11)
         else:
             raise AssertionError
 
     # TODO: write scheduler object creation here.
     _ = ipaddr_sss
 
-    return linkup_ok[0], linkup_ok[1], css, wss, linkupper, p2_g0, p2_g1, p3_g0, p3_g1, box
+    return linkup_ok[0], linkup_ok[1], css, wss, linkupper, box
 
 
-def init_e440xb(
-    spa_type: str = "E4405B",
-    freq_center: float = DEFAULT_FREQ_CENTER,
-    freq_span: float = DEFAULT_FREQ_SPAN,
-    sweep_points: int = DEFAULT_SWEEP_POINTS,
-    resolution_bandwidth: float = DEFAULT_RESOLUTION_BANDWIDTH,
-) -> E440xb:
-    im = InstDevManager(ivi="/usr/lib/x86_64-linux-gnu/libiovisa.so", blacklist=["GPIB0::6::INSTR"])
-    dev = im.lookup(prod_id=spa_type)
-    if dev is None:
-        raise RuntimeError(f"no spectrum analyzer '{spa_type}' is detected")
+def parse_boxtype(boxtypename: str) -> Quel1BoxType:
+    if boxtypename not in QUEL1_BOXTYPE_ALIAS:
+        raise ValueError
+    return Quel1BoxType.fromstr(boxtypename)
 
-    if spa_type == "E4405B":
-        e440xb: E440xb = E4405b(dev)
-    elif spa_type == "E4407B":
-        e440xb = E4407b(dev)
+
+def parse_config_options(optstr: str) -> List[Quel1ConfigOption]:
+    return [Quel1ConfigOption(s) for s in optstr.split(",") if s != ""]
+
+
+def add_common_arguments(
+    parser: ArgumentParser,
+    use_ipaddr_wss: bool = True,
+    use_ipaddr_sss: bool = True,
+    use_ipaddr_css: bool = True,
+    use_boxtype: bool = True,
+    use_config_root: bool = True,
+    use_config_options: bool = True,
+) -> None:
+    """adding common arguments to testlibs of quel_ic_config for manual tests. allowing to accept unused arguments for
+    your convenience
+    :param parser: ArgumentParser object to register arguments
+    :param use_ipaddr_wss:
+    :param use_ipaddr_sss:
+    :param use_ipaddr_css:
+    :param use_boxtype:
+    :param use_config_root:
+    :param use_config_options:
+    :return:
+    """
+
+    non_existent_ipaddress = ip_address("241.3.5.6")
+
+    if use_ipaddr_wss:
+        parser.add_argument(
+            "--ipaddr_wss",
+            type=ip_address,
+            required=True,
+            help="IP address of the wave generation/capture subsystem of the target box",
+        )
     else:
-        raise ValueError("invalid spectrum analyzer type, it must be either E4405B or E4407B")
+        parser.add_argument(
+            "--ipaddr_wss", type=ip_address, required=False, default=non_existent_ipaddress, help="IGNORED"
+        )
 
-    e440xb.reset()
-    e440xb.display_enable = False
-    e440xb.trace_mode = E440xbTraceMode.WRITE
-    e440xb.freq_range_set(freq_center, freq_span)
-    e440xb.sweep_points = sweep_points
-    e440xb.resolution_bandwidth = resolution_bandwidth
-    # e4405b.resolution_bandwidth = 5e4   # floor noise < -70dBm, but spurious peaks higher than -70dBm exist
-    # e4405b.resolution_bandwidth = 1e5  # floor noise < -65dBm
-    # e4405b.resolution_bandwidth = 1e6   # floor noise < -55dBm
-    return e440xb
+    if use_ipaddr_sss:
+        parser.add_argument(
+            "--ipaddr_sss",
+            type=ip_address,
+            required=True,
+            help="IP address of the wave sequencer subsystem of the target box",
+        )
+    else:
+        parser.add_argument(
+            "--ipaddr_sss", type=ip_address, required=False, default=non_existent_ipaddress, help="IGNORED"
+        )
 
+    if use_ipaddr_css:
+        parser.add_argument(
+            "--ipaddr_css",
+            type=ip_address,
+            required=True,
+            help="IP address of the configuration subsystem of the target box",
+        )
+    else:
+        parser.add_argument(
+            "--ipaddr_css", type=ip_address, required=False, default=non_existent_ipaddress, help="IGNORED"
+        )
 
-def measure_floor_noise(e4405b: E440xb, n_iter: int = 5) -> float:
-    # Checkout
-    t0 = e4405b.trace_get()
-    fln = t0[:, 1]
-    for i in range(n_iter - 1):
-        fln = np.maximum(fln, e4405b.trace_get()[:, 1])
+    if use_boxtype:
+        parser.add_argument(
+            "--boxtype",
+            type=parse_boxtype,
+            required=True,
+            help=f"a type of the target box: either of "
+            f"{', '.join([t for t in QUEL1_BOXTYPE_ALIAS if not t.startswith('x_')])}",
+        )
+    else:
+        raise NotImplementedError
 
-    mfln = fln.max()
-    logger.info(f"maximum floor noise = {mfln:.1f}dBm")
-    return mfln
+    if use_config_root:
+        parser.add_argument(
+            "--config_root",
+            type=Path,
+            default=Path("settings"),
+            help="path to configuration file root",
+        )
+    else:
+        raise NotImplementedError
+
+    if use_config_options:
+        parser.add_argument(
+            "--config_options",
+            type=parse_config_options,
+            default=[],
+            help=f"comma separated list of config options: ("
+            f"{' '.join([o for o in Quel1ConfigOption if not o.startswith('x_')])})",
+        )
+    else:
+        raise NotImplementedError
 
 
 if __name__ == "__main__":
     import argparse
 
-    from testlibs.common_arguments import add_common_arguments
-
     logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
     parser = argparse.ArgumentParser(
         description="check the basic functionalities about wave generation of QuEL-1 with a spectrum analyzer"
     )
-    add_common_arguments(parser)
+    add_common_arguments(parser, use_ipaddr_sss=False)
     parser.add_argument(
-        "--mxfe", choices=("0", "1", "both", "0,1", "1,0"), required=True, help="combination of MxFEs under test"
-    )
-    parser.add_argument(
-        "--groupwise_clock",
-        action="store_true",
-        default=False,
-        help="configuring clock of MxFE one by one just before linking it up",
+        "--mxfe", choices=("0", "1", "both", "0,1", "1,0"), default="both", help="combination of MxFEs under test"
     )
     args = parser.parse_args()
 
     # Init: QuEL mxfe
-    linkup_g0, linkup_g1, css, wss, linkupper, p2_g0, p2_g1, p3_g0, p3_g1, box = init_box(
+    linkup_g0, linkup_g1, css, wss, linkupper, box = init_box(
         str(args.ipaddr_wss),
         str(args.ipaddr_sss),
         str(args.ipaddr_css),
@@ -583,23 +700,3 @@ if __name__ == "__main__":
         assert linkup_g0
     if args.mxfe in {"1", "both", "0,1", "1,0"}:
         assert linkup_g1
-
-    """
-    # Init: Spectrum Analyzer
-    e4405b_ = init_e440xb()
-    max_floor_noise = measure_floor_noise(e4405b_, 5)
-    assert max_floor_noise < -62.0
-
-    # Measurement Example
-    e0 = ExpectedSpectrumPeaks([(9987e6, -20), (8991e6, -20)])
-    assert e0.validate_with_measurement_condition(e4405b_.max_freq_error_get())
-
-    if linkup_g0:
-        css_p2_g0.run(2, 0, cnco_mhz=2000, fnco_mhz=13)
-        css_p2_g0.run(3, 0, cnco_mhz=3000, fnco_mhz=9)
-        m0 = MeasuredSpectrumPeak.from_spectrumanalyzer(e4405b_, -60.0)
-        j0, s0, w0 = e0.match(m0)
-        assert all(j0) and len(s0) == 0 and len(w0) == 0
-    else:
-        logger.error("linkup of mxfe0 fails, no test is conducted")
-    """

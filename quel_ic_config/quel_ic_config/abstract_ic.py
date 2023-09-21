@@ -133,7 +133,7 @@ class AbstractIcConfigHelper:
                         f"should be {expected_type} but type of the given value is {actual_type}"
                     )
             else:
-                raise ValueError(f"invalid field name for Reg:{addr}")
+                raise ValueError(f"invalid field name '{k}' for Reg:{addr}")
         self._write_reg(addr_, data)
 
     def discard(self):

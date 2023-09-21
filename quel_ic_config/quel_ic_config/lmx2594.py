@@ -1,6 +1,7 @@
 import logging
 import time
 from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import Dict, Union
 
 from quel_ic_config.abstract_ic import (
@@ -639,6 +640,13 @@ Lmx2594Regs: Dict[int, type] = {
 Lmx2594RegNames: Dict[str, int] = {f"R{k}": k for k in Lmx2594Regs}
 
 
+class Lmx2594LockStatus(IntEnum):
+    TooLow = 0
+    Invalid = 1
+    Locked = 2
+    TooHigh = 3
+
+
 class Lmx2594Mixin(AbstractIcMixin):
     Regs: Dict[int, type] = Lmx2594Regs
     RegNames: Dict[str, int] = Lmx2594RegNames
@@ -653,16 +661,41 @@ class Lmx2594Mixin(AbstractIcMixin):
         return regs
 
     def soft_reset(self) -> None:
-        v0 = self.read_reg(0)
+        v0 = self.read_reg(0) & ~0x08  # clear calibration_enable once just for the ease of debug
         self.write_reg(0, v0 | 0x2)
-        self.write_reg(0, v0 & 0x2)
+        time.sleep(0.01)
+        self.write_reg(0, v0 & ~0x2)
 
-    def calibrate(self) -> None:
+    def is_locked(self) -> Lmx2594LockStatus:
+        v110 = self.read_reg(110)
+        return Lmx2594LockStatus((v110 >> 9) & 0x3)
+
+    def calibrate(self) -> bool:
+        # ensure it takes more than 10msec after manipulating any registers.
+        time.sleep(0.01)
+
         # writing 1 on bit3 of R0 activates calibration procedure once. No transition from 0 to 1 is required.
         v0 = self.read_reg(0)
         self.write_reg(0, v0 | 0x08)
-        # TODO: check the completion of calibration based on register value.
-        time.sleep(0.01)
+        # checking the completion of calibration based on register value.
+        t0 = time.perf_counter()
+        for i in range(2):
+            n = (5, 500)[i]
+            for _ in range(n):
+                time.sleep(0.001)
+                v110 = self.read_reg(110)
+                if (v110 >> 9) & 0x3 == 2:
+                    logger.info(f"calibration of {self.name} is finished in {(time.perf_counter()-t0)*1000:.1f}ms")
+                    return True
+            else:
+                # Maybe the second kick is required due to inappropriate initial values of VCO related settings.
+                # TODO: investigate it by make the register settings correct.
+                if i == 0:
+                    logger.info("raise calibration flag again")
+                    self.write_reg(0, v0 | 0x08)
+        else:
+            logger.warning(f"calibration of {self.name} is not finished within {(time.perf_counter()-t0)*1000:.1f}ms")
+        return False
 
 
 class Lmx2594ConfigHelper(AbstractIcConfigHelper):
@@ -679,6 +712,8 @@ class Lmx2594ConfigHelper(AbstractIcConfigHelper):
         for addr in sorted(self.updated, reverse=True):
             if addr <= self._TopWritableAddress:
                 self.ic.write_reg(addr, self.updated[addr])
+            else:
+                logger.warning(f"failed attempt to write reg-{addr} is detected")
         if discard_after_flush:
             self.discard()
 
