@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "version": "1.99.0",
+    "#": "default"
+  },
+  "clock": {
+    "dac": 12000000000
+  },
+  "tx": {
+    "interpolation_rate": {
+      "channel": 3,
+      "main": 8
+    }
+  }
+}

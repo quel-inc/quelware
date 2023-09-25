@@ -8,18 +8,14 @@ from pydantic.utils import deep_update
 
 from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
 
-with open("settings/quel-1/ad9082_device.json") as f:
-    device_setting: Dict[str, Any] = json.load(f)
-
-with open("settings/quel-1/ad9082_function.json") as f:
+with open("settings/quel-1/ad9082.json") as f:
     function_setting: Dict[str, Any] = json.load(f)
 
-with open("settings/quel-1/ad9082_0_function.json") as f:
+with open("settings/quel-1/ad9082_tx_channel_assign_for_mxfe0.json") as f:
     function_setting_additional: Dict[str, Any] = json.load(f)
 
 
-default_setting = copy.copy(device_setting)
-default_setting = deep_update(default_setting, function_setting)
+default_setting = copy.copy(function_setting)
 default_setting = deep_update(default_setting, function_setting_additional)
 del default_setting["meta"]
 
@@ -124,7 +120,7 @@ assert jesd204_0.mode_id == 16
 assert jesd204_0.mode_c2r_en == 0
 assert jesd204_0.mode_s_sel == 0
 assert param_tx.lane_xbar == (0, 1, 2, 3, 4, 5, 6, 7)
-assert param_tx.fullscale_current == 40520
+assert param_tx.fullscale_current == (40520, 40520, 40520, 40520)
 
 param_rx = cfg_obj.rx
 assert param_rx.shift_freq.main == (0, 0, 0, 0)

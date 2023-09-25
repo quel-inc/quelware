@@ -1,0 +1,11 @@
+build/
+dist/
+log/
+htmlcov/
+venv*/
+*.egg-info/
+*~
+/.DS_Store
+requirements.txt
+
+artifacts/

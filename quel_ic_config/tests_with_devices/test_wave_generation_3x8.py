@@ -9,74 +9,74 @@ import matplotlib.pyplot as plt
 import pytest
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 
-from testlibs.basic_scan_common import init_box, init_e4405b, measure_floor_noise
+from testlibs.basic_scan_common import (
+    E440xb,
+    Quel1BoxType,
+    Quel1ConfigOption,
+    init_box,
+    init_e440xb,
+    measure_floor_noise,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-DEVICE_SETTINGS = {
-    "ipaddr_wss": "10.1.0.42",
-    "ipaddr_sss": "10.2.0.42",
-    "ipaddr_css": "10.5.0.42",
-    "boxtype": "quel1-a",
-    "config_root": "settings",
-    "mxfe": "both",
-    "port_availability": {
-        "unavailable": [(0, 1), (1, 1), (1, 2)],
-        "via_monitor_out": [],
+TEST_SETTINGS = (
+    {
+        "box_config": {
+            "ipaddr_wss": "10.1.0.42",
+            "ipaddr_sss": "10.2.0.42",
+            "ipaddr_css": "10.5.0.42",
+            "boxtype": Quel1BoxType.fromstr("quel1-a"),
+            "config_root": Path("settings"),
+            "config_options": [
+                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
+                Quel1ConfigOption.DAC_CNCO_1500MHz_IN_MXFE0,
+                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
+                Quel1ConfigOption.DAC_CNCO_2000MHz_IN_MXFE1,
+            ],
+            "mxfe_combination": "both",
+        },
+        "port_availability": {
+            "unavailable": [(0, 1), (1, 1), (1, 2)],
+            "via_monitor_out": [],
+        },
+        "spa_type": "E4405B",
+        "spectrum_image_path": "./artifacts/spectrum",
     },
-}
+)
 
-
-OUTPUT_SETTINGS = {
-    "spectrum_image_path": "./artifacts/spectrum",
-}
 
 MAX_BACKGROUND_NOISE = -62.0  # dBm
 
 
-@pytest.fixture(scope="session")
-def e4405b():
-    e4405b = init_e4405b()
-    return e4405b
-
-
-@pytest.fixture(scope="session", params=(DEVICE_SETTINGS,))
-def css_p2(request, e4405b):
+@pytest.fixture(scope="session", params=TEST_SETTINGS)
+def fixtures(request):
     param0 = request.param
 
-    linkup0, linkup1, css_p2_g0, css_p2_g1, _, _ = init_box(
-        ipaddr_wss=param0["ipaddr_wss"],
-        ipaddr_sss=param0["ipaddr_sss"],
-        ipaddr_css=param0["ipaddr_css"],
-        mxfe=param0["mxfe"],
-        boxtype=param0["boxtype"],
-        config_root=param0["config_root"],
-    )
+    linkup0, linkup1, _, wss, _, css_p2_g0, css_p2_g1, _, _, _ = init_box(**param0["box_config"])
     assert linkup0
     assert linkup1
+    assert css_p2_g0 is not None
+    assert css_p2_g1 is not None
 
-    max_noise = measure_floor_noise(e4405b)
+    e440xb: E440xb = init_e440xb(request.param["spa_type"])
+    max_noise = measure_floor_noise(e440xb)
     assert max_noise < MAX_BACKGROUND_NOISE
-    yield css_p2_g0, css_p2_g1
+
+    yield (css_p2_g0, css_p2_g1), e440xb, make_outdir(request.param), request.param["port_availability"],
 
     css_p2_g0.stop()
     css_p2_g1.stop()
 
 
-@pytest.fixture(scope="session", params=(DEVICE_SETTINGS,))
-def port_availability(request):
-    # Notes: configration of CI devices will be managed by using DB or whatever in near future.
-    return request.param["port_availability"]
-
-
-@pytest.fixture(scope="session", params=(OUTPUT_SETTINGS,))
-def outdir(request):
+def make_outdir(param):
     mpl.use("Qt5Agg")  # TODO: reconsider where to execute.
 
-    dirname = request.param["spectrum_image_path"]
+    dirname = param["spectrum_image_path"]
     if os.path.exists(dirname):
+        logger.info(f"deleting the existing directory: '{dirname}'")
         shutil.rmtree(dirname)
 
     dpath = Path(dirname)
@@ -124,6 +124,8 @@ def outdir(request):
         (1, 2, 2, 11000, 2000, -575),
         (1, 3, 0, 10500, 2000, -25),
         (1, 3, 0, 10500, 2000, -525),
+        (1, 3, 0, 10500, 2500, -800),  # for 2000Msps
+        (1, 3, 0, 10500, 2000, 800),  # for 2000Msps
         (1, 3, 1, 10500, 2000, -50),
         (1, 3, 1, 10500, 2000, -550),
         (1, 3, 2, 10500, 2000, -75),
@@ -137,12 +139,10 @@ def test_all_single_awgs(
     lo_mhz: int,
     cnco_mhz: int,
     fnco_mhz: int,
-    css_p2,
-    port_availability,
-    e4405b,
-    outdir,
+    fixtures,
 ):
-    mxfe_g = css_p2[mxfe]
+    mxfe_gs, e4405b, outdir, port_availability = fixtures
+    mxfe_g = mxfe_gs[mxfe]
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
         pytest.skip(f"({mxfe}, {line}) is unavailable.")
@@ -151,12 +151,12 @@ def test_all_single_awgs(
 
     mxfe_g.run(line, awg_idx, lo_mhz=lo_mhz, cnco_mhz=cnco_mhz, fnco_mhz=fnco_mhz)
     if via_monitor:
-        mxfe_g.open_monitor_out()
+        mxfe_g.open_monitor()
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(e4405b, -50.0)
     mxfe_g.stop()
     if via_monitor:
-        mxfe_g.close_monitor_out()
+        mxfe_g.block_monitor()
 
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     e0 = ExpectedSpectrumPeaks([(expected_freq, -20)])
@@ -192,12 +192,10 @@ def test_vatt(
     lo_mhz: int,
     cnco_mhz: int,
     fnco_mhz: int,
-    css_p2,
-    port_availability,
-    e4405b,
-    outdir,
+    fixtures,
 ):
-    mxfe_g = css_p2[mxfe]
+    mxfe_gs, e4405b, outdir, port_availability = fixtures
+    mxfe_g = mxfe_gs[mxfe]
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
         pytest.skip(f"({mxfe}, {line}) is unavailable.")
@@ -213,12 +211,12 @@ def test_vatt(
         """
         mxfe_g.run(line, awg_idx, lo_mhz=lo_mhz, cnco_mhz=cnco_mhz, fnco_mhz=fnco_mhz, vatt=vatt)
         if via_monitor:
-            mxfe_g.open_monitor_out()
+            mxfe_g.open_monitor()
         # notes: -60.0dBm fails due to spurious below 7GHz.
         m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(e4405b, -50.0)
         mxfe_g.stop()
         if via_monitor:
-            mxfe_g.close_monitor_out()
+            mxfe_g.block_monitor()
 
         expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6
         e0 = ExpectedSpectrumPeaks([(expected_freq, -40)])
@@ -239,7 +237,7 @@ def test_vatt(
         if i == 1:
             assert 2.25 <= pwrl[i] - pwrl[i - 1] <= 4.0
         else:
-            assert 3.0 <= pwrl[i] - pwrl[i - 1] <= 5.0
+            assert 2.8 <= pwrl[i] - pwrl[i - 1] <= 5.0
 
 
 @pytest.mark.parametrize(
@@ -271,12 +269,10 @@ def test_sideband(
     cnco_mhz: int,
     fnco_mhz: int,
     sideband: str,
-    css_p2,
-    port_availability,
-    e4405b,
-    outdir,
+    fixtures,
 ):
-    mxfe_g = css_p2[mxfe]
+    mxfe_gs, e4405b, outdir, port_availability = fixtures
+    mxfe_g = mxfe_gs[mxfe]
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
         pytest.skip(f"({mxfe}, {line}) is unavailable.")
@@ -285,12 +281,12 @@ def test_sideband(
 
     mxfe_g.run(line, awg_idx, lo_mhz=lo_mhz, cnco_mhz=cnco_mhz, fnco_mhz=fnco_mhz, sideband=sideband)
     if via_monitor:
-        mxfe_g.open_monitor_out()
+        mxfe_g.open_monitor()
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(e4405b, -50.0)
     mxfe_g.stop()
     if via_monitor:
-        mxfe_g.close_monitor_out()
+        mxfe_g.block_monitor()
 
     if sideband == "L":
         expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6

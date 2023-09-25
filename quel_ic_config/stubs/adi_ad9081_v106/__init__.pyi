@@ -158,6 +158,7 @@ __all__ = [
     "SerSettings",
     "SerSwing",
     "SerdesSettings",
+    "ChipTemperatures",
     "adc_ddc_coarse_nco_ftw_get",
     "adc_ddc_coarse_nco_ftw_set",
     "adc_ddc_coarse_nco_mode_set",
@@ -169,10 +170,13 @@ __all__ = [
     "dac_duc_nco_ftw_set",
     "dac_duc_nco_phase_offset_set",
     "dac_duc_nco_reset_set",
+    "dac_fsc_set",
     "dac_mode_set",
+    "dac_xbar_set",
     "device_api_revision_get",
     "device_chip_id_get",
     "device_clk_config_set",
+    "device_get_temperature",
     "device_init",
     "device_reset",
     "device_startup_rx",
@@ -1423,6 +1427,7 @@ class JtxConvSel():
     def virtual_converterf_index(self, arg0: int) -> None:
         pass
     pass
+
 class NcoFtw():
     def __init__(self) -> None: ...
     @property
@@ -1450,6 +1455,7 @@ class NcoFtw():
     def modulus_b(self, arg0: int) -> None:
         pass
     pass
+
 class Reset():
     """
     Members:
@@ -1759,6 +1765,25 @@ class SerdesSettings():
     def ser_settings(self, arg0: SerSettings) -> None:
         pass
     pass
+class ChipTemperatures():
+    def __init__(self) -> None: ...
+    @property
+    def temp_max(self) -> int:
+        """
+        :type: int
+        """
+    @temp_max.setter
+    def temp_max(self, arg0: int) -> None:
+        pass
+    @property
+    def temp_min(self) -> int:
+        """
+        :type: int
+        """
+    @temp_min.setter
+    def temp_min(self, arg0: int) -> None:
+        pass
+    pass
 def adc_ddc_coarse_nco_ftw_get(arg0: Device, arg1: int, arg2: NcoFtw) -> int:
     pass
 def adc_ddc_coarse_nco_ftw_set(arg0: Device, arg1: int, arg2: NcoFtw) -> int:
@@ -1781,13 +1806,19 @@ def dac_duc_nco_phase_offset_set(arg0: Device, arg1: int, arg2: int, arg3: int, 
     pass
 def dac_duc_nco_reset_set(arg0: Device, arg1: int, arg2: int) -> int:
     pass
+def dac_fsc_set(arg0: Device, arg1: int, arg2: int) -> int:
+    pass
 def dac_mode_set(arg0: Device, arg1: DacModeSwitchGroupSelect, arg2: DacMode) -> int:
+    pass
+def dac_xbar_set(arg0: Device, arg1: int, arg2: int) -> int:
     pass
 def device_api_revision_get(arg0: Device, arg1: ApiRevision) -> int:
     pass
 def device_chip_id_get(arg0: Device, arg1: CmsChipId) -> int:
     pass
 def device_clk_config_set(arg0: Device, arg1: int, arg2: int, arg3: int) -> int:
+    pass
+def device_get_temperature(arg0: Device, arg1: ChipTemperatures) -> int:
     pass
 def device_init(arg0: Device) -> int:
     pass

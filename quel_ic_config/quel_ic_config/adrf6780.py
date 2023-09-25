@@ -2,7 +2,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, Final, Set, Tuple, cast
+from typing import Dict, Final, Set, Tuple, Union, cast
 
 from quel_ic_config.abstract_ic import (
     AbstractIcConfigHelper,
@@ -204,6 +204,7 @@ class Adrf6780Mixin(AbstractIcMixin):
     Regs = Adrf6780Regs
     RegNames = Adrf6780RegNames
     _CHIP_ID: Final[int] = 7
+    _DEFAULT_EXPECTED_REVISION: Final[Set[int]] = {6}
     DEFAULT_SIDEBAND_SWITCH_WAIT = 0.001
 
     def __init__(self, name):
@@ -239,14 +240,16 @@ class Adrf6780Mixin(AbstractIcMixin):
         reg.soft_reset = False
         self._build_and_write_reg(addr, reg)
 
-    def check_id(self, expected_revision: Set[int]) -> int:
+    def check_id(self, expected_revision: Union[Set[int], None] = None) -> int:
         """confirm the chip version and chip revision, or check the soundness of the register access.
         :param expected_revision: a set of valid revisions.
         :return: an actual chip revision
         """
+        if expected_revision is None:
+            expected_revision = self._DEFAULT_EXPECTED_REVISION
         addr, reg = cast(Tuple[int, Adrf6780Control], self._read_and_parse_reg("Control"))
         if reg.chip_id != self._CHIP_ID or reg.chip_rev not in expected_revision:
-            raise RuntimeError("unexpected pair chip_id and chip_revision: 0x'{reg.chip_id:02x}:{reg.chip_rev:1x}")
+            raise RuntimeError(f"unexpected pair chip_id and chip_revision: {reg.chip_id:x}:{reg.chip_rev:x}")
         return reg.chip_rev
 
     def read_alarm(self) -> Dict[str, bool]:

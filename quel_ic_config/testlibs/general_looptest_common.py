@@ -18,7 +18,15 @@ def make_boxpool(
     boxpool: Dict[str, Tuple[bool, bool, Quel1WaveGen, Quel1WaveGen, Quel1WaveCap, Quel1WaveCap]] = {}
     for k, v in settings.items():
         if k.startswith("BOX"):
-            boxpool[k] = init_box(**v)
+            linkup_g0, linkup_g1, _, wss, _, p2g0, p2g1, p3g0, p3g1, _ = init_box(**v)
+            if v["mxfe_combination"] in {"0", "both", "0,1", "1,0"}:
+                assert linkup_g0
+            if v["mxfe_combination"] in {"1", "both", "0,1", "1,0"}:
+                assert linkup_g1
+            if p2g0 is not None and p2g1 is not None and p3g0 is not None and p3g1 is not None:
+                boxpool[k] = (linkup_g0, linkup_g1, p2g0, p2g1, p3g0, p3g1)
+            else:
+                raise ValueError(f"unsupported boxtype: {v['boxtype']}")
     return boxpool
 
 

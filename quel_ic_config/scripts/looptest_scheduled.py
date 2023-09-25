@@ -1,10 +1,12 @@
 import logging
+from pathlib import Path
 from typing import Any, Collection, Dict, Final, Mapping, Tuple
 
 import matplotlib
 import numpy as np
 from quel_clock_master import QuBEMasterClient, SequencerClient
 
+from quel_ic_config import Quel1BoxType, Quel1ConfigOption
 from testlibs.general_looptest_common import calc_angle, init_units, plot_iqs
 from testlibs.updated_linkup_phase2 import Quel1WaveGen
 from testlibs.updated_linkup_phase3 import Quel1WaveCap
@@ -20,10 +22,10 @@ DEVICE_SETTINGS: Mapping[str, Mapping[str, Any]] = {
         "ipaddr_wss": "10.1.0.42",
         "ipaddr_sss": "10.2.0.42",
         "ipaddr_css": "10.5.0.42",
-        "boxtype": "quel1-a",
-        "mxfe": "both",
-        "config_root": "settings",
-        "config_options": ["use_read_in_mxfe0", "use_read_in_mxfe1"],
+        "boxtype": Quel1BoxType.QuEL1_TypeA,
+        "mxfe_combination": "both",
+        "config_root": Path("settings"),
+        "config_options": [Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1],
     },
     "SENDER0": {
         "box": "BOX0",

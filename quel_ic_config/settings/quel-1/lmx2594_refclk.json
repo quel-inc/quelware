@@ -30,6 +30,6 @@
     "R46": {"outb_mux": 2},
     "R58": {"inpin_ignore": false, "inpin_fmt": 2},
     "R71": {"sysref_div_pre": 4, "sysref_en": true, "sysref_repeat": true},
-    "R72": {"sysref_div": 31, "#": "note: 1/66. todo: to be checked"}
+    "R72": {"sysref_div": 31, "#": "note: 1/66. todo: to confirm this is ignored in sysref repeater mode"}
   }
 }

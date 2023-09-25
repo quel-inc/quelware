@@ -1,6 +1,6 @@
 import pytest
 
-from quel_ic_config.quel1_config_objects import Quel1BoxType
+from quel_ic_config.quel1_config_subsystem_common import Quel1BoxType
 from quel_ic_config.rfswitcharray import (
     AbstractRfSwitchArrayMixin,
     QubeRfSwitchArrayMixin,

@@ -27,6 +27,11 @@ typedef struct nco_ftw {
   uint64_t modulus_b;
 } nco_ftw_t;
 
+typedef struct chip_temperatures {
+  int16_t temp_max;
+  int16_t temp_min;
+} chip_temperatures_t;
+
 typedef struct ad9081_callbacks {
   py::function regread_cb;
   py::function regwrite_cb;
@@ -440,6 +445,10 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
       .export_values();
   m.def("dac_mode_set", adi_ad9081_dac_mode_set);
 
+  m.def("dac_xbar_set", &adi_ad9081_dac_xbar_set);
+
+  m.def("dac_fsc_set", &adi_ad9081_dac_fsc_set);
+
   py::class_<adi_cms_jesd_param_t>(m, "AdiCmsJesdParam")
       .def(py::init<>())
       .def_readwrite("l", &adi_cms_jesd_param_t::jesd_l)
@@ -621,4 +630,14 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
           return adi_ad9081_jesd_tx_lids_cfg_set(device, links, lids.data());
         });
   m.def("jesd_tx_link_enable_set", adi_ad9081_jesd_tx_link_enable_set);
+
+  py::class_<chip_temperatures_t>(m, "ChipTemperatures")
+      .def(py::init<>())
+      .def_readwrite("temp_max", &chip_temperatures_t::temp_max)
+      .def_readwrite("temp_min", &chip_temperatures_t::temp_min);
+  m.def("device_get_temperature",
+        [](adi_ad9081_device_t *device, chip_temperatures_t *temps) {
+          return adi_ad9081_device_get_temperature(device, &(temps->temp_max),
+                                                   &(temps->temp_min));
+        });
 }
