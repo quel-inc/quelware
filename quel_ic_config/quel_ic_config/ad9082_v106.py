@@ -3,40 +3,92 @@ import logging
 import time
 from abc import abstractmethod
 from enum import Enum, IntEnum
-from typing import Any, Collection, Dict, Final, List, Sequence, Tuple, Union
+from typing import Any, Collection, Dict, Final, List, Sequence, Tuple, Union, cast
+
+import numpy as np
+from numpy.typing import NDArray
+from pydantic import BaseModel, ConfigDict, RootModel
 
 import adi_ad9081_v106 as ad9081
-import numpy as np
-from adi_ad9081_v106 import ChipTemperatures, CmsError, Device, NcoFtw
-from numpy.typing import NDArray
-from pydantic import BaseModel, Extra
-
+from adi_ad9081_v106 import ChipTemperatures, CmsError, Device
+from adi_ad9081_v106 import NcoFtw as _NcoFtw
 from quel_ic_config.abstract_ic import AbstractIcMixin
 
 logger = logging.getLogger(__name__)
 
+warn_once_yet = True
+
 # TODO: this depends on Clock Setting.
-MAX_CNCO_SHIFT = 6000000000
-MIN_CNCO_SHIFT = -6000000000
+MAX_DAC_CNCO_SHIFT = 6000000000
+MIN_DAC_CNCO_SHIFT = -6000000000
+MAX_ADC_CNCO_SHIFT = 3000000000
+MIN_ADC_CNCO_SHIFT = -3000000000
+
+
+class NcoFtw:
+    def __init__(self, ftw: Union[_NcoFtw, None] = None):
+        self._ftw: _NcoFtw = _NcoFtw() if ftw is None else ftw
+
+    def __eq__(self, other) -> bool:
+        return (self.ftw == other.ftw) and (self.delta_a == other.delta_a) and (self.modulus_b == other.modulus_b)
+
+    def __repr__(self):
+        return f"<ftw: {self.ftw}, delta_a: {self.delta_a}, modulus_b: {self.modulus_b}>"
+
+    @property
+    def ftw(self) -> int:
+        return self._ftw.ftw
+
+    @ftw.setter
+    def ftw(self, v: int) -> None:
+        if not (0 <= v <= 0xFFFFFFFFFFFF):
+            raise ValueError("invalid ftw value")
+        self._ftw.ftw = v
+
+    @property
+    def delta_a(self) -> int:
+        return self._ftw.delta_a
+
+    @delta_a.setter
+    def delta_a(self, v: int) -> None:
+        if not (0 <= v <= 0xFFFFFFFFFFFF):
+            raise ValueError("invalid ftw value")
+        self._ftw.delta_a = v
+
+    @property
+    def modulus_b(self) -> int:
+        return self._ftw.modulus_b
+
+    @modulus_b.setter
+    def modulus_b(self, v: int) -> None:
+        if not (0 <= v <= 0xFFFFFFFFFFFF):
+            raise ValueError("invalid ftw value")
+        self._ftw.modulus_b = v
+
+    @property
+    def rawobj(self) -> _NcoFtw:
+        return self._ftw
 
 
 class NoExtraBaseModel(BaseModel):
-    class Config:
-        extra = Extra.forbid
-        frozen = True
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class NoExtraSequenceBaseModel(NoExtraBaseModel):
-    __root__: Any = ()
+class FrozenRootModel(RootModel):
+    model_config = ConfigDict(frozen=True)
+
+
+class FrozenSequenceRootModel(FrozenRootModel):
+    root: Tuple[Any, ...] = ()
 
     def __len__(self):
-        return len(self.__root__)
+        return len(self.root)
 
     def __getitem__(self, key):
-        return self.__root__[key]
+        return self.root[key]
 
     def __iter__(self):
-        return iter(self.__root__)
+        return iter(self.root)
 
 
 class Ad9082JesdParam(NoExtraBaseModel):
@@ -205,8 +257,8 @@ class _Ad9082LaneConfigEnum(IntEnum):
     LANE7 = 7
 
 
-class _Ad9082LaneMappingConfig(NoExtraSequenceBaseModel):
-    __root__: Tuple[
+class _Ad9082LaneMappingConfig(FrozenSequenceRootModel):
+    root: Tuple[
         _Ad9082LaneConfigEnum,
         _Ad9082LaneConfigEnum,
         _Ad9082LaneConfigEnum,
@@ -221,28 +273,28 @@ class _Ad9082LaneMappingConfig(NoExtraSequenceBaseModel):
         if d is None:
             d = np.zeros(8, np.uint8)
         for i in range(8):
-            d[i] = self.__root__[i]
+            d[i] = self.root[i]
         return d
 
 
-class _Ad9082LaneMask(NoExtraSequenceBaseModel):
-    __root__: Tuple[bool, bool, bool, bool, bool, bool, bool, bool]
+class _Ad9082LaneMask(FrozenSequenceRootModel):
+    root: Tuple[bool, bool, bool, bool, bool, bool, bool, bool]
 
     def as_cpptype(self) -> int:
         u = 0
-        for i, v in enumerate(self.__root__):
+        for i, v in enumerate(self.root):
             u |= int(v) << i
         return u
 
 
-class _Ad9082LaneFlagConfig(NoExtraSequenceBaseModel):
-    __root__: Tuple[bool, bool, bool, bool, bool, bool, bool, bool]
+class _Ad9082LaneFlagConfig(FrozenSequenceRootModel):
+    root: Tuple[bool, bool, bool, bool, bool, bool, bool, bool]
 
     def as_cpptype(self, d: Union[None, NDArray]) -> NDArray:
         if d is None:
             d = np.zeros(8, np.uint8)
         for i in range(8):
-            d[i] = self.__root__[i]
+            d[i] = self.root[i]
         return d
 
 
@@ -380,8 +432,8 @@ class _Ad9082VirtualConverterConfigEnum(IntEnum):
     VC15 = 15
 
 
-class _Ad9082ConvSel(NoExtraSequenceBaseModel):
-    __root__: Tuple[
+class _Ad9082ConvSel(FrozenSequenceRootModel):
+    root: Tuple[
         _Ad9082VirtualConverterConfigEnum,
         _Ad9082VirtualConverterConfigEnum,
         _Ad9082VirtualConverterConfigEnum,
@@ -448,8 +500,8 @@ _Ad9082FddcRateConfigEnum_cpptype_map: Dict[int, ad9081.AdcFineDdcDcm] = {
 }
 
 
-class _Ad9082DecimationRateChannelConfig(NoExtraSequenceBaseModel):
-    __root__: Tuple[
+class _Ad9082DecimationRateChannelConfig(FrozenSequenceRootModel):
+    root: Tuple[
         _Ad9082FddcRateConfigEnum,
         _Ad9082FddcRateConfigEnum,
         _Ad9082FddcRateConfigEnum,
@@ -461,7 +513,7 @@ class _Ad9082DecimationRateChannelConfig(NoExtraSequenceBaseModel):
     ]
 
     def as_cpptype(self):
-        return tuple(x.as_cpptype() for x in self)
+        return tuple(x.as_cpptype() for x in self.root)
 
 
 class _Ad9082CddcRateConfigEnum(IntEnum):
@@ -498,13 +550,13 @@ _Ad9082CddcRateConfigEnum_cpptype_map: Dict[int, ad9081.AdcCoarseDdcDcm] = {
 }
 
 
-class _Ad9082DecimationRateMainConfig(NoExtraSequenceBaseModel):
-    __root__: Tuple[
+class _Ad9082DecimationRateMainConfig(FrozenSequenceRootModel):
+    root: Tuple[
         _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum
     ]
 
     def as_cpptype(self):
-        return tuple(x.as_cpptype() for x in self)
+        return tuple(x.as_cpptype() for x in self.root)
 
 
 class Ad9082DecimationRateConfig(NoExtraBaseModel):
@@ -548,17 +600,20 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     WORKAROUND_FREQ_DISCOUNT_RATE = 0.97
 
-    def __init__(self, name, param_in: Union[str, Dict[str, Any], Ad9082Config]):
+    def __init__(self, name: str, param_in: Union[str, Dict[str, Any], Ad9082Config]):
         super().__init__(name)
         self.param: Final[Ad9082Config] = self.load_settings(param_in)
         self.device: Final[Device] = Device()
         self.device.callback_set(self._read_reg_cb, self._write_reg_cb, self._delay_us_cb, self._log_write_cb)
+        # for historical reason, use 204b for a while.
+        # the default value will be changed to False if the 204c works well.
+        # it should be removed after the evaluation period, finally.
 
     def load_settings(self, param_in: Union[str, Dict[str, Any], Ad9082Config]):
         if isinstance(param_in, str):
-            param: Ad9082Config = Ad9082Config.parse_obj(json.loads(param_in))
+            param: Ad9082Config = Ad9082Config.model_validate(json.loads(param_in))
         elif isinstance(param_in, dict):
-            param = Ad9082Config.parse_obj(param_in)
+            param = Ad9082Config.model_validate(param_in)
         elif isinstance(param_in, Ad9082Config):
             param = param_in
         else:
@@ -576,6 +631,12 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     def dump_regs(self) -> Dict[int, int]:
         raise NotImplementedError
+
+    def _read_u48(self, addr) -> int:
+        ftw_ftw = bytearray(6)
+        for i in range(6):
+            ftw_ftw[i] = self.read_reg(addr + i)
+        return int.from_bytes(ftw_ftw, byteorder="little", signed=False)
 
     @abstractmethod
     def _read_reg_cb(self, address: int) -> Tuple[bool, int]:
@@ -675,7 +736,9 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     def initialize(
         self,
-        reset: bool = True,
+        reset: bool = False,
+        link_init: bool = False,
+        use_204b: bool = True,
         wait_after_device_init: float = 0.1,
     ) -> None:
         if reset:
@@ -686,39 +749,58 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.device_init()  # the values set above is applied to the device here.
         time.sleep(wait_after_device_init)
 
-        chip_id = self.device_chip_id_get()
-        logger.info(
-            f"chip_type = {chip_id.chip_type}, prod_id = {chip_id.prod_id:04x}, prod_grade = {chip_id.prod_grade},"
-            f"dev_revision = {chip_id.dev_revision}"
-        )
-
-        # TODO: stop using "FREQ_DISCOUNT" (!)
-        dev_ref_clk_hz = int(self.param.clock.ref * self.WORKAROUND_FREQ_DISCOUNT_RATE)
-        dac_clk_hz = int(self.param.clock.dac * self.WORKAROUND_FREQ_DISCOUNT_RATE)
-        adc_clk_hz = int(self.param.clock.adc * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+        if use_204b and link_init:
+            # TODO: stop using "FREQ_DISCOUNT" (!)
+            dev_ref_clk_hz = int(self.param.clock.ref * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+            dac_clk_hz = int(self.param.clock.dac * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+            adc_clk_hz = int(self.param.clock.adc * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+        else:
+            dev_ref_clk_hz = int(self.param.clock.ref)
+            dac_clk_hz = int(self.param.clock.dac)
+            adc_clk_hz = int(self.param.clock.adc)
 
         self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
 
-        self._startup_tx(self.param.tx)
-        self._startup_rx(self.param.rx)
-        self._establish_link()
+        if link_init:
+            self._startup_tx(self.param.tx, use_204b)
+            self._startup_rx(self.param.rx, use_204b)
+            self._establish_link()
 
-        # TODO: remove it when FREQ_DISCOUNT is removed successfully.
-        #       We know this is a completely wrong way. the DISCOUNT_RATE is chosen very carefully to avoid catastrophy.
-        #       For the reason of its necessity, ask the senior guys of QuEL.
-        self.device.dev_info.dev_freq_hz = self.param.clock.ref
-        self.device.dev_info.dac_freq_hz = self.param.clock.dac
-        self.device.dev_info.adc_freq_hz = self.param.clock.adc
+        if use_204b and link_init:
+            # TODO: remove it when FREQ_DISCOUNT is removed successfully.
+            #       We know this is a completely wrong way. the DISCOUNT_RATE is chosen very carefully to avoid
+            #       catastrophy. For the reason of its necessity, ask the senior guys of QuEL.
+            self.device.dev_info.dev_freq_hz = self.param.clock.ref
+            self.device.dev_info.dac_freq_hz = self.param.clock.dac
+            self.device.dev_info.adc_freq_hz = self.param.clock.adc
 
-    def _startup_tx(self, param_tx: Ad9082TxConfig) -> None:
+    def _startup_tx(self, param_tx: Ad9082TxConfig, use_204b: bool) -> None:
         logger.info("starting-up DACs")
+
+        if use_204b:
+            main_freq: Tuple[int, int, int, int] = cast(
+                Tuple[int, int, int, int],
+                tuple([x * self.WORKAROUND_FREQ_DISCOUNT_RATE for x in param_tx.shift_freq.main]),
+            )
+            channel_freq: Tuple[int, int, int, int, int, int, int, int] = cast(
+                Tuple[int, int, int, int, int, int, int, int],
+                tuple([x * self.WORKAROUND_FREQ_DISCOUNT_RATE for x in param_tx.shift_freq.channel]),
+            )
+            # Notes: putting main_freq and channel_freq into Ad9082ShiftFreqConfig for validation.
+            shift_freq: Ad9082ShiftFreqConfig = Ad9082ShiftFreqConfig(
+                main=main_freq,
+                channel=channel_freq,
+            )
+        else:
+            shift_freq = param_tx.shift_freq
+
         rc = ad9081.device_startup_tx(
             self.device,
             param_tx.interpolation_rate.main,
             param_tx.interpolation_rate.channel,
             param_tx.channel_assign.as_cpptype(),
-            param_tx.shift_freq.main,
-            param_tx.shift_freq.channel,
+            shift_freq.main,
+            shift_freq.channel,
             param_tx.jesd204.as_cpptype(),
         )
         if rc != CmsError.API_CMS_ERROR_OK:
@@ -734,6 +816,13 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.hal_reg_set(0x0401, 0x00)
 
         # TODO(XXX): this should be moved to establish_link()
+        if not use_204b:
+            logger.info("calibrating JESD204C rx link")
+            rc = ad9081.jesd_rx_calibrate_204c(self.device, 1, 0, 0)
+            if rc != CmsError.API_CMS_ERROR_OK:
+                raise RuntimeError(f"{CmsError(rc).name}")
+
+        # TODO(XXX): this should be moved to establish_link()
         logger.info("enabling JESD204C rx link")
         rc = ad9081.jesd_rx_link_enable_set(self.device, ad9081.LINK_0, 1)
         if rc != CmsError.API_CMS_ERROR_OK:
@@ -742,14 +831,32 @@ class Ad9082V106Mixin(AbstractIcMixin):
         for i in range(4):
             self.set_fullscale_current(1 << i, param_tx.fullscale_current[i])
 
-    def _startup_rx(self, param_rx: Ad9082RxConfig) -> None:
+    def _startup_rx(self, param_rx: Ad9082RxConfig, use_204b: bool) -> None:
         logger.info("starting up ADCs")
+
+        if use_204b:
+            main_freq: Tuple[int, int, int, int] = cast(
+                Tuple[int, int, int, int],
+                tuple([x * self.WORKAROUND_FREQ_DISCOUNT_RATE for x in param_rx.shift_freq.main]),
+            )
+            channel_freq: Tuple[int, int, int, int, int, int, int, int] = cast(
+                Tuple[int, int, int, int, int, int, int, int],
+                tuple([x * self.WORKAROUND_FREQ_DISCOUNT_RATE for x in param_rx.shift_freq.channel]),
+            )
+            # Notes: putting main_freq and channel_freq into Ad9082ShiftFreqConfig for validation.
+            shift_freq: Ad9082ShiftFreqConfig = Ad9082ShiftFreqConfig(
+                main=main_freq,
+                channel=channel_freq,
+            )
+        else:
+            shift_freq = param_rx.shift_freq
+
         rc = ad9081.device_startup_rx(
             self.device,
             ad9081.ADC_CDDC_ALL,
             ad9081.ADC_FDDC_ALL,
-            param_rx.shift_freq.main,
-            param_rx.shift_freq.channel,
+            shift_freq.main,
+            shift_freq.channel,
             param_rx.decimation_rate.main.as_cpptype(),
             param_rx.decimation_rate.channel.as_cpptype(),
             param_rx.c2r_enable.main,
@@ -778,9 +885,13 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.write_reg(0x05BB, 0x00)
         self.write_reg(0x05BB, 0x01)
 
-    def check_link_status(self, ignore_crc_error: bool = False) -> bool:
+    def get_link_status(self) -> Tuple[int, int]:
         link_status: int = self.read_reg(0x055E)
         crc_flag: int = self.read_reg(0x05BB)
+        return link_status, crc_flag
+
+    def check_link_status(self, ignore_crc_error: bool = False) -> bool:
+        link_status, crc_flag = self.get_link_status()
         logger.info(f"link status and crc flag:  *(0x55e) = 0x{link_status:02x},  *(0x05bb) = 0x{crc_flag:02x}")
         if link_status == 0xE0:
             if crc_flag == 0x01:
@@ -805,16 +916,16 @@ class Ad9082V106Mixin(AbstractIcMixin):
     # Notes: the calculation and set of ftw are separated for the integration of DAC and ADC in QuEL-1
     #        this class should not implement QuEL-1 specific features, but provide the flexibility for them.
     def calc_dac_cnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
-        if not (MIN_CNCO_SHIFT < shift_hz < MAX_CNCO_SHIFT):
+        if not (MIN_DAC_CNCO_SHIFT < shift_hz < MAX_DAC_CNCO_SHIFT):
             raise ValueError("frequency is out of range")
 
         ftw = NcoFtw()
         if fractional_mode:
-            rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw)
+            rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
         else:
-            rc = ad9081.hal_calc_tx_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw)
+            rc = ad9081.hal_calc_tx_nco_ftw(self.device, self.device.dev_info.dac_freq_hz, shift_hz, ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.hal_calc_tx_nco_ftw() failed with error code: {rc}")
         return ftw
@@ -842,7 +953,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return self.calc_dac_cnco_ftw_float(shift_hz * float(self.param.tx.interpolation_rate.main), fractional_mode)
 
     def calc_dac_cnco_ftw_rational(self, shift_nr_hz: int, shift_dn: int, fractional_mode=False) -> NcoFtw:
-        if not (MIN_CNCO_SHIFT * shift_dn < shift_nr_hz < MAX_CNCO_SHIFT * shift_dn):
+        if not (MIN_DAC_CNCO_SHIFT * shift_dn < shift_nr_hz < MAX_DAC_CNCO_SHIFT * shift_dn):
             raise ValueError("frequency is out of range")
 
         ftw = NcoFtw()
@@ -869,73 +980,138 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if ftw.ftw < (1 << 47):
             x: float = float(ftw.ftw)
             if ftw.modulus_b != 0:
-                x += ftw.modulus_a / ftw.modulus_b
+                x += ftw.delta_a / ftw.modulus_b
         else:
             x = float(ftw.ftw - (1 << 48))
             if ftw.modulus_b != 0:
-                if ftw.modulus_a != 0:
+                if ftw.delta_a != 0:
                     x += 1
-                    x -= ((1 << 48) - ftw.modulus_a) / ftw.modulus_b
+                    x -= ((1 << 48) - ftw.delta_a) / ftw.modulus_b
         return x * self.device.dev_info.dac_freq_hz / (1 << 48)
 
     def calc_dac_fnco_freq(self, ftw: NcoFtw) -> float:
         return self.calc_dac_cnco_freq(ftw) / float(self.param.tx.interpolation_rate.main)
 
     def set_dac_cnco(self, dacs: Collection[int], ftw: NcoFtw) -> None:
+        # dacs is actually cducs.
         dac_mask: ad9081.DacSelect = ad9081.DAC_NONE
         for i in dacs:
+            if not 0 <= i <= 3:
+                raise ValueError("invalid index of dac: {i}")
             dac_mask |= getattr(ad9081, f"DAC_{i:d}")
 
         if dac_mask != ad9081.DAC_NONE:
             rc = ad9081.dac_duc_nco_enable_set(self.device, int(dac_mask), int(ad9081.DAC_CH_NONE), 1)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
-            rc = ad9081.dac_duc_nco_ftw_set(self.device, int(dac_mask), int(ad9081.DAC_CH_NONE), ftw)
+            rc = ad9081.dac_duc_nco_ftw_set(self.device, int(dac_mask), int(ad9081.DAC_CH_NONE), ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
 
+    def get_dac_cnco(self, dac: int) -> NcoFtw:
+        # dac is actually cduc
+        if not 0 <= dac <= 3:
+            raise ValueError(f"invalid index of dac: {dac}")
+        dac_mask: ad9081.DacSelect = getattr(ad9081, f"DAC_{dac:d}")
+        rc = ad9081.dac_select_set(self.device, int(dac_mask))
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
+
+        ftw = NcoFtw()
+        ftw.ftw = self._read_u48(0x1CB)
+        ftw.delta_a = self._read_u48(0x1DE)
+        ftw.modulus_b = self._read_u48(0x1D3)
+        return ftw
+
     def set_dac_fnco(self, channels: Collection[int], ftw: NcoFtw) -> None:
+        # channel is actually fduc
         ch_mask: ad9081.DacChannelSelect = ad9081.DAC_CH_NONE
         for i in channels:
+            if not 0 <= i <= 7:
+                raise ValueError(f"invalid channel: {i}")
             ch_mask |= getattr(ad9081, f"DAC_CH_{i:d}")
 
         if ch_mask != ad9081.DAC_CH_NONE:
             rc = ad9081.dac_duc_nco_enable_set(self.device, int(ad9081.DAC_NONE), int(ch_mask), 1)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
-            rc = ad9081.dac_duc_nco_ftw_set(self.device, int(ad9081.DAC_NONE), int(ch_mask), ftw)
+            rc = ad9081.dac_duc_nco_ftw_set(self.device, int(ad9081.DAC_NONE), int(ch_mask), ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.dac_duc_nco_ftw_set() failed with error code: {rc}")
+
+    def get_dac_fnco(self, channel: int) -> NcoFtw:
+        # channel is actually fduc
+        if not 0 <= channel <= 7:
+            raise ValueError(f"invalid index of channel: {channel}")
+        ch_mask: ad9081.DacChannelSelect = getattr(ad9081, f"DAC_CH_{channel:d}")
+
+        rc = ad9081.dac_chan_select_set(self.device, int(ch_mask))
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
+
+        ftw = NcoFtw()
+        ftw.ftw = self._read_u48(0x1A2)
+        ftw.delta_a = self._read_u48(0x1B0)
+        ftw.modulus_b = self._read_u48(0x1A8)
+        return ftw
 
     # Notes: the calculation and set of ftw are separated for the integration of DAC and ADC in QuEL-1
     #        this class should not implement QuEL-1 specific features, but provide the flexibility for them.
     def calc_adc_cnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
-        if not (MIN_CNCO_SHIFT < shift_hz < MAX_CNCO_SHIFT):
+        if not (MIN_ADC_CNCO_SHIFT < shift_hz < MAX_ADC_CNCO_SHIFT):
             raise ValueError("frequency is out of range")
 
         ftw = NcoFtw()
         if fractional_mode:
-            rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw)
+            rc = ad9081.hal_calc_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.hal_calc_nco_ftw() failed with error code: {rc}")
         else:
-            rc = ad9081.hal_calc_rx_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw)
+            rc = ad9081.hal_calc_rx_nco_ftw(self.device, self.device.dev_info.adc_freq_hz, shift_hz, ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.hal_calc_rx_nco_ftw() failed with error code: {rc}")
         return ftw
 
     def calc_adc_fnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
+        global warn_once_yet
         # TODO: take index of ADC in the case that different decimation rates are used among ADCs.
         # TODO: double shift value when c2r is enabled (low priority).
-        logger.warning(
-            "be aware the current implementation works only when all the ADCs shares identical decimation rate."
-        )
+        if warn_once_yet:
+            logger.warning(
+                "be aware the current implementation works only when all the ADCs shares identical decimation rate."
+            )
+            warn_once_yet = False
         # Notes: be aware that rounding error may be induced here.
-        return self.calc_adc_cnco_ftw(int(shift_hz * self.param.rx.decimation_rate.main[0] + 0.5), fractional_mode)
+        return self.calc_adc_cnco_ftw(shift_hz * self.param.rx.decimation_rate.main[0], fractional_mode)
+
+    def calc_adc_cnco_freq(self, ftw: NcoFtw) -> float:
+        if ftw.ftw < (1 << 47):
+            x: float = float(ftw.ftw)
+            if ftw.modulus_b != 0:
+                x += ftw.delta_a / ftw.modulus_b
+        else:
+            x = float(ftw.ftw - (1 << 48))
+            if ftw.modulus_b != 0:
+                if ftw.delta_a != 0:
+                    x += 1
+                    x -= ((1 << 48) - ftw.delta_a) / ftw.modulus_b
+        return x * self.device.dev_info.adc_freq_hz / (1 << 48)
+
+    def calc_adc_fnco_freq(self, ftw: NcoFtw) -> float:
+        global warn_once_yet
+        # TODO: make it possible to eliminate the following warning message
+        if warn_once_yet:
+            logger.warning(
+                "be aware the current implementation works only when all the ADCs shares identical decimation rate."
+            )
+            warn_once_yet = False
+        return self.calc_adc_cnco_freq(ftw) / float(self.param.rx.decimation_rate.main[0])
 
     def set_adc_cnco(self, adcs: Collection[int], ftw: NcoFtw) -> None:
         adc_mask: ad9081.AdcCoarseDdcSelect = ad9081.ADC_CDDC_NONE
         for i in adcs:
+            if not 0 <= i <= 3:
+                raise ValueError(f"invalid index of adc: {i}")
             adc_mask |= getattr(ad9081, f"ADC_CDDC_{i:d}")
 
         if adc_mask != ad9081.ADC_CDDC_NONE:
@@ -943,17 +1119,35 @@ class Ad9082V106Mixin(AbstractIcMixin):
             rc = ad9081.adc_ddc_coarse_nco_mode_set(
                 self.device,
                 int(adc_mask),
-                ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.modulus_a == 0 else ad9081.ADC_NCO_VIF,
+                ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.delta_a == 0 else ad9081.ADC_NCO_VIF,
             )
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.adc_ddc_coarse_nco_mode_set() failed with error code: {rc}")
-            rc = ad9081.adc_ddc_coarse_nco_ftw_set(self.device, int(adc_mask), ftw)
+            rc = ad9081.adc_ddc_coarse_nco_ftw_set(self.device, int(adc_mask), ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.adc_ddc_nco_ftw_set() failed with error code: {rc}")
+
+    def get_adc_cnco(self, adc: int) -> NcoFtw:
+        # Note: adc is actually cddc
+        if not 0 <= adc <= 3:
+            raise ValueError(f"invalid index of adc: {adc}")
+        adc_mask: ad9081.AdcCoarseDdcSelect = getattr(ad9081, f"ADC_CDDC_{adc:d}")
+
+        rc = ad9081.adc_ddc_coarse_select_set(self.device, int(adc_mask))
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"ad9081.adc_ddc_coarse_nco_mode_set() failed with error code: {rc}")
+
+        ftw = NcoFtw()
+        ftw.ftw = self._read_u48(0xA05)
+        ftw.delta_a = self._read_u48(0xA11)
+        ftw.modulus_b = self._read_u48(0xA17)
+        return ftw
 
     def set_adc_fnco(self, channels: Collection[int], ftw: NcoFtw) -> None:
         ch_mask: ad9081.AdcFineDdcSelect = ad9081.ADC_FDDC_NONE
         for i in channels:
+            if not 0 <= i <= 7:
+                raise ValueError(f"invalid index of adc channel: {i}")
             ch_mask |= getattr(ad9081, f"ADC_FDDC_{i:d}")
 
         if ch_mask != ad9081.ADC_FDDC_NONE:
@@ -961,24 +1155,42 @@ class Ad9082V106Mixin(AbstractIcMixin):
             rc = ad9081.adc_ddc_fine_nco_mode_set(
                 self.device,
                 int(ch_mask),
-                ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.modulus_a == 0 else ad9081.ADC_NCO_VIF,
+                ad9081.ADC_NCO_ZIF if ftw.ftw == 0 and ftw.delta_a == 0 else ad9081.ADC_NCO_VIF,
             )
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.adc_ddc_nco_mode_set() failed with error code: {rc}")
-            rc = ad9081.adc_ddc_fine_nco_ftw_set(self.device, int(ch_mask), ftw)
+            rc = ad9081.adc_ddc_fine_nco_ftw_set(self.device, int(ch_mask), ftw.rawobj)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"ad9081.adc_ddc_fine_nco_set() failed with error code: {rc}")
 
-    def set_fullscale_current(self, dacs: int, current: int):
-        if dacs == 0 or (dacs & 0x0F) != dacs:
-            raise ValueError("wrong specifier of DACs {dacs:x}")
-        if not 0 <= current <= 40520:
-            raise ValueError("invalid current {current}uA")
+    def get_adc_fnco(self, channel: int) -> NcoFtw:
+        # Note: channel is actually fddc
+        if not 0 <= channel <= 7:
+            raise ValueError(f"invalid index of adc channel: {channel}")
+        ch_mask: ad9081.AdcFineDdcSelect = getattr(ad9081, f"ADC_FDDC_{channel:d}")
 
-        if current == 40520:
-            # TODO: should be reduced to 37750uA, with using adi_ad9081_dac_fsc_set() API.
-            # Notes: this implementation is kept for the historical reason.
-            logger.info("setting fullscale current to 40520uA, that is the conventional value for QuEL-1")
+        rc = ad9081.adc_ddc_fine_select_set(self.device, int(ch_mask))
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"ad9081.adc_ddc_coarse_nco_mode_set() failed with error code: {rc}")
+
+        ftw = NcoFtw()
+        ftw.ftw = self._read_u48(0xA85)
+        ftw.delta_a = self._read_u48(0xA91)
+        ftw.modulus_b = self._read_u48(0xA97)
+        return ftw
+
+    def set_fullscale_current(self, dacs: int, current: int) -> None:
+        if dacs == 0 or (dacs & 0x0F) != dacs:
+            raise ValueError(f"wrong specifier of DACs {dacs:x}")
+
+        # Notes: this implementation is kept for the historical reason.
+        #        40527uA is the historically used fsc, it is called as 40520 by mistake for a while...
+        if not ((7000 <= current <= 40000) or (current in {40520, 40527})):
+            raise ValueError(f"invalid current {current}uA")
+
+        if current in (40250, 40527):
+            # Notes: adi_ad9081_dac_fsc_set() API pose the maximum limit of fsc as 40000uA.
+            logger.info("setting fullscale current to 40527uA, that is the conventional value for QuEL-1")
             self.hal_reg_set(0x001B, dacs)
             self.hal_reg_set(0x0117, 0xA0)
             self.hal_reg_set(0x0118, 0xFF)
@@ -986,6 +1198,37 @@ class Ad9082V106Mixin(AbstractIcMixin):
             rc = ad9081.dac_fsc_set(self.device, dacs, current)
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"{CmsError(rc).name}")
+
+    def get_fullscale_current(self, dac: int) -> int:
+        if not 0 <= dac <= 3:
+            raise ValueError(f"invalid index of dac: {dac}")
+        dac_mask: ad9081.DacSelect = getattr(ad9081, f"DAC_{dac:d}")
+        rc = ad9081.dac_select_set(self.device, int(dac_mask))
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
+
+        r117 = self.hal_reg_get(0x117)
+        fscmin = (r117 >> 4) & 0x0F
+        fscctrl_1_0 = r117 & 0x03
+        fscctrl_9_2 = self.hal_reg_get(0x118) & 0xFF
+        return round((fscmin / 16 + ((fscctrl_9_2 << 2) + fscctrl_1_0) / 1024) * 25000)
+
+    def get_virtual_adc_select(self) -> List[int]:
+        # Notes: 16 comes from the value of JESD M parameter. (see p.68 of UG-1578 rev.A)
+        convsel = []
+        for i in range(16):
+            v = self.read_reg(0x600 + i)
+            if v & 0x80:
+                convsel.append(-1)
+            else:
+                convsel.append(v)
+        return convsel
+
+    def get_main_interpolation_rate(self) -> int:
+        return int(self.param.tx.interpolation_rate.main)
+
+    def get_channel_interpolation_rate(self) -> int:
+        return int(self.param.tx.interpolation_rate.channel)
 
     def get_temperatures(self) -> Tuple[int, int]:
         temperatures = ChipTemperatures()

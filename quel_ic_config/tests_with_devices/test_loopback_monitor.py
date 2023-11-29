@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from testlibs.basic_scan_common import Quel1BoxType, Quel1ConfigOption, init_box
+from quel_ic_config_utils.simple_box import Quel1BoxType, Quel1ConfigOption, SimpleBoxIntrinsic, init_box_with_linkup
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -16,19 +16,23 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 DEVICE_SETTINGS = (
     {
-        "ipaddr_wss": "10.1.0.42",
-        "ipaddr_sss": "10.2.0.42",
-        "ipaddr_css": "10.5.0.42",
-        "boxtype": Quel1BoxType.fromstr("quel1-a"),
-        "config_root": Path("settings"),
-        "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
-        "mxfe_combination": "both",
+        "label": "staging-074",
+        "config": {
+            "ipaddr_wss": "10.1.0.74",
+            "ipaddr_sss": "10.2.0.74",
+            "ipaddr_css": "10.5.0.74",
+            "boxtype": Quel1BoxType.fromstr("quel1-a"),
+            "config_root": None,
+            "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
+            "mxfes_to_linkup": (0, 1),
+            "use_204b": True,
+        },
     },
 )
 
 
 OUTPUT_SETTING = {
-    "spectrum_image_path": "./artifacts/loopback_monitor",
+    "spectrum_image_path": Path("./artifacts/loopback_monitor"),
 }
 
 
@@ -36,43 +40,27 @@ OUTPUT_SETTING = {
 def css_p2_p3(request):
     param0 = request.param
 
-    linkup0, linkup1, _, wss, _, css_p2_g0, css_p2_g1, css_p3_g0, css_p3_g1, _ = init_box(**param0)
+    linkup0, linkup1, _, _, _, box = init_box_with_linkup(**param0["config"], refer_by_port=False)
     assert linkup0
     assert linkup1
-    assert css_p2_g0 is not None
-    assert css_p2_g1 is not None
-    assert css_p3_g0 is not None
-    assert css_p3_g1 is not None
+    assert isinstance(box, SimpleBoxIntrinsic)
+    yield make_outdir(param0["label"]), box
 
-    # max_noise = measure_floor_noise(e4405b)
-    # assert max_noise < MAX_BACKGROUND_NOISE
-    yield (css_p2_g0, css_p3_g0), (css_p2_g1, css_p3_g1)
-
-    css_p2_g0.stop()
-    css_p2_g1.stop()
-    if len(css_p3_g0.active_units) != 0:
-        css_p3_g0.complete()
-        assert False
-    if len(css_p3_g1.active_units) != 0:
-        css_p3_g1.complete()
-        assert False
+    box.easy_stop_all()
 
 
-@pytest.fixture(scope="session")
-def outdir(request):
+def make_outdir(dirname: str) -> Path:
     mpl.use("Qt5Agg")  # TODO: reconsider where to execute.
 
-    dirname = OUTPUT_SETTING["spectrum_image_path"]
-    if os.path.exists(dirname):
-        shutil.rmtree(dirname)
-
-    dpath = Path(dirname)
-    os.makedirs(dpath)
-    return dpath
+    dirpath = OUTPUT_SETTING["spectrum_image_path"] / dirname
+    if os.path.exists(dirpath):
+        shutil.rmtree(dirpath)
+    os.makedirs(dirpath)
+    return dirpath
 
 
 @pytest.mark.parametrize(
-    ("mxfe", "line", "awg_idx", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
+    ("mxfe", "line", "channel", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
     [
         (0, 0, 0, 11500, 1500, 1500, 0, 0, "L"),
         (0, 0, 0, 11500, 1500, 1500, 10, 0, "L"),
@@ -113,7 +101,7 @@ def outdir(request):
 def test_monitor_loopback(
     mxfe: int,
     line: int,
-    awg_idx: int,
+    channel: int,
     lo_mhz: int,
     cnco_mhz_tx: int,
     cnco_mhz_rx: int,
@@ -121,25 +109,37 @@ def test_monitor_loopback(
     fnco_mhz_rx: int,
     sideband: str,
     css_p2_p3,
-    outdir,
 ):
-    mxfe_g, mxfe_c = css_p2_p3[mxfe]
-    mxfe_g.run(line, awg_idx, lo_mhz=lo_mhz, cnco_mhz=cnco_mhz_tx, fnco_mhz=fnco_mhz_tx, sideband=sideband)
-    # Notes: a down convert mixer of the monitor receiver utilizes LO of the line 1.
-    mxfe_c.run(
-        "m",
-        num_words=65536 * 16,
-        active_units={0},
-        enable_internal_loop=True,
-        lo_mhz=lo_mhz if line != 1 else None,
-        cnco_mhz=cnco_mhz_rx,
-        fnco_mhz=fnco_mhz_rx,
-    )
-    captured = mxfe_c.complete()
-    mxfe_g.stop()
+    outdir, box = css_p2_p3
 
-    assert captured is not None
-    x = list(captured.values())[0]
+    box.easy_start_cw(
+        group=mxfe,
+        line=line,
+        channel=channel,
+        lo_freq=lo_mhz * 1e6,
+        cnco_freq=cnco_mhz_tx * 1e6,
+        fnco_freq=fnco_mhz_tx * 1e6,
+        vatt=0xA00,
+        sideband=sideband,
+        amplitude=32767.0,
+    )
+
+    num_samples = 65536 * 4
+
+    x = box.easy_capture(
+        group=mxfe,
+        rline="m",
+        runit=0,
+        lo_freq=lo_mhz * 1e6 if line != 1 else None,
+        cnco_freq=cnco_mhz_rx * 1e6,
+        fnco_freq=fnco_mhz_rx * 1e6,
+        activate_internal_loop=True,
+        num_samples=num_samples,
+    )
+
+    box.easy_stop(group=mxfe, line=line, channel=channel)
+
+    assert (x is not None) and (len(x) == num_samples)
     p = abs(np.fft.fft(x))
     f = np.fft.fftfreq(len(p), 1.0 / 500e6)
     max_idx = np.argmax(p)
@@ -147,18 +147,18 @@ def test_monitor_loopback(
     expected_freq = ((cnco_mhz_tx - cnco_mhz_rx) + (fnco_mhz_tx - fnco_mhz_rx)) * 1e6
 
     logger.info(f"freq error = {f[max_idx] - expected_freq}Hz")
-    logger.info(f"power = {p[max_idx]/len(x)}")
+    logger.info(f"power = {p[max_idx]/num_samples}")
 
     plt.cla()
-    plt.plot(f, p / len(x))
+    plt.plot(f, p / num_samples)
     plt.savefig(
-        outdir / f"mxfe{mxfe:d}-line{line:d}-ch{awg_idx:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
+        outdir / f"mxfe{mxfe:d}-line{line:d}-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
         f"-fnco{fnco_mhz_tx:d}_{fnco_mhz_rx:d}.png"
     )
 
     assert abs(f[max_idx] - expected_freq) < abs(f[1] - f[0])
     if fnco_mhz_rx == 0:
-        assert p[max_idx] / len(x) >= 2000.0
+        assert p[max_idx] / num_samples >= 2000.0
     else:
         # TODO: investigate why the amplitude of the received signal is smaller when fnco_rx != 0.
-        assert p[max_idx] / len(x) >= 1000.0
+        assert p[max_idx] / num_samples >= 1000.0

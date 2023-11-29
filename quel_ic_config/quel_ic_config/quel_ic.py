@@ -91,6 +91,7 @@ class Ad5328(Ad5328Mixin, Quel1Ic):
         return Quel1Ic._read_reg(self, addr)
 
     def write_reg(self, addr: int, data: int) -> None:
+        self._carbon_copy_not_updated[addr] = data
         return Quel1Ic._write_reg(self, addr, data)
 
 

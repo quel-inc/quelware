@@ -9,11 +9,12 @@ logger = logging.getLogger(__name__)
 class QuelInstDevice(str, Enum):
     E4405B = "E4405B"
     E4407B = "E4407B"
-    MS2720T = "MS2720T"
+    MS2720T_1 = "MS2720T-1"
+    MS2090A_1 = "MS2090A-1"
     SYNTHHD = "SYNTH_HD"  # tentative
 
     def get_visa_name(self):
-        if self in {self.E4405B, self.E4407B, self.MS2720T}:
+        if self in {self.E4405B, self.E4407B, self.MS2720T_1, self.MS2090A_1}:
             return self.value
         else:
             raise ValueError(f"{self.value} is not a visa device")

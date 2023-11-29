@@ -93,7 +93,8 @@ class AbstractIcConfigHelper:
         self.updated[addr] = data
 
     def read_reg(self, address: Union[int, str], refer_to_cache: bool = False) -> AbstractIcReg:
-        """read the value of a register at the address.
+        """reading the value of a register at the address.
+
         :param address: the address of register to be read. you may use alias name instead.
         :param refer_to_cache: return the cached register value if True.
         :return: an instance of the corresponding register object
@@ -102,8 +103,9 @@ class AbstractIcConfigHelper:
         return self._read_reg(addr_, refer_to_cache)
 
     def write_reg(self, address: Union[int, str], data: Union[int, AbstractIcReg]) -> None:
-        """update the value of a register into a cache. the cached values are written to the register when flush() is
+        """updating the value of a register into a cache. the cached values are written to the register when flush() is
         called.
+
         :param address: the address of a register to be updated.
         :param data: the value of the register.
         :return: None
@@ -113,6 +115,7 @@ class AbstractIcConfigHelper:
 
     def write_field(self, addr: Union[int, str], **kwargs: Union[bool, int, IntEnum]):
         """a wrapper function of write_reg() providing a convenient way to update fields of a register.
+
         :param addr: the address of a register to be updated.
         :param kwargs: the values of fields of the register.
         :return: None

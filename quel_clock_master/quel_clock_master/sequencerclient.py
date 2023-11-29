@@ -54,22 +54,37 @@ class SequencerClient(SimpleUdpClient):
             logger.info(f"scheduled command is added to {self._server_ipaddr} successfully")
         return raddr is not None
 
-    def read_clock(self) -> Tuple[bool, int]:
+    def read_clock(self) -> Tuple[bool, int, int]:
         data = struct.pack("BBBB", 0x00, 0x00, 0x00, 0x04)
 
         logger.debug(f"sending {':'.join(['{0:02x}'.format(x) for x in data])}")
-        reply, raddr = self._send_recv_generic(self._synch_port, data)
+        reply_, raddr = self._send_recv_generic(self._synch_port, data)
+        reply = memoryview(reply_)
+
+        clock: int = -1
+        sysref_latch: int = -1
+        flag: bool = False
+
         if raddr is None:
             logger.warning("communication failure in clear_clock()")
-            clock = -1
         else:
             logger.debug(f"receiving {':'.join(['{0:02x}'.format(x) for x in reply])} from {raddr[0]:s}:{raddr[1]:d}")
-            # if reply[0] != 0x33:
-            #    logger.warning("unexpected reply packet starting with {reply[0]:02x} is received")
+            if reply[0] == 0x00 and reply[1] == 0x00 and reply[2] == 0x00 and reply[3] == 0x05:
+                try:
+                    if len(reply) == 12:
+                        clock = struct.unpack(">Q", reply[4:12])[0]
+                        flag = True
+                    elif len(reply) == 20:
+                        clock, sysref_latch = struct.unpack(">QQ", reply[4:20])
+                        flag = True
+                    else:
+                        logger.warning(f"a packet with wrong length ({len(reply)}) is received, ignore it")
+                except struct.error as e:
+                    logger.error(e)
+            else:
+                logger.warning("unexpected reply packet starting with {reply[0]:02x} is received")
 
-            clock = struct.unpack(">Q", reply[4:12])[0]
-
-        return (raddr is not None), clock
+        return flag, clock, sysref_latch
 
 
 if __name__ == "__main__":
@@ -91,7 +106,7 @@ if __name__ == "__main__":
     current: int = 0
     if args.command == "sched":
         target0 = SequencerClient(args.ipaddr_targets[0], args.seqr_port, args.synch_port)
-        retcode0, current = target0.read_clock()
+        retcode0, current, _ = target0.read_clock()
         if not retcode0:
             logger.error(f"failed to read clock from {args.ipaddr_targets[0]}, aborted.")
             sys.exit(1)
@@ -115,9 +130,9 @@ if __name__ == "__main__":
                 flag = False
                 logger.warning(f"{ipaddr_target}: failed")
         elif args.command == "read":
-            retcode, clock = target.read_clock()
+            retcode, clock, last_sysref = target.read_clock()
             if retcode:
-                logger.info(f"{ipaddr_target}: {clock}")
+                logger.info(f"{ipaddr_target}: {clock} {last_sysref}")
             else:
                 flag = False
                 logger.info(f"{ipaddr_target}: failed")

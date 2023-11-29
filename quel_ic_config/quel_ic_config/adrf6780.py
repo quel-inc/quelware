@@ -211,7 +211,8 @@ class Adrf6780Mixin(AbstractIcMixin):
         super().__init__(name)
 
     def dump_regs(self) -> Dict[int, int]:
-        """dump all the available registers.
+        """dumping all the available registers.
+
         :return: a mapping between an address and a value of the registers
         """
         regs = {}
@@ -230,7 +231,8 @@ class Adrf6780Mixin(AbstractIcMixin):
         self.write_reg(addr, regobj.build())
 
     def soft_reset(self, parity_enable: bool = False) -> None:
-        """soft reset.
+        """committing soft reset.
+
         :return: None
         """
         addr, reg = cast(Tuple[int, Adrf6780Control], self._read_and_parse_reg("Control"))
@@ -241,7 +243,8 @@ class Adrf6780Mixin(AbstractIcMixin):
         self._build_and_write_reg(addr, reg)
 
     def check_id(self, expected_revision: Union[Set[int], None] = None) -> int:
-        """confirm the chip version and chip revision, or check the soundness of the register access.
+        """confirming the chip version and chip revision, or check the soundness of the register access.
+
         :param expected_revision: a set of valid revisions.
         :return: an actual chip revision
         """
@@ -263,7 +266,8 @@ class Adrf6780Mixin(AbstractIcMixin):
         }
 
     def get_lo_sideband(self) -> Adrf6780LoSideband:
-        """set LO Sideband to either of LSB or USB.
+        """setting LO Sideband to either of LSB or USB.
+
         :return: None
         """
         # don't use helper to confirm type safety.
@@ -271,8 +275,9 @@ class Adrf6780Mixin(AbstractIcMixin):
         return cast(Adrf6780LoPath, reg).lo_sideband
 
     def set_lo_sideband(self, sideband: Adrf6780LoSideband, wait=DEFAULT_SIDEBAND_SWITCH_WAIT) -> None:
-        """set LO Sideband to either of LSB or USB.
-        :param sideband: either of LoSideband.Lsb or LoSideband.Usb
+        """setting LO Sideband to either of LSB or USB.
+
+        :param sideband: either of LoSideband.Lsb or LoSideband.Usb.
         :return: None
         """
         # don't use helper to confirm type safety.
@@ -309,8 +314,9 @@ class Adrf6780Mixin(AbstractIcMixin):
         self._build_and_write_reg(addr_enable, reg_enable)
 
     def read_detector_adc(self) -> int:
-        """Read the value of the internal ADC. This method assumes the ADC is already enabled with the steps 1 -- 3
+        """reading the value of the internal ADC. This method assumes the ADC is already enabled with the steps 1 -- 3
         described at the p.23 of the revision D datasheet.
+
         :return: the reading of the ADC (8bit unsigned).
         """
         # don't use helper to confirm type safety.
@@ -345,7 +351,7 @@ class Adrf6780ConfigHelper(AbstractIcConfigHelper):
         super().__init__(ic)
 
     def flush(self, discard_after_flush=True):
-        """Update the modified registers in the order of addresses 0, 2, 3, 4, 5, 6. The modifications on addresses 1
+        """updating the modified registers in the order of addresses 0, 2, 3, 4, 5, 6. The modifications on addresses 1
         and 12 are ignored because they are read-only registers."""
         for addr in (0, 2, 3, 4, 5, 6):
             if addr in self.updated:

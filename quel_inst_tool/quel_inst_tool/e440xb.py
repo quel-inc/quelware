@@ -6,7 +6,7 @@ from typing import Final, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import Extra
+from pydantic import ConfigDict
 
 from quel_inst_tool.spectrum_analyzer import InstDev, SpectrumAnalyzer, SpectrumAnalyzerParams
 
@@ -22,8 +22,7 @@ class E440xbTraceMode(str, Enum):
 
 
 class E440xbParams(SpectrumAnalyzerParams):
-    class Config:
-        extra = Extra.forbid
+    model_config = ConfigDict(extra="forbid")
 
     trace_mode: Union[E440xbTraceMode, None] = None
     resolution_bandwidth: Union[float, None] = None
@@ -46,7 +45,7 @@ class E440xbReadableParams(E440xbParams):
     @classmethod
     def from_e440xb(cls, obj: "E440xb") -> "E440xbReadableParams":
         model = E440xbReadableParams()
-        fields = cls.__fields__
+        fields = cls.model_fields
         if not isinstance(fields, dict):
             raise RuntimeError("unexpected field data")
         for k in fields.keys():
@@ -58,7 +57,7 @@ class E440xbReadableParams(E440xbParams):
 
 class E440xbWritableParams(E440xbParams):
     def update_device_parameter(self, obj: "E440xb") -> bool:
-        fields = E440xbParams.__fields__
+        fields = E440xbParams.model_fields
         if not isinstance(fields, dict):
             raise RuntimeError("unexpected field data")
 
@@ -194,7 +193,7 @@ class E440xb(SpectrumAnalyzer, metaclass=ABCMeta):
             raise TypeError("given parameter object has wrong type")
 
         rprms: E440xbReadableParams = E440xbReadableParams.from_e440xb(self)
-        field = E440xbParams.__fields__
+        field = E440xbParams.model_fields
         if not isinstance(field, dict):
             raise RuntimeError("unexpected field data")
         for k in field.keys():

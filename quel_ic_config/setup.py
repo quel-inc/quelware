@@ -1,10 +1,11 @@
 from pybind11.setup_helpers import Pybind11Extension
 from setuptools import setup
+from glob import glob
 
 ext_modules = [
     Pybind11Extension(
         "adi_ad9081_v106",
-        ["v106/ad9081_wrapper.cpp", "v106/adi_ad9081_adc.c", "v106/adi_ad9081_dac.c", "v106/adi_ad9081_device.c", "v106/adi_ad9081_hal.c", "v106/adi_ad9081_jesd.c"],
+        sources=glob("adi_ad9081_v106/*.c") + glob("adi_ad9081_v106/*.cpp"),
     )
 ]
 

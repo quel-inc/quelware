@@ -98,7 +98,7 @@ def test_kick(proxies: Tuple[QuBEMasterClient, Dict[str, SequencerClient]]):
 
 def test_nonexistent_target():
     target = SequencerClient("10.193.194.195")
-    retcode, _ = target.read_clock()
+    retcode, _, _ = target.read_clock()
     assert not retcode
 
 

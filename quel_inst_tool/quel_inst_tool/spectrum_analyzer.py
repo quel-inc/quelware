@@ -1,14 +1,16 @@
 import logging
+import socket
 import struct
 import threading
 import time
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Final, List, Tuple, Union, cast
+from typing import Collection, Dict, Final, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 import pyvisa
 from pydantic import BaseModel
+from pyvisa.constants import ResourceAttribute
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +75,8 @@ class InstDev:
     def write(self, cmd: str) -> None:
         with self._lock:
             length = self._resource.write(cmd)
-            if length != len(cmd) + 2:
+
+            if length != len(cmd) + len(self._resource.write_termination):
                 raise RuntimeError(f"failed to send a command '{cmd}'")
 
     def read_raw(self) -> bytes:
@@ -83,7 +86,7 @@ class InstDev:
     def write_and_read_raw(self, cmd: str) -> bytes:
         with self._lock:
             length = self._resource.write(cmd)
-            if length != len(cmd) + 2:
+            if length != len(cmd) + len(self._resource.write_termination):
                 raise RuntimeError(f"failed to send a command '{cmd}'")
             return self._resource.read_raw()
 
@@ -91,41 +94,118 @@ class InstDev:
         with self._lock:
             return self._resource.query(cmd)
 
+    @property
+    def termchar_enabled(self) -> bool:
+        return self._resource.get_visa_attribute(ResourceAttribute.termchar_enabled)
+
+    @termchar_enabled.setter
+    def termchar_enabled(self, enable: bool) -> None:
+        self._resource.set_visa_attribute(ResourceAttribute.termchar_enabled, enable)
+
+    @property
+    def suppress_end_enabled(self) -> bool:
+        return self._resource.get_visa_attribute(ResourceAttribute.suppress_end_enabled)
+
+    @suppress_end_enabled.setter
+    def suppress_end_enabled(self, enable: bool) -> None:
+        self._resource.set_visa_attribute(ResourceAttribute.suppress_end_enabled, enable)
+
 
 class InstDevManager:
-    def __init__(self, ivi: Union[str, None] = None, blacklist: Union[None, List[str]] = None):
-        self._blacklist: List[str] = blacklist if blacklist is not None else []
+    def __init__(
+        self,
+        ivi: Union[str, None] = None,
+        manual_scan: Collection[str] = (),
+        blacklist: Collection[str] = (),
+    ):
+        self._blacklisted_resources: Set[str] = set(blacklist)
         if ivi is not None:
             self._resource_manager = pyvisa.ResourceManager(ivi)
         else:
             self._resource_manager = pyvisa.ResourceManager()
         self._lock = threading.Lock()
         self._insts: Dict[str, InstDev] = {}
-        self.scan()
+        self._available_resources: Set[str] = set()
+        self.find_resources()  # If all available resources need to be opend, use scan() method after find_resources()
 
     def show(self) -> None:
         for addr, inst in self._insts.items():
             print(f"{addr:s}, {inst.prod_id:s}, {inst.dev_id:s}")
 
+    def _is_socket_resource(self, resource_string: str):
+        t = resource_string.split("::")
+        return len(t) == 4 and t[0] == "TCPIP" and t[3] == "SOCKET"
+
+    def _open_resource(self, resource_string: str) -> Union[InstDev, None]:
+        logger.info(f"opening {resource_string}...")
+
+        try:
+            robj = self._resource_manager.open_resource(resource_string)
+        except Exception as e:
+            logger.warning(f"invalid resource '{resource_string}' is skipped with the following reasons: {e}")
+            return None
+
+        if not isinstance(robj, pyvisa.resources.MessageBasedResource):
+            logger.warning("unsupported type of resource '{resource_string}', not a messasage-based one")
+            return None
+
+        if self._is_socket_resource(resource_string):
+            robj.read_termination = "\n"
+            robj.write_termination = "\n"
+
+        try:
+            iobj = InstDev(robj)
+            logger.info(f"established a connection to resource '{resource_string}' successfully.")
+        except pyvisa.errors.VisaIOError:
+            logger.warning(f"resource '{resource_string}' is skipped because it is not responding.")
+            return None
+
+        return iobj
+
+    def find_resources(self) -> None:
+        with self._lock:
+            rl: Set[str] = set(self._resource_manager.list_resources())
+            removed_resource = rl & self._blacklisted_resources
+            for r in removed_resource:
+                logger.info(f"resource '{r}' is skipped because it is on blacklist")
+            rl -= removed_resource
+            self._available_resources = rl
+
     def scan(self) -> None:
         with self._lock:
-            rl: Tuple[str, ...] = self._resource_manager.list_resources()
-            new_insts = {}
-            for r in rl:
-                try:
-                    if r not in self._blacklist:
-                        rsrc = self._resource_manager.open_resource(r)
-                        if isinstance(rsrc, pyvisa.resources.MessageBasedResource):
-                            new_insts[r] = InstDev(cast(pyvisa.resources.MessageBasedResource, rsrc))
-                            logger.info(f"a resource '{r}' is recognized.")
-                        else:
-                            logger.info(f"a resource '{r}' is ignored because it is not a supported resource")
-                    else:
-                        logger.info(f"a resource '{r}' is ignored because it is blacklisted.")
-                except pyvisa.errors.VisaIOError:
-                    logger.info(f"a resource '{r}' is ignored because it is not responding.")
-                    pass
+            new_insts: Dict[str, InstDev] = {}  # thisreplaces self._insts
+            for r in self._available_resources:
+                robj = self._open_resource(r)
+                if robj is not None:
+                    new_insts[r] = robj
+
             self._insts = new_insts
+
+    def _is_available_resource(self, resource: str) -> bool:
+        if self._is_socket_resource(resource):
+            _, host, port, _ = tuple(resource.split("::"))
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = s.connect_ex((host, int(port)))
+            if result == 0:
+                logger.info(f"resource '{resource} responds to socket access.")
+                s.close()
+                return True
+            else:
+                return False
+        elif resource in self._available_resources:
+            return True
+        else:
+            return False
+
+    def get_inst_device(self, resource: str) -> InstDev:
+        if self._is_available_resource(resource):
+            inst = self._open_resource(resource)
+            if inst is not None:
+                return inst
+            else:
+                raise ValueError(f"resource '{resource}' can not be opend")
+        else:
+            raise ValueError(f"resource '{resource}' is not available")
 
     def lookup(
         self, resource_id: Union[None, str] = None, prod_id: Union[None, str] = None, dev_id: Union[None, str] = None
@@ -170,7 +250,7 @@ class SpectrumAnalyzer(metaclass=ABCMeta):
         "_freq_points",
     )
 
-    def __init__(self, dev: "InstDev"):
+    def __init__(self, dev):
         self._dev = dev
         self._lock = threading.Lock()
         # NOTE: all the members should be defined in __init__()
@@ -453,12 +533,12 @@ class SpectrumAnalyzer(metaclass=ABCMeta):
 
     @property
     def input_attenuation(self) -> float:
-        return float(self._dev.query(":POW:ATT?"))
+        return float(self._dev.query(":POW:RF:ATT?"))  # ':POW:ATT' command is not supported for MS2029A
 
     @input_attenuation.setter
     def input_attenuation(self, value: float) -> None:
         if self.input_att_min <= value <= self.input_att_max:
-            self._dev.write(f":POW:ATT {value:f}")
+            self._dev.write(f":POW:RF:ATT {value:f}")  # ':POW:ATT' command is not supported for MS2029A
         else:
             raise ValueError("invalid input attenuation: '{value:d}'dB")
 

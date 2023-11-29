@@ -37,6 +37,7 @@ def main():
 
     args = parser.parse_args()
     im = InstDevManager(ivi="/usr/lib/x86_64-linux-gnu/libiovisa.so", blacklist=["GPIB0::6::INSTR"])
+    im.scan()
     if args.spatype is not None:
         if args.spatype == "E4405B":
             e440xb: E440xb = E4405b(im.lookup(prod_id="E4405B"))

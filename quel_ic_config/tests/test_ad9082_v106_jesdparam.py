@@ -29,7 +29,7 @@ def test_jesdparam_normal():
     }
 
     obj = Ad9082JesdParam(**dict0)
-    dict1 = obj.dict()
+    dict1 = obj.model_dump()
     assert dict0 == dict1
 
     cmsobj = obj.as_cpptype()

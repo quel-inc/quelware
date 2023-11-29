@@ -1,7 +1,7 @@
 import logging
 import socket
 from pathlib import Path
-from typing import Collection, Dict, Mapping, Tuple, Union
+from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
 
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
 from quel_ic_config.quel1_config_subsystem_common import (
@@ -82,14 +82,17 @@ class Quel1ConfigSubsystem(
 ):
     __slots__ = ()
 
-    DEFAULT_CONFIG_JSONFILE: str = "quel-1.json"
-    NUM_IC: Dict[str, int] = {
+    _DEFAULT_CONFIG_JSONFILE: str = "quel-1.json"
+
+    _NUM_IC: Dict[str, int] = {
         "ad9082": 2,
         "lmx2594": 10,
         "adrf6780": 8,
         "ad5328": 1,
         "gpio": 1,
     }
+
+    _GROUPS: Set[int] = {0, 1}
 
     _DAC_IDX: Dict[Tuple[int, int], int] = {
         (0, 0): 0,
@@ -109,7 +112,7 @@ class Quel1ConfigSubsystem(
         (1, "m"): 2,
     }
 
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], Union[int, None]] = {
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
         (0, 0): 0,
         (0, 1): 1,
         (0, 2): 2,
@@ -124,7 +127,7 @@ class Quel1ConfigSubsystem(
         (1, "m"): 6,
     }
 
-    _MIXER_IDX: Dict[Tuple[int, int], Union[int, None]] = {
+    _MIXER_IDX: Dict[Tuple[int, int], int] = {
         (0, 0): 0,
         (0, 1): 1,
         (0, 2): 2,
@@ -135,7 +138,7 @@ class Quel1ConfigSubsystem(
         (1, 3): 4,
     }
 
-    _VATT_IDX: Dict[Tuple[int, int], Union[Tuple[int, int], None]] = {
+    _VATT_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
         (0, 1): (0, 1),
         (0, 2): (0, 2),
@@ -146,18 +149,34 @@ class Quel1ConfigSubsystem(
         (1, 3): (0, 4),
     }
 
-    _ADC_CH_IDX: Dict[Tuple[int, str], int] = {
-        (0, "r"): 5,
-        (0, "m"): 4,
-        (1, "r"): 5,
-        (1, "m"): 4,
+    # TODO: will be replaced with a parser method
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
+        (0, "r"): (5,),
+        (0, "m"): (4,),
+        (1, "r"): (5,),
+        (1, "m"): (4,),
+    }
+
+    _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {
+        (0, 0): (0, "path0"),
+        (0, 1): (0, "path1"),
+        (0, 2): (0, "path2"),
+        (0, 3): (0, "path3"),
+        (0, "r"): (0, "path0"),
+        (0, "m"): (0, "monitor"),
+        (1, 0): (1, "path0"),
+        (1, 1): (1, "path1"),
+        (1, 2): (1, "path2"),
+        (1, 3): (1, "path3"),
+        (1, "r"): (1, "path0"),
+        (1, "m"): (1, "monitor"),
     }
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        config_path: Path,
+        config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = 16384,
         timeout: float = 0.5,
@@ -183,40 +202,106 @@ class Quel1ConfigSubsystem(
             self.init_adrf6780(i)
             is_locked = self.init_lmx2594(i)
             if not is_locked:
-                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-{i}")
+                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{i}")
 
     def configure_all_mxfe_clocks(self) -> None:
         for group in range(2):
             lmx2594_idx = 8 + group
             is_locked = self.init_lmx2594(lmx2594_idx)
             if not is_locked:
-                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-{lmx2594_idx}")
+                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{lmx2594_idx}")
 
     def configure_mxfe(
         self,
         group: int,
-        soft_reset: bool = True,
         hard_reset: bool = False,
-        configure_clock: bool = False,
+        soft_reset: bool = False,
+        mxfe_init: bool = False,
+        use_204b: bool = True,
         ignore_crc_error: bool = False,
     ) -> bool:
-        self._validate_group_and_line_out(group, 0)
-
-        if configure_clock:
-            lmx2594_idx = 8 + group
-            is_locked = self.init_lmx2594(lmx2594_idx)
-            if not is_locked:
-                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-{lmx2594_idx}")
+        self._validate_group(group)
 
         if hard_reset:
             logger.warning(
-                f"QuEL-1 ({self._css_addr}) does not support hardware reset of AD9082-{group}, "
+                f"QuEL-1 ({self._css_addr}) does not support hardware reset of AD9082-#{group}, "
                 "conducts software reset instead."
             )
             soft_reset = True
 
-        self.ad9082[group].initialize(reset=soft_reset)
+        self.ad9082[group].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
         link_valid = self.ad9082[group].check_link_status(ignore_crc_error=ignore_crc_error)
         if not link_valid:
-            logger.warning("{self._css_addr}:AD9082-{group} failed to link-up")
+            if mxfe_init:
+                logger.warning(f"failed to establish datalink between {self._css_addr}:AD9082-#{group} and FPGA")
+            else:
+                logger.warning(f"the link between {self._css_addr}:AD9082-#{group} and FPGA is not healthy")
         return link_valid
+
+    def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
+        """dumping the current configuration of a transmitter channel.
+
+        :param group: an index of a group which the channel belongs to.
+        :param line: a group-local index of a line which the target channel belongs to.
+        :param channel: a line-local index of the channel.
+        :return: the current configuration information of the channel.
+        """
+        self._validate_channel(group, line, channel)
+        return {
+            "fnco_hz": self.get_dac_fnco(group, line, channel),
+        }
+
+    def dump_line(self, group: int, line: int) -> Dict[str, Any]:
+        """dumping the current configuration of a transmitter line.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: the current configuration information of the line.
+        """
+        self._validate_line(group, line)
+        r: Dict[str, Any] = {}
+        r["channels"] = [self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))]
+        r["cnco_hz"] = self.get_dac_cnco(group, line)
+        r["fsc_ua"] = self.get_fullscale_current(group, line)
+        if (group, line) in self._LO_IDX:
+            r["lo_hz"] = self.get_lo_multiplier(group, line) * 100_000_000
+        if (group, line) in self._VATT_IDX:
+            r["sideband"] = self.get_sideband(group, line)
+            vatt = self.get_vatt_carboncopy(group, line)
+            if vatt is not None:
+                r["vatt"] = vatt
+        if (group, line) in self._RFSWITCH_NAME:
+            r["rfswitch"] = "blocked" if self.is_blocked_line(group, line) else "passing"
+        return r
+
+    def dump_rchannel(self, group: int, rline: str, rchannel: int) -> Dict[str, Any]:
+        """dumping the current configuration of the receiver channel.
+
+        :param group: an index of a group which the channel belongs to.
+        :param rline: a group-local index of a line which the target channel belongs to.
+        :param rchannel: a line-local index of the target channel.
+        :return: the current configuration information of the channel.
+        """
+        self._validate_rchannel(group, rline, rchannel)
+        return {
+            "fnco_hz": self.get_adc_fnco(group, rline, rchannel),
+        }
+
+    def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
+        """dumping the current configuration of a receiver line.
+
+        :param group: an index of a group which the line belongs to.
+        :param rline: a group-local index of the line.
+        :return: the current configuration information of the line.
+        """
+        self._validate_rline(group, rline)
+        r: Dict[str, Any] = {}
+        if (group, rline) in self._RFSWITCH_NAME:
+            r["rfswitch"] = "looping back" if self.is_blocked_line(group, rline) else "opened"
+        if (group, rline) in self._LO_IDX:
+            r["lo_hz"] = self.get_lo_multiplier(group, rline) * 100_000_000
+        r["cnco_hz"] = self.get_adc_cnco(group, rline)
+        r["channels"] = [
+            self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
+        ]
+        return r

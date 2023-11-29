@@ -2,15 +2,14 @@ import logging
 from abc import ABCMeta
 from typing import Tuple, Union
 
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel, ConfigDict
 from windfreak import SynthHD  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 
 class SynthHDSweepParams(BaseModel):
-    class Config:
-        extra = Extra.forbid
+    model_config = ConfigDict(extra="forbid")
 
     sweep_freq_low: Union[None, float] = None
     sweep_freq_high: Union[None, float] = None
@@ -23,7 +22,7 @@ class SynthHDSweepParams(BaseModel):
     sweep_cont: Union[None, bool] = None
 
     def update_device_parameter(self, obj: "SynthHDChannel") -> bool:
-        fields = SynthHDSweepParams.__fields__
+        fields = SynthHDSweepParams.model_fields
         if not isinstance(fields, dict):
             raise RuntimeError("unexpected field data")
         for k in fields.keys():
@@ -36,7 +35,7 @@ class SynthHDSweepParams(BaseModel):
     @classmethod
     def from_synthHD(cls, obj: "SynthHDChannel") -> "SynthHDSweepParams":
         model = SynthHDSweepParams()
-        fields = cls.__fields__
+        fields = cls.model_fields
         if not isinstance(fields, dict):
             raise RuntimeError("unexpected field data")
         for k in fields.keys():

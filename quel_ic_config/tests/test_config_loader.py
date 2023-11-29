@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Set
 
 import pytest
-from pydantic.utils import deep_update
+from pydantic.v1.utils import deep_update
 
 from quel_ic_config import Quel1BoxType, Quel1ConfigOption, Quel1ConfigSubsystem
 
@@ -27,7 +27,7 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     NUM_AD5328 = 1
     NUM_GPIO = 1
 
-    _config_path = Path("settings")
+    _config_path = Path("quel_ic_config/settings")
 
     # Notes: boxtype_main is defined in the class implementing loader, because it determines proxy objects to create
     #        independently of the configuration file.
@@ -142,7 +142,7 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     ],
 )
 def test_config_loader(boxtype: Quel1BoxType, config_options: Set[Quel1ConfigOption]):
-    qco = Quel1ConfigSubsystem("241.3.5.6", boxtype, Path("settings"), config_options)
+    qco = Quel1ConfigSubsystem("241.3.5.6", boxtype, Path("quel_ic_config/settings"), config_options)
 
     target = copy.copy(qco._param)
     del target["meta"]

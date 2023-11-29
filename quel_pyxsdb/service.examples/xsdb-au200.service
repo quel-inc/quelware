@@ -1,0 +1,14 @@
+[Unit]
+Description="Xsdb server for Alveo U200 based on Vivado 2020.1"
+
+[Service]
+User=
+Group=
+WorkingDirectory=/opt/quel/xsdb_venv/
+ExecStart=/opt/quel/xsdb_venv/bin/quel_xsdb_server --xsdb_port 34335 --hwsvr_port 4121 --target_type au200 --vivado_topdir /tools/Xilinx/Vivado/2020.1
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+

@@ -225,7 +225,8 @@ class _TfpltConv:
 
     @classmethod
     def convert(cls, r: float) -> float:
-        """convert a relative resistor value into temperature in degC
+        """converting a relative resistor value into temperature in degC
+
         :param r: a relative resitor of the thermistor
         :return: temperature at the resitor in degC
         """

@@ -49,7 +49,7 @@ class TestServers:
             resolution_bandwidth=1e5,
             average_enable=False,
         )
-        response = client.post("/param", headers={"Content-Type": "application/json"}, json=param0.dict())
+        response = client.post("/param", headers={"Content-Type": "application/json"}, json=param0.model_dump())
         if valid_parameter and (e440xb_name not in out_of_range):
             assert response.status_code == 200
             body = response.json()
@@ -85,7 +85,7 @@ class TestServers:
             "meta": True,
         }
 
-        response = client.post("/param", headers={"Content-Type": "application/json"}, json=param0.dict())
+        response = client.post("/param", headers={"Content-Type": "application/json"}, json=param0.model_dump())
         if e440xb_name not in out_of_range:
             assert response.status_code == 200
             response = client.get(f"/trace?{urlencode(query)}")

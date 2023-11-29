@@ -1,0 +1,12 @@
+[Unit]
+Description="Xsdb server for CMOD based on Vivado 2019.1"
+
+[Service]
+User=
+Group=
+WorkingDirectory=/opt/quel/xsdb_venv/
+ExecStart=/opt/quel/xsdb_venv/bin/quel_xsdb_server --xsdb_port 36335 --hwsvr_port 6121 --target_type cmod --vivado_topdir /tools/Xilinx/Vivado/2019.1
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

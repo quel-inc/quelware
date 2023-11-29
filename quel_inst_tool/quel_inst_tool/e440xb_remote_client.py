@@ -79,7 +79,7 @@ class E440xbClient:
                 "Content-Type": "application/json",
             }
             req = urllib.request.Request(
-                f"http://{self._server_host:s}:{self._port:d}/param", param.json().encode(), headers
+                f"http://{self._server_host:s}:{self._port:d}/param", param.model_dump_json().encode(), headers
             )
             with urllib.request.urlopen(req, timeout=URLOPEN_TIMEOUT) as response:
                 body = json.loads(response.read())

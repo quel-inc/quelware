@@ -1,0 +1,2 @@
+include quel_ic_config/settings/*.json
+graft quel_ic_config/settings/*
