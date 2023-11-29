@@ -33,9 +33,9 @@ pip install dist/*.whl
 これらは数時間前に予め同期をしてあります。
 ```shell
 $ quel_clock_master_read 10.3.0.13 10.2.0.42 10.2.0.58
-2023-06-26 01:34:43,741 [INFO] consoleapps.apps: 10.3.0.13: 179949078638
-2023-06-26 01:34:43,741 [INFO] consoleapps.apps: 10.2.0.42: 179952338538
-2023-06-26 01:34:43,741 [INFO] consoleapps.apps: 10.2.0.58: 179952358039
+2023-06-26 01:34:43,741 [INFO] quel_clock_master_consoleapps.apps: 10.3.0.13: 179949078638
+2023-06-26 01:34:43,741 [INFO] quel_clock_master_consoleapps.apps: 10.2.0.42: 179952338538
+2023-06-26 01:34:43,741 [INFO] quel_clock_master_consoleapps.apps: 10.2.0.58: 179952358039
 ```
 
 #### 解説と余談
@@ -54,13 +54,13 @@ $ quel_clock_master_read 10.3.0.13 10.2.0.42 10.2.0.58
 以下のコマンドで、クロックマスター(10.3.0.13) とさきほどの2台の制御装置(10.2.0.42, 10.2.0.58) を再同期します。
 ```shell
 $ quel_clock_master_clear 10.3.0.13 10.2.0.42 10.2.0.58
-2023-06-26 01:46:45,373 [INFO] consoleapps.apps: cleared successfully
-2023-06-26 01:46:45,373 [INFO] consoleapps.apps: kicked successfully
+2023-06-26 01:46:45,373 [INFO] quel_clock_master_consoleapps.apps: cleared successfully
+2023-06-26 01:46:45,373 [INFO] quel_clock_master_consoleapps.apps: kicked successfully
 $
 $ quel_clock_master_read 10.3.0.13 10.2.0.42 10.2.0.58
-2023-06-26 01:46:46,737 [INFO] consoleapps.apps: 10.3.0.13: 170499729
-2023-06-26 01:46:46,737 [INFO] consoleapps.apps: 10.2.0.42: 170524873
-2023-06-26 01:46:46,737 [INFO] consoleapps.apps: 10.2.0.58: 170549663
+2023-06-26 01:46:46,737 [INFO] quel_clock_master_consoleapps.apps: 10.3.0.13: 170499729
+2023-06-26 01:46:46,737 [INFO] quel_clock_master_consoleapps.apps: 10.2.0.42: 170524873
+2023-06-26 01:46:46,737 [INFO] quel_clock_master_consoleapps.apps: 10.2.0.58: 170549663
 ```
 `quel_clock_master_clear` コマンドで同期を取った直後に、マスタと各制御装置のカウンタを取得すると、全てのカウンタ値が0.2ms程度の誤差で
 一致していることが分かります。この誤差は、上で述べたように、時刻問い合わせのタイミングのずれによります。なお、clear コマンドはマスタのクロック
@@ -69,7 +69,7 @@ $ quel_clock_master_read 10.3.0.13 10.2.0.42 10.2.0.58
 # APIs
 当然ですが、ライブラリをインポートして、実験用のPythonスクリプトから各APIを叩くこともできます。
 APIの詳細については、文書化できていないので、ソースコードをご覧ください。
-[コンソールコマンドのコード](consoleapps/apps.py) と、上記の説明を合わせると理解しやすいと思います。
+[コンソールコマンドのコード](quel_clock_master_consoleapps/apps.py) と、上記の説明を合わせると理解しやすいと思います。
 また、ライブラリ中のクラスを定義しているファイルをインタプリタで直接実行すると、ログレベルがDEBUGになった状態で、いろいろテスト実行を
 行なえます。動的な振る舞いを理解するのに便利です。
 仕様の細かい部分については、tests 及び tests_with_devices 以下のテストケースが参考になります。

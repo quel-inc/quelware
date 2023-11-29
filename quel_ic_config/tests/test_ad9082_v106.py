@@ -3,15 +3,15 @@ import json
 import logging
 from typing import Any, Dict, Tuple
 
-import adi_ad9081_v106 as ad9081
-from pydantic.utils import deep_update
+from pydantic.v1.utils import deep_update
 
+import adi_ad9081_v106 as ad9081
 from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
 
-with open("settings/quel-1/ad9082.json") as f:
+with open("quel_ic_config/settings/quel-1/ad9082.json") as f:
     function_setting: Dict[str, Any] = json.load(f)
 
-with open("settings/quel-1/ad9082_tx_channel_assign_for_mxfe0.json") as f:
+with open("quel_ic_config/settings/quel-1/ad9082_tx_channel_assign_for_mxfe0.json") as f:
     function_setting_additional: Dict[str, Any] = json.load(f)
 
 
@@ -61,7 +61,7 @@ logging.basicConfig(level=logging.DEBUG)
 cfg_desc = copy.copy(default_setting)
 # cfg_desc['tx'].update(addon_tx_mxfe0)
 # cfg_desc['rx'].update(addon_rx_monitor)
-cfg_obj = Ad9082Config.parse_obj(cfg_desc)
+cfg_obj = Ad9082Config.model_validate(cfg_desc)
 
 
 class Ad9082V106Dummy(Ad9082V106Mixin):
@@ -93,10 +93,10 @@ assert all(x.device.serdes_info.ser_settings.lane_mapping0 == (0, 1, 2, 3, 4, 5,
 assert all(x.device.serdes_info.ser_settings.lane_mapping1 == (0, 1, 2, 3, 4, 5, 6, 7))
 
 param_tx = cfg_obj.tx
-assert param_tx.interpolation_rate.channel == 3
-assert param_tx.interpolation_rate.main == 8
+assert param_tx.interpolation_rate.channel == 4
+assert param_tx.interpolation_rate.main == 6
 assert param_tx.channel_assign.as_cpptype() == (0x01, 0x02, 0x1C, 0xE0)
-assert param_tx.shift_freq.main == (0, 0, 0, 0)
+assert param_tx.shift_freq.main == (1500000000, 1500000000, 1500000000, 1500000000)
 assert param_tx.shift_freq.channel == (0, 0, 0, 0, 0, 0, 0, 0)
 jesd204_0 = param_tx.jesd204.as_cpptype()
 assert jesd204_0.l == 8
@@ -120,10 +120,10 @@ assert jesd204_0.mode_id == 16
 assert jesd204_0.mode_c2r_en == 0
 assert jesd204_0.mode_s_sel == 0
 assert param_tx.lane_xbar == (0, 1, 2, 3, 4, 5, 6, 7)
-assert param_tx.fullscale_current == (40520, 40520, 40520, 40520)
+assert param_tx.fullscale_current == (40527, 40527, 40527, 40527)
 
 param_rx = cfg_obj.rx
-assert param_rx.shift_freq.main == (0, 0, 0, 0)
+assert param_rx.shift_freq.main == (1500000000, 1500000000, 1500000000, 1500000000)
 assert param_rx.decimation_rate.main.as_cpptype() == (
     ad9081.ADC_CDDC_DCM_6,
     ad9081.ADC_CDDC_DCM_6,

@@ -124,17 +124,20 @@ class Ad5328Mixin(AbstractIcMixin):
 
     def __init__(self, name: str):
         super().__init__(name)
+        self._carbon_copy: Dict[int, int] = {}
+        self._carbon_copy_not_updated: Dict[int, int] = {}
 
     def dump_regs(self) -> Dict[int, int]:
-        """AD5328 doesn't support register read.
-        :return: supposed to return a map between an address and a value of the registers.
-        """
+        # Notes: AD5328 doesn't support register read.
         raise NotImplementedError
 
     def soft_reset(self) -> None:
-        """soft reset
+        """commiting soft reset.
+
         :return: None
         """
+        for i in range(8):
+            self._carbon_copy[i] = 0
         self.write_reg(self._RESET, 0x000)
 
     @staticmethod
@@ -146,12 +149,14 @@ class Ad5328Mixin(AbstractIcMixin):
         """update the output of the DACs once.
         :return: None
         """
+        self._carbon_copy.update(self._carbon_copy_not_updated)
         self.write_reg(self._UPDATE, 0x002)
 
     def set_output(self, channel: int, value: int, update_dac=False) -> None:
-        """set the output value of a DAC channel.
+        """setting the output value of a DAC channel.
+
         :param channel: an index of a DAC channel to be set. The output voltage of the DAC will be updated when
-        update_dac() is called.
+                        update_dac() is called.
         :param value: an output value of the DAC
         :param update_dac: conduct update_dac() if True. Its default value is False.
         :return: None
@@ -162,6 +167,13 @@ class Ad5328Mixin(AbstractIcMixin):
         self.write_reg(channel, value)
         if update_dac:
             self.update_dac()
+
+    def get_output_carboncopy(self, channel: int) -> Union[int, None]:
+        self._validate_channel(channel)
+        if channel in self._carbon_copy:
+            return self._carbon_copy[channel]
+        else:
+            return None
 
 
 class Ad5328ConfigHelper(AbstractIcConfigHelper):

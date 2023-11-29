@@ -1,3 +1,6 @@
-log/
+ref/
+deactivated/
 artifacts/
+generated/
+log/
 requirements.txt

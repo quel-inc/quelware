@@ -1,20 +1,21 @@
 [build-system]
-requires = ["setuptools>=43.0.0", "wheel"]
+requires = ["setuptools>=43.0.0", "pybind11"]
 build-backend = "setuptools.build_meta"
 
 [tool.flake8]
 max-line-length = 120
+ignore = "E203,W503"
 
 [tool.black]
 line-length = 120
-target-version = ["py38"]
+target-version = ["py39"]
 
 [tool.isort]
 profile = "black"
 line_length = 120
 
 [tool.mypy]
-python_version = 3.8
+python_version = 3.9
 
 [[tool.mypy.overrides]]
 module = "matplotlib.*"

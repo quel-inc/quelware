@@ -31,6 +31,7 @@ PyQt5 は quel_inst_tool のパッケージのインストールのときに、�
 ```shell
 sudo apt install python3-pyqt5
 pip install -U pip
+pip install build
 ```
 とすればよい。
 
@@ -40,7 +41,7 @@ pip install -U pip
 ビルドは次のように行う。
 ```shell
 rm -rf dist/
-python setup.py bdist_wheel
+python -m build
 ```
 すると、`dist`ディレクトリ以下にwhlパッケージができるので、それを`pip`などでインストールする。
 

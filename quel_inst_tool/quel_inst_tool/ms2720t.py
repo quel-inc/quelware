@@ -1,32 +1,16 @@
 import logging
 import time
-from enum import Enum
-from typing import Final, List, Set, Tuple
+from typing import Final, Set, Tuple, Union
 
-import numpy as np
-import numpy.typing as npt
-
-from quel_inst_tool.spectrum_analyzer import InstDev, SpectrumAnalyzer, SpectrumAnalyzerParams
+from quel_inst_tool.ms2xxxx import Ms2xxxx, Ms2xxxxTraceMode
+from quel_inst_tool.spectrum_analyzer import InstDev
 
 logger = logging.getLogger(__name__)
 
 
-class Ms2720tTraceMode(str, Enum):
-    NORM = "NORM"
-    MAXHOLD = "MAXH"
-    MINHOLD = "MINH"
-    AVER = "AVER"
-
-
-class Ms2720tAverageType(str, Enum):
-    NONE = "NONE"
-    SCAL = "SCAL"
-    MAX = "MAX"
-    MIN = "MIN"
-
-
-class Ms2720t(SpectrumAnalyzer):
+class Ms2720t(Ms2xxxx):
     __slots__ = ("_max_peaksearch_trials", "_holdmode_nsweeps", "_continuous_sweep")
+    _RESOURCE_TYPE: Final[str] = "INSTR"
     _FREQ_MAX: Final[float] = 3.2e10
     _FREQ_MIN: Final[float] = 9e3
     _VIDEO_BANDWIDTH_RATIO_MIN: Final[float] = 1e-6
@@ -37,39 +21,23 @@ class Ms2720t(SpectrumAnalyzer):
     _RESOLUTION_BANDWIDTH_MAX: Final[float] = 1e7
     _INPUT_ATT_MIN: Final[float] = 0
     _INPUT_ATT_MAX: Final[float] = 65
-
     _SWEEP_POINTS: Final[int] = 551
     _SUPPORTED_PROD_ID: Final[Set[str]] = {"MS2720T"}
-    _DEFUALT_MAX_PEAKSEARCH_TRIALS: Final[int] = 10
-    _TRACE_DATA_ENDIAN: Final[str] = "little"
     _DEFUALT_HOLDMODE_NSWEEPS: Final[int] = 10
-    _PYVISA_TIMEOUT: Final[float] = 10  # default : 2s
+    _SUPPORTED_TRACE_MODE: Final[Set[Ms2xxxxTraceMode]] = {
+        Ms2xxxxTraceMode.NORM,
+        Ms2xxxxTraceMode.MAXHOLD,
+        Ms2xxxxTraceMode.MINHOLD,
+        Ms2xxxxTraceMode.AVER,
+    }
 
     def __init__(self, dev: InstDev):
         super().__init__(dev)
-        self._max_peaksearch_trials = self._DEFUALT_MAX_PEAKSEARCH_TRIALS
         self._holdmode_nsweeps = self._DEFUALT_HOLDMODE_NSWEEPS
-        self._continuous_sweep = False
 
-    @property
-    def continuous_sweep(self) -> bool:
-        return self._continuous_sweep
-
-    @continuous_sweep.setter
-    def continuous_sweep(self, exp_mode: bool) -> None:
-        if exp_mode is True:
-            self.init_cont = True
-        else:
-            self.init_cont = False
-        self._continuous_sweep = exp_mode
-
-    @property
-    def max_peaksearch_trials(self) -> int:
-        return self._max_peaksearch_trials
-
-    @max_peaksearch_trials.setter
-    def max_peaksearch_trials(self, max_pk: int) -> None:
-        self._max_peaksearch_trials = max_pk
+    @classmethod
+    def get_visa_name(cls, ipaddr: str, port: Union[int, None] = None) -> str:
+        return "TCPIP::" + ipaddr + "::" + cls._RESOURCE_TYPE
 
     @property
     def holdmode_nsweeps(self) -> int:
@@ -80,14 +48,6 @@ class Ms2720t(SpectrumAnalyzer):
         self._holdmode_nsweeps = nsweeps
 
     @property
-    def peak_threshold(self) -> float:
-        return float(self._dev.query(":CALC:MARK:PEAK:THR?"))
-
-    @peak_threshold.setter
-    def peak_threshold(self, pk_thr: float):
-        self._dev.write(f":CALC:MARK:PEAK:THR {pk_thr:f}")
-
-    @property
     def sweep_points(self) -> int:
         return self._SWEEP_POINTS
 
@@ -96,52 +56,27 @@ class Ms2720t(SpectrumAnalyzer):
         raise ValueError(f"Cannot change sweep points for {self.prod_id:s}. It is fixed to be {self.sweep_points:d}")
 
     @property
-    def display_enable(self):
-        return bool(int(self._dev.query(":TRAC:DISP:STAT?")))
-
-    @display_enable.setter
-    def display_enable(self, enable):
-        on_or_off = "ON" if enable else "OFF"
-        self._dev.write(f":TRAC:DISP:STAT {on_or_off:s}")
-
-    def average_clear(self) -> None:
-        average_type: str = self._dev.query(":AVER:TYPE?")
-        self._dev.write(f":AVER:TYPE {Ms2720tAverageType.NONE}")
-        if Ms2720tAverageType.SCAL in average_type:
-            self._dev.write(f":AVER:TYPE {Ms2720tAverageType.SCAL}")
-
-    @property
-    def average_enable(self) -> bool:
-        average_type: str = self._dev.query(":AVER:TYPE?")
-        if Ms2720tAverageType.SCAL in average_type:
-            return True
-        else:
-            return False
-
-    @average_enable.setter
-    def average_enable(self, enable) -> None:
-        on_or_off = Ms2720tAverageType.SCAL if enable else Ms2720tAverageType.NONE
-        self._dev.write(f":AVER:TYPE {on_or_off:s}")
-
-    @property
-    def trace_mode(self, index: int = 1) -> Ms2720tTraceMode:
+    def trace_mode(self, index: int = 1) -> Ms2xxxxTraceMode:
         self._check_trace_index(index)
-        return Ms2720tTraceMode(self._dev.query(f":TRAC{index:d}:OPER?").strip())
+        return Ms2xxxxTraceMode(self._dev.query(f":TRAC{index:d}:OPER?").strip())
 
     @trace_mode.setter
-    def trace_mode(self, mode: Ms2720tTraceMode, index: int = 1) -> None:
-        self._check_trace_index(index)
-        self._dev.write(f":TRAC{index:d}:OPER {mode.value:s}")
+    def trace_mode(self, mode: Ms2xxxxTraceMode, index: int = 1) -> None:
+        if self._is_supported_trace_mode(mode):
+            self._check_trace_index(index)
+            self._dev.write(f":TRAC{index:d}:OPER {mode.value:s}")
+        else:
+            raise ValueError(f"trace mode '{mode}' is not supported for {self.prod_id}")
 
     def _trace_capture(self, timeout) -> None:
         # Notes: must be called from locked environment.
-        if self.init_cont is False:
-            if self.trace_mode == Ms2720tTraceMode.AVER:
+        if self.continuous_sweep is False:
+            if self.trace_mode == Ms2xxxxTraceMode.AVER:
                 self._dev.write(":INIT:IMM AVER")
             else:
                 self._dev.write(":INIT:IMM")
         else:
-            self.trace_mode == Ms2720tTraceMode.NORM
+            self.init_cont = False  # If continuous_sweep is True, sweeping is stopped for the capture.
 
         t0 = time.time()
         logger.info("waiting for capture...")
@@ -149,7 +84,9 @@ class Ms2720t(SpectrumAnalyzer):
         sweep_cnt: int = 0
         nsweeps: int = (
             1
-            if self.trace_mode == Ms2720tTraceMode.AVER or self.trace_mode == Ms2720tTraceMode.NORM
+            if self.continuous_sweep is True
+            or self.trace_mode == Ms2xxxxTraceMode.AVER
+            or self.trace_mode == Ms2xxxxTraceMode.NORM
             else self.holdmode_nsweeps
         )
         while time.time() - t0 < timeout:
@@ -164,6 +101,7 @@ class Ms2720t(SpectrumAnalyzer):
             time.sleep(min(0.2, timeout / 25))
         if not flag:
             raise RuntimeError("measurement command timeout")
+
         logger.info("capture completed")
 
     def _trace_and_peak_read(
@@ -177,39 +115,8 @@ class Ms2720t(SpectrumAnalyzer):
         self._dev.write(":FORM INT,32")
         self._dev.write(f"TRAC? {idx}")
         trace_raw: bytes = self._dev.read_raw() if enable_trace else b""
-        peaks: List[Tuple[float, float]] = []
-        self._dev.write("CALC:MARKer1:MAX")
-        freq_max: float = float(self._dev.query("CALC:MARKer1:X?"))
-        amp_max: float = float(self._dev.query("CALC:MARKer1:Y?"))
-        peaks.append((freq_max, amp_max))
-        freq_prev: float = freq_max
-        nsearches: int = 0
-        while nsearches < self.max_peaksearch_trials:
-            self._dev.write("CALC:MARKer1:MAX:NEXT")
-            freq_peak: float = float(self._dev.query("CALC:MARKer1:X?"))
-            amp_peak: float = float(self._dev.query("CALC:MARKer1:Y?"))
-            if freq_peak == freq_prev:
-                break
-            else:
-                peaks.append((freq_peak, amp_peak))
-                freq_prev = freq_peak
-            nsearches = nsearches + 1
-        peaks.sort(key=lambda x: x[0])
-        peaks_raw: str = ""  # need to add the peak search
-        for p in peaks:
-            peaks_raw = peaks_raw + str(p[0]) + "," + str(p[1]) + ","
 
+        peaks_raw: str = self._peak_search()
+        if self.continuous_sweep is True:
+            self.init_cont = True  # going back to continuous sweep if its mode is on.
         return trace_raw, peaks_raw
-
-    @staticmethod
-    def _convert_peaks(peaks_raw: str, minimum_power: float) -> npt.NDArray[np.float64]:
-        if len(peaks_raw) == 0:
-            peaks_split = []
-        else:
-            peaks_split = [float(p) for p in peaks_raw.split(",") if len(p) > 0]
-        peaks = np.fromiter(peaks_split, float)
-        peaks = peaks.reshape(peaks.shape[0] // 2, 2)
-        return peaks[peaks[:, 1] > minimum_power]
-
-    def check_prms(self, wprms: SpectrumAnalyzerParams) -> SpectrumAnalyzerParams:
-        raise NotImplementedError("This function is not yet defined")

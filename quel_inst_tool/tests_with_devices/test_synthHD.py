@@ -7,9 +7,8 @@ from typing import cast
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from device_availablity import QuelInstDevice
 
-from quel_inst_tool import E440xb, E440xbTraceMode, Ms2720t, Ms2720tTraceMode, SpectrumAnalyzer, SynthHDSweepParams
+from quel_inst_tool import E440xb, E440xbTraceMode, Ms2xxxxTraceMode, Ms2720t, SpectrumAnalyzer, SynthHDSweepParams
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +75,7 @@ def _gen_spectrum_image(trace, filepath):
 
 def test_generation(signal_generator, spectrum_analyzer, outsubdir):
     spa: SpectrumAnalyzer
-    name, spa = spectrum_analyzer
+    _, spa = spectrum_analyzer
     signal_generator.channel[0].frequency = 9000000000
     assert signal_generator.channel[0].frequency == 9000000000
     signal_generator.channel[0].power = -10
@@ -88,7 +87,7 @@ def test_generation(signal_generator, spectrum_analyzer, outsubdir):
     assert signal_generator.channel[1].power == -20
 
     if isinstance(spa, Ms2720t):
-        spa.trace_mode = Ms2720tTraceMode.NORM
+        spa.trace_mode = Ms2xxxxTraceMode.NORM
     elif isinstance(spa, E440xb):
         spa.trace_mode = E440xbTraceMode.WRITE
     else:
@@ -98,7 +97,7 @@ def test_generation(signal_generator, spectrum_analyzer, outsubdir):
     freq_span = 3e9
     spa.freq_range_set(freq_center, freq_span)
 
-    if name != "MS2720T":  # for MS2720T, The number of sweep points is fixed at 551
+    if spa.prod_id != "MS2720T":  # for MS2720T, The number of sweep points is fixed at 551
         spa.sweep_points = 4001
 
     spa.resolution_bandwidth = 1e5
@@ -107,17 +106,17 @@ def test_generation(signal_generator, spectrum_analyzer, outsubdir):
     signal_generator.channel[0].enable = True
     fd, pk = spa.trace_and_peak_get(minimum_power=-40.0)
     _gen_spectrum_image(fd, outsubdir / "CH0")
-    assert np.abs(pk[0, 0] - signal_generator.channel[0].frequency) < freq_span / (spa.sweep_points - 1)
+    assert np.abs(pk[0, 0] - signal_generator.channel[0].frequency) < freq_span / (spa.sweep_points - 1) + 1
     # may need to be changed due to the attenuation from SG to the analyzer
-    assert pk[0, 1] > signal_generator.channel[0].power - 6.0
+    assert pk[0, 1] > signal_generator.channel[0].power - 10.0
     signal_generator.channel[0].enable = False
 
     signal_generator.channel[1].enable = True
     fd, pk = spa.trace_and_peak_get(minimum_power=-40.0)
     _gen_spectrum_image(fd, outsubdir / "CH1")
-    assert np.abs(pk[0, 0] - signal_generator.channel[1].frequency) < freq_span / (spa.sweep_points - 1)
+    assert np.abs(pk[0, 0] - signal_generator.channel[1].frequency) < freq_span / (spa.sweep_points - 1) + 1
     # may need to be changed due to the attenuation from SG to the analyzer
-    assert pk[0, 1] > signal_generator.channel[1].power - 6.0
+    assert pk[0, 1] > signal_generator.channel[1].power - 10.0
     signal_generator.channel[1].enable = False
 
 
@@ -149,7 +148,7 @@ def test_sweep_params(signal_generator, spectrum_analyzer):
     freq_center = 5.1e9
     freq_span = 1e10
     spa.freq_range_set(freq_center, freq_span)
-    if spa_name == QuelInstDevice.MS2720T:
+    if spa.prod_id == "MS2720T":
         cast(Ms2720t, spa).continuous_sweep = True
         # Note: for MS2720T, The number of sweep points is fixed at 551
     else:

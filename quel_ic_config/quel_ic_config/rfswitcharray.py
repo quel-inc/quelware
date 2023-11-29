@@ -29,7 +29,8 @@ class RfSwitchArray(AbstractIcReg):
 
 class AbstractRfSwitchArrayMixin(AbstractIcMixin):
     def dump_regs(self) -> Dict[int, int]:
-        """dump all the available registers.
+        """dumping all the available registers.
+
         :return: a mapping between an address and a value of the registers
         """
         regs = {0: self.read_reg(0)}

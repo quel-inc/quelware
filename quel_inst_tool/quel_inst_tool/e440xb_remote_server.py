@@ -26,6 +26,7 @@ async def lifespan(application: FastAPI):
     global e440xb
     saname = os.getenv("SPECTRUM_ANALYZER_NAME", default="E4405B")
     im = InstDevManager(ivi="/usr/lib/x86_64-linux-gnu/libiovisa.so")
+    im.scan()
     if saname == "E4407B":
         e440xb = E4407b(im.lookup(prod_id="E4407B"))
     else:
@@ -98,7 +99,7 @@ async def trace_get(
     if peak:
         retval["peak"] = base64.b64encode(p0.tobytes())
     if meta:
-        retval["meta"] = E440xbReadableParams.from_e440xb(e440xb).json()
+        retval["meta"] = E440xbReadableParams.from_e440xb(e440xb).model_dump_json()
     return retval
 
 
