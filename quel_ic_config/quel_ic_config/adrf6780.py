@@ -242,7 +242,7 @@ class Adrf6780Mixin(AbstractIcMixin):
         reg.soft_reset = False
         self._build_and_write_reg(addr, reg)
 
-    def check_id(self, expected_revision: Union[Set[int], None] = None) -> int:
+    def check_id(self, expected_revision: Union[Set[int], None] = None) -> Tuple[bool, Tuple[int, int]]:
         """confirming the chip version and chip revision, or check the soundness of the register access.
 
         :param expected_revision: a set of valid revisions.
@@ -251,9 +251,10 @@ class Adrf6780Mixin(AbstractIcMixin):
         if expected_revision is None:
             expected_revision = self._DEFAULT_EXPECTED_REVISION
         addr, reg = cast(Tuple[int, Adrf6780Control], self._read_and_parse_reg("Control"))
-        if reg.chip_id != self._CHIP_ID or reg.chip_rev not in expected_revision:
-            raise RuntimeError(f"unexpected pair chip_id and chip_revision: {reg.chip_id:x}:{reg.chip_rev:x}")
-        return reg.chip_rev
+        if reg.chip_id == self._CHIP_ID and reg.chip_rev in expected_revision:
+            return True, (reg.chip_id, reg.chip_rev)
+        else:
+            return False, (reg.chip_id, reg.chip_rev)
 
     def read_alarm(self) -> Dict[str, bool]:
         # don't use helper to confirm type safety.

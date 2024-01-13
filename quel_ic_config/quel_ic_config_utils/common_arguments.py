@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Collection, List, Tuple, Union
+from typing import Collection, List, Set, Tuple, Union
 
 from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1ConfigOption
 
@@ -21,15 +21,31 @@ def _parse_mxfe_combination(mxfe_combination: str) -> Tuple[int, ...]:
         mxfe_list: Tuple[int, ...] = (0,)
     elif mxfe_combination == "1":
         mxfe_list = (1,)
-    elif mxfe_combination in {"both", "0:1"}:
+    elif mxfe_combination in {"both", "0,1"}:
         mxfe_list = (0, 1)
-    elif mxfe_combination == "1:0":
+    elif mxfe_combination == "1,0":
         mxfe_list = (1, 0)
     elif mxfe_combination == "none":
         mxfe_list = ()
     else:
-        raise AssertionError
+        raise ValueError(f"invalid combination of MxFEs: {mxfe_combination}")
     return mxfe_list
+
+
+def _parse_comma_separated_adrf6780_list(cslist: str) -> Set[int]:
+    parsed = [int(x) for x in cslist.split(":")]
+    invalid = [x for x in parsed if not 0 <= x <= 7]
+    if len(invalid) != 0:
+        raise ValueError(f"invalid indices of ADRF6780s: {':'.join([str(x) for x in invalid])}")
+    return set(parsed)
+
+
+def _parse_comma_separated_lmx2594_list(cslist: str) -> Set[int]:
+    parsed = [int(x) for x in cslist.split(":")]
+    invalid = [x for x in parsed if not 0 <= x <= 9]
+    if len(invalid) != 0:
+        raise ValueError(f"invalid indices of LMX2594s: {':'.join([str(x) for x in invalid])}")
+    return set(parsed)
 
 
 def complete_ipaddrs(args: Namespace):
@@ -101,7 +117,6 @@ def add_common_arguments(
                 default=ip_address(0),
                 help="IP address of the wave sequencer subsystem of the target box",
             )
-
     else:
         parser.add_argument(
             "--ipaddr_sss", type=ip_address, required=False, default=non_existent_ipaddress, help="IGNORED"
@@ -179,14 +194,62 @@ def add_common_arguments(
         if allow_implicit_mxfe:
             parser.add_argument(
                 "--mxfe",
+                metavar="MxFEs",
                 type=_parse_mxfe_combination,
                 default=(0, 1),
-                help="combination of MxFEs under test, possible values are '0', '1', 'both', '0:1', '1:0', and 'none'",
+                help="combination of MxFEs under test, possible values are '0', '1', 'both', '0,1', '1,0', and 'none'",
             )
         else:
             parser.add_argument(
                 "--mxfe",
+                metavar="MxFEs",
                 type=_parse_mxfe_combination,
                 required=True,
-                help="combination of MxFEs under test, possible values are '0', '1', 'both', '0:1', '1:0', and 'none'",
+                help="combination of MxFEs under test, possible values are '0', '1', 'both', '0,1', '1,0', and 'none'",
             )
+
+
+def add_common_workaround_arguments(
+    parser: ArgumentParser,
+    use_ignore_crc_error_of_mxfe: bool = False,
+    use_ignore_access_failure_of_adrf6780: bool = False,
+    use_ignore_lock_failure_of_lmx2594: bool = False,
+    use_ignore_extraordinary_converter_select_of_mxfe: bool = False,
+):
+    if use_ignore_crc_error_of_mxfe:
+        parser.add_argument(
+            "--ignore_crc_error_of_mxfe",
+            metavar="MxFEs",
+            type=_parse_mxfe_combination,
+            default=(),
+            help="a comma-separated list of MxFEs to ignore crc_error_flag during initialization, "
+            "possible values are '0', '1', 'both', '0,1', '1,0', and 'none'",
+        )
+
+    if use_ignore_access_failure_of_adrf6780:
+        parser.add_argument(
+            "--ignore_access_failure_of_adrf6780",
+            metavar="ADRF6780s",
+            type=_parse_comma_separated_adrf6780_list,
+            default={},
+            help="a comma-separated list of ADRF6780s to ignore communication failures",
+        )
+
+    if use_ignore_lock_failure_of_lmx2594:
+        parser.add_argument(
+            "--ignore_lock_failure_of_lmx2594",
+            metavar="LMX2594s",
+            type=_parse_comma_separated_lmx2594_list,
+            default={},
+            help="a comma-separated list of LMX2594s to ignore lock failures",
+        )
+
+    if use_ignore_extraordinary_converter_select_of_mxfe:
+        parser.add_argument(
+            "--ignore_extraordinary_converter_select_of_mxfe",
+            metavar="MxFEs",
+            type=_parse_mxfe_combination,
+            default=(),
+            help="a comma-separated list of MxFEs to ignore the abnormally configured converter select. "
+            "possible values are '0', '1', 'both', '0,1', '1,0', and 'none'",
+        )

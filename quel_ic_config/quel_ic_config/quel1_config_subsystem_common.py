@@ -15,7 +15,7 @@ from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband
 from quel_ic_config.exstickge_proxy import _ExstickgeProxyBase
 from quel_ic_config.generic_gpio import GenericGpioConfigHelper
 from quel_ic_config.lmx2594 import Lmx2594ConfigHelper
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
+from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 from quel_ic_config.quel_ic import (
     Ad5328,
     Ad9082V106,
@@ -36,6 +36,7 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         "_css_addr",
         "_param",
         "_boxtype",
+        "_features",
         "_config_path",
         "_config_options",
         "_proxy",
@@ -56,14 +57,16 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
     _DEFAULT_CONFIG_JSONFILE: str
     _NUM_IC: Dict[str, int]
     _GROUPS: Set[int]
-    _DAC_IDX: Dict[Tuple[int, int], int]
-    _ADC_IDX: Dict[Tuple[int, str], int]
+    _MXFE_IDXS: Set[int]
+    _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]]
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]]
     _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]]
 
     def __init__(self):
         # variable defined in the importer class
         self._css_addr: str
         self._boxtype: Quel1BoxType
+        self._features: Collection[Quel1Feature]
         self._config_path: Path
         self._config_options: Collection[Quel1ConfigOption]
         self._param: Dict[str, List[Dict[str, Any]]]  # TODO: clean up around here!
@@ -90,7 +93,15 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         if group not in self._GROUPS:
             raise ValueError("an invalid group: {group}")
 
+    def get_all_mxfes(self) -> Set[int]:
+        return self._MXFE_IDXS
+
+    def _validate_mxfe(self, mxfe_idx: int) -> None:
+        if mxfe_idx not in self._MXFE_IDXS:
+            raise ValueError("an invalid mxfe: {mxfe_idx}")
+
     def get_all_lines_of_group(self, group: int) -> Set[int]:
+        self._validate_group(group)
         lines: Set[int] = set()
         for g, l in self._DAC_IDX:
             if g == group:
@@ -145,6 +156,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = 16384,
@@ -154,6 +166,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         super(Quel1ConfigSubsystemRoot, self).__init__()
         self._css_addr: str = css_addr
         self._boxtype: Quel1BoxType = boxtype
+        self._features: Set[Quel1Feature] = set(features) if features is not None else {Quel1Feature.SINGLE_ADC}
         self._config_path: Path = config_path if config_path is not None else self.DEFAULT_CONFIG_PATH
         self._config_options: Collection[Quel1ConfigOption] = config_options if config_options is not None else set()
         self._param: Dict[str, Any] = self._load_config()  # TODO: Dict[str, Any] is tentative.
@@ -182,15 +195,14 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
                     file = v
                 else:
                     raise TypeError(f"invalid type of 'file': {k}")
-            elif k == "boxtype":
+            elif k == "boxtype":  # OR
                 if isinstance(v, str):
                     v = [v]
                 if not isinstance(v, list):
                     raise TypeError(f"invalid type of 'boxtype': {k}")
-                for bt1 in v:
-                    if bt1 not in self._boxtype.value:
-                        flag = False
-            elif k == "option":
+                if self._boxtype.value[1] not in v:
+                    flag = False
+            elif k == "option":  # AND
                 if isinstance(v, str):
                     v = [v]
                 if not isinstance(v, list):
@@ -198,6 +210,17 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
                 for op1 in v:
                     if Quel1ConfigOption(op1) not in self._config_options:
                         flag = False
+            elif k == "feature":  # AND
+                if isinstance(v, str):
+                    v = [v]
+                if not isinstance(v, list):
+                    raise TypeError(f"invalid type of 'option': {k}")
+                for ft1 in v:
+                    if Quel1Feature(ft1) not in self._features:
+                        flag = False
+            elif k == "otherwise":
+                if not isinstance(v, str):
+                    raise TypeError(f"invalid type of 'otherwise': {k}")
             else:
                 raise ValueError(f"invalid key of conditional include: {k}")
 
@@ -206,7 +229,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         return flag
 
     def _include_config(
-        self, directive: Union[str, Mapping[str, str], Sequence[Union[str, Mapping[str, str]]]]
+        self, directive: Union[str, Mapping[str, str], Sequence[Union[str, Mapping[str, str]]]], label_for_log: str
     ) -> Tuple[Dict[str, Any], Set[Quel1ConfigOption]]:
         fired_options: Set[Quel1ConfigOption] = set()
 
@@ -217,29 +240,35 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         for d1 in directive:
             if isinstance(d1, str):
                 with open(self._config_path / d1) as f:
-                    logger.info(f"basic config applied: {d1}")
+                    logger.info(f"basic config applied to {label_for_log}: {d1}")
                     config = deep_update(config, json.load(f))
             elif isinstance(d1, dict):
                 if self._match_conditional_include(d1):
                     with open(self._config_path / d1["file"]) as f:
-                        logger.info(f"conditional config applied: {d1}")
+                        logger.info(f"conditional config applied to {label_for_log}: {d1}")
                         config = deep_update(config, json.load(f))
                         if "option" in d1:
                             option = d1["option"]
                             if isinstance(option, str):
                                 fired_options.add(Quel1ConfigOption(option))
                             elif isinstance(option, list):
-                                fired_options.update({Quel1ConfigOption(o) for o in d1["option"]})
+                                fired_options.update({Quel1ConfigOption(o) for o in option})
                             else:
                                 raise AssertionError
+                elif "otherwise" in d1:
+                    with open(self._config_path / d1["otherwise"]) as f:
+                        logger.info(f"'otherwise' part of conditional config applied to {label_for_log}: {d1}")
+                        config = deep_update(config, json.load(f))
             else:
-                raise TypeError(f"malformed template: '{d1}'")
+                raise TypeError(f"malformed template at {label_for_log}: '{d1}'")
         if "meta" in config:
             del config["meta"]
         return self._remove_comments(config), fired_options
 
     def _load_config(self) -> Dict[str, Any]:
         logger.info(f"loading configuration settings from '{self._config_path / self._DEFAULT_CONFIG_JSONFILE}'")
+        logger.info(f"boxtype = {self._boxtype}")
+        logger.info(f"config_options = {self._config_options}")
         fired_options: Set[Quel1ConfigOption] = set()
 
         with open(self._config_path / self._DEFAULT_CONFIG_JSONFILE) as f:
@@ -253,7 +282,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
                 for idx, directive1 in enumerate(directive0):
                     if idx >= self._NUM_IC[k0]:
                         raise ValueError(f"too many {k0.upper()}s are found")
-                    config[k0][idx], fired_options_1 = self._include_config(directive1)
+                    config[k0][idx], fired_options_1 = self._include_config(directive1, label_for_log=f"{k0}[{idx}]")
                     fired_options.update(fired_options_1)
             else:
                 raise ValueError(f"invalid name of IC: '{k0}'")
@@ -276,17 +305,27 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         return self._css_addr
 
     @abstractmethod
-    def configure_peripherals(self) -> None:
+    def configure_peripherals(
+        self,
+        ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
+        ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
+    ) -> None:
         """configure ICs other than MxFEs and PLLs for their reference clock.
 
+        :param ignore_access_failure_of_adrf6780: a collection of index of ADRF6780 to ignore access failure during the
+                                                  initialization process
+        :param ignore_lock_failure_of_lmx2594: a collection of index of LMX2594 to ignore PLL lock failure during the
+                                               initialization process
         :return: None
         """
         pass
 
     @abstractmethod
-    def configure_all_mxfe_clocks(self) -> None:
+    def configure_all_mxfe_clocks(self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None) -> None:
         """configure PLLs for clocks of MxFEs.
 
+        :param ignore_lock_failure_of_lmx2594: a collection of index of LMX2594 to ignore PLL lock failure during the
+                                               initialization process
         :return: None
         """
         pass
@@ -294,7 +333,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
     @abstractmethod
     def configure_mxfe(
         self,
-        group: int,
+        mxfe_idx: int,
         *,
         hard_reset: bool,
         soft_reset: bool,
@@ -304,7 +343,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
     ) -> bool:
         """configure an MxFE and its related data objects. PLLs for their clock must be set up in advance.
 
-        :param group: an index of a group which the target MxFE belongs to.
+        :param mxfe_idx: an index of a group which the target MxFE belongs to.
         :param hard_reset: enabling hard reset of the MxFE before the initialization if available.
         :param soft_reset: enabling soft reset of the MxFE before the initialization.
         :param mxfe_init: enabling the initialization of the MxFE's, not just for initializing the host-side data
@@ -327,7 +366,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         return self._ad9082
 
     def _validate_frequency_info(
-        self, group: int, freq_type: str, freq_in_hz: Union[int, None], ftw: Union[NcoFtw, None]
+        self, mxfe_idx: int, freq_type: str, freq_in_hz: Union[int, None], ftw: Union[NcoFtw, None]
     ) -> Tuple[int, NcoFtw]:
         # Notes: Assuming that group is already validated.
         # Notes: decimation rates can be different among DACs, however,
@@ -337,13 +376,13 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         elif freq_in_hz is not None:
             # TODO: consider to use calc_*_*_ftw_rational().
             if freq_type == "dac_cnco":
-                ftw = self.ad9082[group].calc_dac_cnco_ftw(freq_in_hz)
+                ftw = self.ad9082[mxfe_idx].calc_dac_cnco_ftw(freq_in_hz)
             elif freq_type == "dac_fnco":
-                ftw = self.ad9082[group].calc_dac_fnco_ftw(freq_in_hz)
+                ftw = self.ad9082[mxfe_idx].calc_dac_fnco_ftw(freq_in_hz)
             elif freq_type == "adc_cnco":
-                ftw = self.ad9082[group].calc_adc_cnco_ftw(freq_in_hz)
+                ftw = self.ad9082[mxfe_idx].calc_adc_cnco_ftw(freq_in_hz)
             elif freq_type == "adc_fnco":
-                ftw = self.ad9082[group].calc_adc_fnco_ftw(freq_in_hz)
+                ftw = self.ad9082[mxfe_idx].calc_adc_fnco_ftw(freq_in_hz)
             else:
                 raise ValueError(f"invalid freq_type: {freq_in_hz}")
         elif ftw is not None:
@@ -351,9 +390,9 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
                 raise TypeError("unexpected ftw is given")
             # Notes: freq_in_hz is computed back from ftw for logger messages.
             if freq_type == "dac_cnco":
-                freq_in_hz_ = self.ad9082[group].calc_dac_cnco_freq(ftw)
+                freq_in_hz_ = self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
             elif freq_type == "dac_fnco":
-                freq_in_hz_ = self.ad9082[group].calc_dac_fnco_freq(ftw)
+                freq_in_hz_ = self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
             elif freq_type == "adc_cnco":
                 raise NotImplementedError
             elif freq_type == "adc_fnco":
@@ -366,13 +405,13 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
 
         return freq_in_hz, ftw
 
-    def _get_dac_idx(self, group: int, line: int) -> int:
+    def _get_dac_idx(self, group: int, line: int) -> Tuple[int, int]:
         self._validate_line(group, line)
         return self._DAC_IDX[(group, line)]
 
     def _get_channels_of_line(self, group: int, line: int) -> Tuple[int, ...]:
-        dac_idx = self._get_dac_idx(group, line)
-        dac_ch_idxes = tuple(self._param["ad9082"][group]["tx"]["channel_assign"][f"dac{dac_idx}"])
+        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        dac_ch_idxes = tuple(self._param["ad9082"][mxfe_idx]["dac"]["channel_assign"][f"dac{dac_idx}"])
         return dac_ch_idxes
 
     def get_num_channels_of_line(self, group: int, line: int) -> int:
@@ -382,7 +421,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         self._validate_channel(group, line, channel)
         return self._get_channels_of_line(group, line)[channel]
 
-    def _get_adc_idx(self, group: int, rline: str) -> int:
+    def _get_adc_idx(self, group: int, rline: str) -> Tuple[int, int]:
         self._validate_rline(group, rline)
         return self._ADC_IDX[(group, rline)]
 
@@ -409,13 +448,13 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        dac_idx = self._get_dac_idx(group, line)
-        freq_in_hz_, ftw_ = self._validate_frequency_info(group, "dac_cnco", freq_in_hz, ftw)
+        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "dac_cnco", freq_in_hz, ftw)
         logger.info(
-            f"DAC-CNCO{dac_idx} of MxFE{group} of {self._css_addr} is set to {freq_in_hz_}Hz "
+            f"DAC-CNCO{dac_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz "
             f"(ftw = {ftw_.ftw}, {ftw_.delta_a}, {ftw_.modulus_b})"
         )
-        self.ad9082[group].set_dac_cnco({dac_idx}, ftw_)
+        self.ad9082[mxfe_idx].set_dac_cnco({dac_idx}, ftw_)
 
     def get_dac_cnco(self, group: int, line: int) -> float:
         """getting CNCO frequency of a transmitter line.
@@ -424,9 +463,9 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line.
         :return: the current CNCO frequency of the line in Hz.
         """
-        dac_idx = self._get_dac_idx(group, line)
-        ftw = self.ad9082[group].get_dac_cnco(dac_idx)
-        return self.ad9082[group].calc_dac_cnco_freq(ftw)
+        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        ftw = self.ad9082[mxfe_idx].get_dac_cnco(dac_idx)
+        return self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
 
     def set_dac_fnco(
         self, group: int, line: int, channel: int, freq_in_hz: Union[int, None] = None, ftw: Union[NcoFtw, None] = None
@@ -440,13 +479,14 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
+        mxfe_idx, _ = self._get_dac_idx(group, line)
         fnco_idx = self._get_dac_ch_idx(group, line, channel)
-        freq_in_hz_, ftw_ = self._validate_frequency_info(group, "dac_fnco", freq_in_hz, ftw)
+        freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "dac_fnco", freq_in_hz, ftw)
         logger.info(
-            f"DAC-FNCO{fnco_idx} of MxFE{group} of {self._css_addr} is set to {freq_in_hz_}Hz "
+            f"DAC-FNCO{fnco_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz "
             f"(ftw = {ftw_.ftw}, {ftw_.delta_a}, {ftw_.modulus_b})"
         )
-        self.ad9082[group].set_dac_fnco({fnco_idx}, ftw_)
+        self.ad9082[mxfe_idx].set_dac_fnco({fnco_idx}, ftw_)
 
     def get_dac_fnco(self, group: int, line: int, channel: int) -> float:
         """getting FNCO frequency of a transmitter channel.
@@ -456,9 +496,10 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param channel: a line-local index of the chennel.
         :return: the current FNCO frequency of the channel in Hz.
         """
+        mxfe_idx, _ = self._get_dac_idx(group, line)
         fnco_idx = self._get_dac_ch_idx(group, line, channel)
-        ftw = self.ad9082[group].get_dac_fnco(fnco_idx)
-        return self.ad9082[group].calc_dac_fnco_freq(ftw)
+        ftw = self.ad9082[mxfe_idx].get_dac_fnco(fnco_idx)
+        return self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
 
     def set_adc_cnco(
         self, group: int, rline: str, freq_in_hz: Union[int, None] = None, ftw: Union[NcoFtw, None] = None
@@ -471,13 +512,13 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        adc_idx = self._get_adc_idx(group, rline)
-        freq_in_hz_, ftw_ = self._validate_frequency_info(group, "adc_cnco", freq_in_hz, ftw)
+        mxfe_idx, adc_idx = self._get_adc_idx(group, rline)
+        freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "adc_cnco", freq_in_hz, ftw)
         logger.info(
-            f"ADC-CNCO{adc_idx} of MxFE{group} of {self._css_addr} is set to {freq_in_hz_}Hz "
+            f"ADC-CNCO{adc_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz "
             f"(ftw = {ftw_.ftw}, {ftw_.delta_a}, {ftw_.modulus_b})"
         )
-        self.ad9082[group].set_adc_cnco({adc_idx}, ftw_)
+        self.ad9082[mxfe_idx].set_adc_cnco({adc_idx}, ftw_)
 
     def get_adc_cnco(self, group: int, rline: str) -> float:
         """getting CNCO frequency of a receiver line.
@@ -486,9 +527,9 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line.
         :return: the current CNCO frequency of the line in Hz.
         """
-        adc_idx = self._get_adc_idx(group, rline)
-        ftw = self.ad9082[group].get_adc_cnco(adc_idx)
-        return self.ad9082[group].calc_adc_cnco_freq(ftw)
+        mxfe_idx, adc_idx = self._get_adc_idx(group, rline)
+        ftw = self.ad9082[mxfe_idx].get_adc_cnco(adc_idx)
+        return self.ad9082[mxfe_idx].calc_adc_cnco_freq(ftw)
 
     def set_adc_fnco(
         self,
@@ -507,13 +548,14 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
+        mxfe_idx, _ = self._get_adc_idx(group, rline)
         fnco_idx = self._get_adc_rch_idx(group, rline, rchannel)
-        freq_in_hz_, ftw_ = self._validate_frequency_info(group, "adc_fnco", freq_in_hz, ftw)
+        freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "adc_fnco", freq_in_hz, ftw)
         logger.info(
-            f"ADC-FNCO{fnco_idx} of MxFE{group} of {self._css_addr} is set to {freq_in_hz_}Hz "
+            f"ADC-FNCO{fnco_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz "
             f"(ftw = {ftw_.ftw}, {ftw_.delta_a}, {ftw_.modulus_b})"
         )
-        self.ad9082[group].set_adc_fnco({fnco_idx}, ftw_)
+        self.ad9082[mxfe_idx].set_adc_fnco({fnco_idx}, ftw_)
 
     def get_adc_fnco(self, group: int, rline: str, rchannel: int) -> float:
         """getting FNCO frequency of a receiver channel.
@@ -523,18 +565,19 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param channel: a line-local index of the chennel.
         :return: the current FNCO frequency of the channel in Hz.
         """
+        mxfe_idx, _ = self._get_adc_idx(group, rline)
         fnco_idx = self._get_adc_rch_idx(group, rline, rchannel)
-        ftw = self.ad9082[group].get_adc_fnco(fnco_idx)
-        return self.ad9082[group].calc_adc_fnco_freq(ftw)
+        ftw = self.ad9082[mxfe_idx].get_adc_fnco(fnco_idx)
+        return self.ad9082[mxfe_idx].calc_adc_fnco_freq(ftw)
 
-    def get_link_status(self, group: int) -> Tuple[int, int]:
+    def get_link_status(self, mxfe_idx: int) -> Tuple[int, int]:
         """getting the status of the datalink between a MxFE in a group and the FPGA.
 
-        :param group: an index of the group which the target MxFE belongs to.
+        :param mxfe_idx: an index of the group which the target MxFE belongs to.
         :return: the content of the registers of the MxFE at the addresses of 0x55E and 0x5BB.
         """
-        self._validate_group(group)
-        return self._ad9082[group].get_link_status()
+        self._validate_mxfe(mxfe_idx)
+        return self._ad9082[mxfe_idx].get_link_status()
 
     def set_fullscale_current(self, group: int, line: int, fsc: int) -> None:
         """setting the full-scale current of a DAC of a line.
@@ -544,8 +587,8 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param fsc: full-scale current of the DAC of the line in uA.
         :return: None
         """
-        dac_idx = self._get_dac_idx(group, line)
-        self.ad9082[group].set_fullscale_current(1 << dac_idx, fsc)
+        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        self.ad9082[mxfe_idx].set_fullscale_current(1 << dac_idx, fsc)
 
     def get_fullscale_current(self, group: int, line: int) -> int:
         """geting the current full scale current of a DAC of a line.
@@ -554,44 +597,44 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line
         :return: the current full-scale current of the DAC in uA
         """
-        dac_idx = self._get_dac_idx(group, line)
-        return self.ad9082[group].get_fullscale_current(dac_idx)
+        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        return self.ad9082[mxfe_idx].get_fullscale_current(dac_idx)
 
-    def get_main_interpolation_rate(self, group: int) -> int:
+    def get_main_interpolation_rate(self, mxfe_idx: int) -> int:
         """getting the current main interpolation rate of a MxFE of a group.
 
-        :param group: an index of the group which the target MxFE belongs to.
+        :param mxfe_idx: an index of the group which the target MxFE belongs to.
         :return: main interpolation rate
         """
-        self._validate_group(group)
-        return self.ad9082[group].get_main_interpolation_rate()
+        self._validate_mxfe(mxfe_idx)
+        return self.ad9082[mxfe_idx].get_main_interpolation_rate()
 
-    def get_channel_interpolation_rate(self, group: int) -> int:
+    def get_channel_interpolation_rate(self, mxfe_idx: int) -> int:
         """getting the current channel interpolation rate of a MxFE of a group.
 
-        :param group: a group which the target MxFE belongs to.
+        :param mxfe_idx: a group which the target MxFE belongs to.
         :return: channel interpolation rate
         """
-        self._validate_group(group)
-        return self.ad9082[group].get_channel_interpolation_rate()
+        self._validate_mxfe(mxfe_idx)
+        return self.ad9082[mxfe_idx].get_channel_interpolation_rate()
 
-    def get_virtual_adc_select(self, group: int) -> List[int]:
+    def get_virtual_adc_select(self, mxfe_idx: int) -> List[int]:
         """getting converter select matrix of ADC virtual converters after FDDC.
 
-        :param group: a group which the target MxFE belongs to.
+        :param mxfe_idx: a group which the target MxFE belongs to.
         :return: converter select matrix in list
         """
-        self._validate_group(group)
-        return self.ad9082[group].get_virtual_adc_select()
+        self._validate_mxfe(mxfe_idx)
+        return self.ad9082[mxfe_idx].get_virtual_adc_select()
 
-    def get_ad9082_temperatures(self, group: int) -> Tuple[int, int]:
+    def get_ad9082_temperatures(self, mxfe_idx: int) -> Tuple[int, int]:
         """getting the current die temperatures of a MxFE of a group.
 
-        :param group: an index of the group which the target MxFE belongs to.
+        :param mxfe_idx: an index of the group which the target MxFE belongs to.
         :return: a pair of maximum and minimum temperatures in the die.
         """
-        self._validate_group(group)
-        temp_max, temp_min = self.ad9082[group].get_temperatures()
+        self._validate_mxfe(mxfe_idx)
+        temp_max, temp_min = self.ad9082[mxfe_idx].get_temperatures()
         return temp_max, temp_min
 
 
@@ -615,14 +658,23 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
     def lmx2594_helper(self) -> Tuple[Lmx2594ConfigHelper, ...]:
         return self._lmx2594_helper
 
-    def init_lmx2594(self, idx) -> bool:
+    def init_lmx2594(self, idx: int, ignore_lock_failure: bool = False) -> bool:
+        # Notes: ignore_lock_failure is prepared for experimental purposes.
         ic, helper = self._lmx2594[idx], self._lmx2594_helper[idx]
-        param: Dict[str, Dict[str, Union[int, bool]]] = self._param["lmx2594"][idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["lmx2594"][idx]
         ic.soft_reset()
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
-        return ic.calibrate()
+        is_locked = ic.calibrate()
+        if not is_locked:
+            if ignore_lock_failure:
+                logger.error(
+                    f"failed to lock PLL of {self._css_addr}:LMX2594-#{idx}, keep running with an unlocked PLL"
+                )
+            else:
+                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{idx}")
+        return is_locked
 
     def _validate_freq_multiplier(self, freq_multiplier: int):
         if not isinstance(freq_multiplier, int):
@@ -688,19 +740,28 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
     def adrf6780_helper(self) -> Tuple[Adrf6780ConfigHelper, ...]:
         return self._adrf6780_helper
 
-    def init_adrf6780(self, idx, skip_revision_check: bool = False):
-        # Notes: skip_revision_check is a workaround for ill-designed board (prototype 2-8G mixer board).
+    def init_adrf6780(self, idx, ignore_id_mismatch: bool = False) -> bool:
+        # Notes: ignore_id_mismatch is a workaround for some ill-designed boards.
         ic, helper = self._adrf6780[idx], self._adrf6780_helper[idx]
-        param: Dict[str, Dict[str, Union[int, bool]]] = self._param["adrf6780"][idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["adrf6780"][idx]
         ic.soft_reset(parity_enable=False)
-        if not skip_revision_check:
-            rev = ic.check_id()
-            logger.info(f"chip revision of ADRF6780[{idx}] of {self._css_addr} is {rev}")
+        matched, (chip_id, chip_rev) = ic.check_id()
+        if matched:
+            logger.info(f"chip revision of ADRF6780[{idx}] of {self._css_addr} is ({chip_id}, {chip_rev})")
         else:
-            logger.info("chip revision check is skipped")
+            if ignore_id_mismatch:
+                logger.error(
+                    f"unexpected chip revision of ADRF6780[{idx}] of {self._css_addr}: ({chip_id}, {chip_rev}), "
+                    f"keep running with an unstable mixer"
+                )
+            else:
+                raise RuntimeError(
+                    f"unexpected chip revision of ADRF6780[{idx}] of {self._css_addr}: ({chip_id}, {chip_rev})"
+                )
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
+        return matched
 
     def _validate_sideband(self, sideband: str):
         if not isinstance(sideband, str):
@@ -774,9 +835,9 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
     def ad5328_helper(self) -> Tuple[Ad5328ConfigHelper, ...]:
         return self._ad5328_helper
 
-    def init_ad5328(self, idx):
+    def init_ad5328(self, idx) -> None:
         ic, helper = self._ad5328[idx], self._ad5328_helper[idx]
-        param: Dict[str, Dict[str, Union[int, bool]]] = self._param["ad5328"][idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["ad5328"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -827,15 +888,19 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
 
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]]
 
+    # TODO: this is not good with respect to the hierarchical structure.
     def _construct_rfswitch(self, gpio_idx: int):
-        if self._boxtype == Quel1BoxType.QuEL1_TypeA:
+        if self._boxtype in {Quel1BoxType.QuEL1_TypeA, Quel1BoxType.QuEL1_NTT}:
             gpio_tmp: AbstractRfSwitchArrayMixin = Quel1TypeARfSwitchArray(self._proxy, gpio_idx)
         elif self._boxtype == Quel1BoxType.QuEL1_TypeB:
             gpio_tmp = Quel1TypeBRfSwitchArray(self._proxy, gpio_idx)
-        elif self._boxtype in {Quel1BoxType.QuBE_TypeA, Quel1BoxType.QuBE_TypeB}:
+        elif self._boxtype in {
+            Quel1BoxType.QuBE_RIKEN_TypeA,
+            Quel1BoxType.QuBE_RIKEN_TypeB,
+        }:
             gpio_tmp = QubeRfSwitchArray(self._proxy, gpio_idx)
         else:
-            raise ValueError("invalid boxtype: {boxtype}")
+            raise ValueError(f"invalid boxtype: {self._boxtype}")
         self._rfswitch_gpio_idx = gpio_idx
         self._rfswitch: AbstractRfSwitchArrayMixin = gpio_tmp
         self._rfswitch_helper: RfSwitchArrayConfigHelper = RfSwitchArrayConfigHelper(self._rfswitch)
@@ -848,7 +913,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
     def rfswitch_helper(self) -> RfSwitchArrayConfigHelper:
         return self._rfswitch_helper
 
-    def init_rfswitch(self):
+    def init_rfswitch(self) -> None:
         helper = self._rfswitch_helper
         param: Dict[str, Dict[str, Dict[str, Union[int, bool]]]] = self._param["gpio"][self._rfswitch_gpio_idx]
         for name, fields in param["registers"].items():
@@ -990,9 +1055,9 @@ class Quel1ConfigSubsystemGpioMixin(Quel1ConfigSubsystemBaseSlot):
     def gpio_helper(self) -> Tuple[GenericGpioConfigHelper, ...]:
         return self._gpio_helper
 
-    def init_gpio(self, idx):
+    def init_gpio(self, idx) -> None:
         helper = self.gpio_helper[idx]
-        param: Dict[str, Dict[str, Union[int, bool]]] = self._param["gpio"][idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["gpio"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()

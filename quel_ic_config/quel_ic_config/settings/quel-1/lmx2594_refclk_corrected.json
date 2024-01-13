@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "version": "1.2.0",
+    "#": "note: R31 and R75 set the ratio of the channel divider to 4 (SEG0=2, SEG1=2)"
+  },
+  "registers": {
+    "R0": {"vco_phase_sync_en": true, "out_mute": true, "#": "note: inclusive divide is activated when vco_phase_sync_en is true" },
+    "R4": {"acal_cmp_dly": 27, "#": "note: check if default value is fine for us"},
+    "R17": {"vco_daciset_strt": 300},
+    "R20": {"vco_sel": 4},
+    "R78": {"vco_capctrl_strt": 1, "#":  "not 183, see the NOTE at p.23 of the Rev.C detasheet"},
+    "R14": {"cpg": 1, "#": "note: this is determined by using PLLATINUM based on our desired phase margin"},
+    "R31": {"chdiv_div2": true},
+    "R75": {"chdiv": 1},
+    "R34": {"pll_n_18_16": 0},
+    "R36": {"pll_n": 30},
+    "R37": {
+      "pfd_dly_sel": 1,
+      "#1": "It should be 1 for both pll_n=30x4 and pll_n=30 for this case, actually",
+      "#2": "survey how to determine the right value of pfd_dly_set when IncludedDivide is active",
+      "#3": "should be ADDED"
+    },
+    "R44": {"outa_pwr": 50, "outb_pd": false, "outa_pd": false, "mash_reset_n": true, "mash_order": 0},
+    "R45": {"outa_mux": 1, "out_iset": 0, "#": "note: outb_pwr is kept at its default value, 31"},
+    "R46": {"outb_mux": 2},
+    "R58": {"inpin_ignore": false, "inpin_fmt": 2},
+    "R71": {
+      "sysref_div_pre": 2,
+      "sysref_en": true,
+      "sysref_repeat": true,
+      "#": "800MHz <= (12GHz / included_devide (=4) / sysref_div_pre) <= 1500MHz"
+    },
+    "#R72": {"#": "Note: it is impossible to generate 62.5kHz SYSREF with sysref master mode, the minimum is 125kHz."}
+  }
+}

@@ -3,21 +3,22 @@ import logging
 import sys
 import time
 from argparse import ArgumentParser
-from typing import Any, Collection, Dict, Final, List, Union, cast
+from typing import Any, Collection, Dict, Final, List, Mapping, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 from quel_cmod_scripting import QuelCmod
 from quel_pyxsdb import get_jtagterminal_port
 
-from quel_ic_config import Quel1ConfigSubsystem, Quel1NormalThermistor, Quel1PathSelectorThermistor
+from quel_ic_config import QubeConfigSubsystem, Quel1BoxType, Quel1NormalThermistor, Quel1PathSelectorThermistor
 from quel_ic_config_utils import (
     CaptureReturnCode,
-    E7HwType,
     Quel1E7ResourceMapper,
     Quel1WaveSubsystem,
     add_common_arguments,
+    add_common_workaround_arguments,
     complete_ipaddrs,
+    init_box_with_reconnect,
 )
 
 DEFAULT_XSDB_PORT_FOR_CMOD: Final[int] = 36335
@@ -126,15 +127,87 @@ def cli_body():
     logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
     logging.getLogger("quel_ic_config_utils.quel1_wave_subsystem").setLevel(logging.WARNING)
 
-    settings = {
-        "2022": {"lo_mult": 85, "cnco": 1500_000_000, "sb": "U"},  # 10GHz
-        "ntt": {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},  # 7GHz
-        "2023pseudo": {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},  # 8GHz
+    settings: Mapping[str, Mapping[Tuple[int, Union[int, str]], Mapping[str, Any]]] = {
+        "2022a": {
+            (0, 0): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "U"},
+            (0, 1): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "U"},
+            (0, 2): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, 3): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 0): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "U"},
+            (1, 1): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "U"},
+            (1, 2): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 3): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, "r"): {"cnco": 1500_000_000},
+            (0, "m"): {"cnco": 1500_000_000},
+            (1, "r"): {"cnco": 1500_000_000},
+            (1, "m"): {"cnco": 1500_000_000},
+        },  # 10GHz
+        "2022b": {
+            (0, 0): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, 1): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, 2): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, 3): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 0): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 1): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 2): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (1, 3): {"lo_mult": 115, "cnco": 1500_000_000, "sb": "L"},
+            (0, "r"): {"cnco": 1500_000_000},
+            (0, "m"): {"cnco": 1500_000_000},
+            (1, "r"): {"cnco": 1500_000_000},
+            (1, "m"): {"cnco": 1500_000_000},
+        },  # 10GHz
+        "ntt": {
+            (0, 0): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (0, 1): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (0, 2): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (0, 3): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (1, 0): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (1, 1): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (1, 2): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (1, 3): {"lo_mult": 85, "cnco": 1500_000_000, "sb": "L"},
+            (0, "r"): {"cnco": 1500_000_000},
+            (0, "m"): {"cnco": 1500_000_000},
+            (1, "r"): {"cnco": 1500_000_000},
+            (1, "m"): {"cnco": 1500_000_000},
+        },  # 7GHz: may need to reconsider the settings.
+        "2023pseudo": {
+            (0, 0): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (0, 1): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (0, 2): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (0, 3): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (1, 0): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (1, 1): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (1, 2): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (1, 3): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
+            (0, "r"): {"cnco": 2500_000_000},
+            (0, "m"): {"cnco": 2500_000_000},
+            (1, "r"): {"cnco": 2500_000_000},
+            (1, "m"): {"cnco": 2500_000_000},
+        },  # 8GHz: tentative, should be replaced with 2023
+    }
+
+    boxtype2freq = {
+        Quel1BoxType.QuBE_OU_TypeA: "2022a",
+        Quel1BoxType.QuBE_RIKEN_TypeA: "2022a",
+        Quel1BoxType.QuEL1_TypeA: "2022a",
+        Quel1BoxType.QuBE_OU_TypeB: "2022b",
+        Quel1BoxType.QuBE_RIKEN_TypeB: "2022b",
+        Quel1BoxType.QuEL1_TypeB: "2022b",
+        Quel1BoxType.QuEL1_NTT: "ntt",
+        Quel1BoxType.QuEL1SE_Proto8: "2023pseudo",
     }
 
     parser = ArgumentParser(description="a phase fluctuation measurement tool")
     add_common_arguments(
         parser, use_mxfe=True, allow_implicit_mxfe=True, use_config_root=False, use_config_options=False
+    )
+    add_common_workaround_arguments(parser, use_ignore_crc_error_of_mxfe=True)
+    parser.add_argument(
+        "--rline",
+        type=str,
+        default="",
+        help="a receiver line to use for the phase measurement, "
+        "you don't have to specify this if the box has single receiver channel",
     )
     parser.add_argument(
         "--cmod_host",
@@ -156,12 +229,6 @@ def cli_body():
     )
     parser.add_argument("--cmod_jtag", type=str, default="", help="jtag id of the Cmod USB adapter")
     parser.add_argument("--duration", type=int, default=30, help="measurement duration in second")
-    parser.add_argument(
-        "--frequency",
-        choices=set(settings.keys()),
-        default="2022",
-        help="frequency for test signal, 10GHz for 2022, 7GHz for ntt, and 8GHz for 2023",
-    )
     args = parser.parse_args()
     complete_ipaddrs(args)
 
@@ -179,52 +246,70 @@ def cli_body():
         tm = None
 
     #
-    # Config (1/2)
+    # Config (1/2) and Wave
     #
-    css = Quel1ConfigSubsystem(
-        css_addr=str(args.ipaddr_css),
+    linkstat, css, wss, rmap, _, _ = init_box_with_reconnect(
+        ipaddr_wss=str(args.ipaddr_wss),
+        ipaddr_sss=str(args.ipaddr_sss),
+        ipaddr_css=str(args.ipaddr_css),
         boxtype=args.boxtype,
+        mxfes_to_connect=mxfe_to_use,
+        ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
+        refer_by_port=False,
     )
-    for mxfe in mxfe_to_use:
-        if not css.configure_mxfe(mxfe):
-            raise RuntimeError(f"phase stability test is not ready for group-{mxfe}")
+    if not isinstance(css, QubeConfigSubsystem):
+        raise ValueError(f"unsupported boxtype: {args.boxtype}")
 
-    #
-    # Wave
-    #
-    wss = Quel1WaveSubsystem(str(args.ipaddr_wss), E7HwType.SIMPLE_MULTI_CLASSIC)
+    # TODO: change the return value (linkstat0 and linkstat1) as below.
+    for mxfe in mxfe_to_use:
+        if not linkstat[mxfe]:
+            raise RuntimeError(f"phase stability test is not ready for group-{mxfe}")
 
     #
     # Targets select
     #
-    rmap = Quel1E7ResourceMapper(css, wss)
     active_rlines: Dict[int, str] = {}
     for g in mxfe_to_use:
-        active_rline = rmap.get_active_rlines_of_group(g)
-        assert len(active_rline) == 1
-        active_rlines[g] = tuple(active_rline)[0]
+        active_rline = rmap.get_active_rlines_of_group(g).intersection(css.get_all_rlines_of_group(g))
+        if args.rline == "":
+            if len(active_rline) == 1:
+                active_rlines[g] = tuple(active_rline)[0]
+            else:
+                raise ValueError("a receiver line should be specified with '--rline' option")
+        else:
+            if args.rline in active_rline:
+                active_rlines[g] = args.rline
+            else:
+                raise ValueError(f"the specified receiver line '{args.rline}' is unavailable")
         logger.info(f"group-{g} is configured to watch {'read' if active_rline == 'r' else 'monitor'} path")
 
     #
     # Config (2/2)
     #
+    setting = settings[boxtype2freq[args.boxtype]]
+
     for j in mxfe_to_use:
-        setting = settings[args.frequency]
         for i in range(4):
-            css.set_lo_multiplier(j, i, cast(int, setting["lo_mult"]))
-            css.set_dac_cnco(j, i, cast(int, setting["cnco"]))
+            css.set_lo_multiplier(j, i, cast(int, setting[j, i]["lo_mult"]))
+            css.set_dac_cnco(j, i, cast(int, setting[j, i]["cnco"]))
             css.set_dac_fnco(j, i, 0, 0)
             css.set_vatt(j, i, 0xC00)
-            css.set_sideband(j, i, cast(str, setting["sb"]))
+            css.set_sideband(j, i, cast(str, setting[j, i]["sb"]))
 
         if active_rlines[j] == "r":
-            css.set_adc_cnco(j, "r", cast(int, setting["cnco"]))
+            css.set_adc_cnco(j, "r", cast(int, setting[j, "r"]["cnco"]))
             css.set_adc_fnco(j, "r", 0, freq_in_hz=0)
-            css.activate_read_loop(j)
+            if hasattr(css, "activate_read_loop"):
+                css.activate_read_loop(j)
+            else:
+                logger.warning(f"confirm the read loop of group-#{j} is set up manually")
         elif active_rlines[j] == "m":
-            css.set_adc_cnco(j, "m", cast(int, setting["cnco"]))
+            css.set_adc_cnco(j, "m", cast(int, setting[j, "m"]["cnco"]))
             css.set_adc_fnco(j, "m", 0, freq_in_hz=0)
-            css.activate_monitor_loop(j)
+            if hasattr(css, "activate_monitor_loop"):
+                css.activate_monitor_loop(j)
+            else:
+                logger.warning(f"confirm the monitor loop of group-#{j} is set up manually")
         else:
             raise AssertionError
 

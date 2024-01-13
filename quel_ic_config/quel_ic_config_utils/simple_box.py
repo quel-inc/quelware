@@ -1,23 +1,30 @@
 import logging
 from pathlib import Path
-from typing import Any, Collection, Dict, Final, Sequence, Tuple, Union
+from typing import Any, Collection, Dict, Final, Sequence, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 
 from quel_ic_config import (
+    QubeConfigSubsystem,
+    QubeOuTypeAConfigSubsystem,
+    QubeOuTypeBConfigSubsystem,
     Quel1AnyConfigSubsystem,
     Quel1BoxType,
     Quel1ConfigOption,
     Quel1ConfigSubsystem,
+    Quel1Feature,
+    Quel1NecConfigSubsystem,
     Quel1SeProto8ConfigSubsystem,
     Quel1SeProto11ConfigSubsystem,
     Quel1SeProtoAddaConfigSubsystem,
+    Quel1TypeAConfigSubsystem,
+    Quel1TypeBConfigSubsystem,
 )
 from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemAd9082Mixin
 from quel_ic_config_utils.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config_utils.linkupper import LinkupFpgaMxfe
-from quel_ic_config_utils.quel1_wave_subsystem import CaptureReturnCode, E7HwType, Quel1WaveSubsystem
+from quel_ic_config_utils.quel1_wave_subsystem import CaptureReturnCode, E7FwLifeStage, E7FwType, Quel1WaveSubsystem
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +36,7 @@ class SimpleBoxIntrinsic:
     VERY_LONG_DURATION: float = 0x10000000000000000 * 128e-9
 
     def __init__(
-        self, css: Quel1ConfigSubsystem, wss: Quel1WaveSubsystem, rmap: Union[Quel1E7ResourceMapper, None] = None
+        self, css: QubeConfigSubsystem, wss: Quel1WaveSubsystem, rmap: Union[Quel1E7ResourceMapper, None] = None
     ):
         self._css = css
         self._wss = wss
@@ -41,7 +48,7 @@ class SimpleBoxIntrinsic:
         return f"<{self.__class__.__name__}:{self._wss._wss_addr}>"
 
     @property
-    def css(self) -> Quel1ConfigSubsystem:
+    def css(self) -> QubeConfigSubsystem:
         return self._css
 
     @property
@@ -52,29 +59,51 @@ class SimpleBoxIntrinsic:
     def rmap(self) -> Quel1E7ResourceMapper:
         return self._rmap
 
-    def init(self, ignore_crc_error: bool = False) -> bool:
+    # TODO: update doc
+    def init(
+        self,
+        mxfe_list: Union[Collection[int], None] = None,
+        ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+        ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
+    ) -> Dict[int, bool]:
         """establish a configuration link between a box and host.
         You need to initialize all the ICs and to establish datalink between AD9082 and FPGA
         (a.k.a. linking-up the box) in advance.
 
-        :param ignore_crc_error: ignore CRC error of datalink between AD9082 and FPGA
+        :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored.
+        :param ignore_extraordinary_converter_select_of_mxfe: a list of MxFEs whose unusual converter mapping is
+                                                              dismissed.
         :return: True if success
         """
+        if mxfe_list is None:
+            mxfe_list = self._css.get_all_mxfes()
 
-        retval = True
-        for group in self._css.get_all_groups():
+        if ignore_crc_error_of_mxfe is None:
+            ignore_crc_error_of_mxfe = {}
+
+        if ignore_extraordinary_converter_select_of_mxfe is None:
+            ignore_extraordinary_converter_select_of_mxfe = {}
+
+        link_ok = {}
+        for mxfe_idx in mxfe_list:
+            self._rmap.validate_configuration_integrity(
+                mxfe_idx,
+                ignore_extraordinary_converter_select=mxfe_idx in ignore_extraordinary_converter_select_of_mxfe,
+            )
             try:
-                valid_link: bool = self._css.configure_mxfe(group, ignore_crc_error=ignore_crc_error)
-                self._css.ad9082[group].device_chip_id_get()
+                valid_link: bool = self._css.configure_mxfe(
+                    mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe
+                )
+                self._css.ad9082[mxfe_idx].device_chip_id_get()
             except RuntimeError:
-                logger.error(f"failed to establish a configuration link with AD9082-#{group}")
                 valid_link = False
+                logger.error(f"failed to establish a configuration link with AD9082-#{mxfe_idx}")
 
             if not valid_link:
-                logger.error(f"AD9082-#{group} is not working. it must be linked up in advance")
-                retval = False
+                logger.error(f"AD9082-#{mxfe_idx} is not working. it must be linked up in advance")
+            link_ok[mxfe_idx] = valid_link
 
-        return retval
+        return link_ok
 
     @staticmethod
     def _calc_wave_repeats(duration_in_sec: float, num_samples: int) -> Tuple[int, int]:
@@ -130,7 +159,7 @@ class SimpleBoxIntrinsic:
             self.open_rfswitch(group, "m")
         num_repeats = self._calc_wave_repeats(duration, 64)
         logger.info(
-            f"start emitting continuous wave signal from ({group}, {line}, {channel})"
+            f"start emitting continuous wave signal from ({group}, {line}, {channel}) "
             f"for {num_repeats[0]*num_repeats[1]*128e-9} seconds"
         )
         self.start_channel(group, line, channel, amplitude=amplitude, num_repeat=num_repeats)
@@ -141,8 +170,8 @@ class SimpleBoxIntrinsic:
         line: int,
         channel: Union[int, None] = None,
         *,
-        control_port_rfswtich: bool = True,
-        control_monitor_rfswtich: bool = False,
+        control_port_rfswitch: bool = True,
+        control_monitor_rfswitch: bool = False,
     ) -> None:
         """stopping the wave generation on a given channel.
 
@@ -150,27 +179,27 @@ class SimpleBoxIntrinsic:
         :param line: a group-local index of a line which the channel belongs to.
         :param channel: an index of the channel in the line. stop the signal generation of all the channel of
                         the line if None.
-        :param control_port_rfswtich: blocking the emission of the RF signal from the corresponding port if True.
-        :param control_monitor_rfswtich: blocking the emission of the RF signal from the monitor-out port if True.
+        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
+        :param control_monitor_rfswitch: blocking the emission of the RF signal from the monitor-out port if True.
         :return: None
         """
         self.stop_channel(group, line, channel)
         logger.info(f"stop emitting continuous wave signal from ({group}, {line}, {channel})")
         self.close_rfswitch(group, line)
-        if control_port_rfswtich:
+        if control_port_rfswitch:
             self.close_rfswitch(group, line)
-        if control_monitor_rfswtich:
+        if control_monitor_rfswitch:
             self.activate_monitor_loop(group)
 
     def easy_stop_all(self, control_port_rfswitch: bool = True) -> None:
         """stopping the signal generation on all the channels of the box.
 
-        :param control_port_rfswtich: blocking the emission of the RF signal from the corresponding port if True.
+        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
         :return: None
         """
         for group in self._css.get_all_groups():
             for line in self._css.get_all_lines_of_group(group):
-                self.easy_stop(group, line, control_port_rfswtich=control_port_rfswitch)
+                self.easy_stop(group, line, control_port_rfswitch=control_port_rfswitch)
 
     def easy_capture(
         self,
@@ -320,7 +349,10 @@ class SimpleBoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        self._css.pass_line(group, line)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.pass_line(group, line)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
     def close_rfswitch(self, group: int, line: Union[int, str]):
         """closing RF switch of the port corresponding to a given line, either of transmitter or receiver one.
@@ -329,7 +361,10 @@ class SimpleBoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        self._css.block_line(group, line)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.block_line(group, line)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
     def start_channel(
         self,
@@ -396,7 +431,10 @@ class SimpleBoxIntrinsic:
         :param group: an index of a group which the monitor path belongs to.
         :return: None
         """
-        self._css.activate_monitor_loop(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.activate_monitor_loop(group)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal monitor loop-back path.
@@ -404,7 +442,10 @@ class SimpleBoxIntrinsic:
         :param group: a group which the monitor path belongs to.
         :return: None
         """
-        self._css.deactivate_monitor_loop(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.deactivate_monitor_loop(group)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
     def is_loopedback_monitor(self, group: int) -> bool:
         """checking if an internal monitor loop-back path is activated or not.
@@ -412,23 +453,32 @@ class SimpleBoxIntrinsic:
         :param group: an index of a group which the monitor loop-back path belongs to.
         :return: True if the monitor loop-back path is activated.
         """
-        return self._css.is_loopedback_monitor(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            return self._css.is_loopedback_monitor(group)
+        else:
+            return False
 
-    def activate_read_loop(self, group: int):
+    def activate_read_loop(self, group: int) -> None:
         """enabling an internal read loop-back path from read-out port to read-in port.
 
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        self._css.activate_read_loop(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.activate_read_loop(group)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
-    def deactivate_read_loop(self, group: int):
+    def deactivate_read_loop(self, group: int) -> None:
         """disabling an internal read loop-back.
 
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        self._css.deactivate_read_loop(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            self._css.deactivate_read_loop(group)
+        else:
+            logger.info("do nothing because no RF switches are available")
 
     def is_loopedback_read(self, group: int) -> bool:
         """checking if an internal read loop-back path is activated or not.
@@ -436,61 +486,126 @@ class SimpleBoxIntrinsic:
         :param group: an index of a group which the read loop-back path belongs to.
         :return: True if the read loop-back path is activated.
         """
-        return self._css.is_loopedback_read(group)
+        if isinstance(self._css, Quel1ConfigSubsystem):
+            return self._css.is_loopedback_read(group)
+        else:
+            return False
 
-    def dump_config(self) -> Dict[int, Dict[Union[int, str], Dict[str, Any]]]:
+    def dump_config(self) -> Dict[str, Dict[int, Dict[Union[int, str], Dict[str, Any]]]]:
         """dumping the current configuration of the box.
         :return: the current configuration of the box in dictionary.
         """
-        retval: Dict[int, Dict[Union[int, str], Dict[str, Any]]] = {}
+        retval: Dict[str, Dict[int, Dict[Union[int, str], Dict[str, Any]]]] = {"mxfes": {}, "lines": {}}
 
-        for group in self._css.get_all_groups():
-            retval[group] = {
+        for mxfe_idx in self.css.get_all_mxfes():
+            retval["mxfes"][mxfe_idx] = {
                 "config": {
-                    "channel_interporation_rate": self._css.get_channel_interpolation_rate(group),
-                    "main_interporation_rate": self._css.get_main_interpolation_rate(group),
+                    "channel_interporation_rate": self._css.get_channel_interpolation_rate(mxfe_idx),
+                    "main_interporation_rate": self._css.get_main_interpolation_rate(mxfe_idx),
                 }
             }
+
+        for group in self.css.get_all_groups():
             for line in self._css.get_all_lines_of_group(group):
-                retval[group][line] = self._css.dump_line(group, line)
+                retval["lines"][group][line] = self._css.dump_line(group, line)
             for rline in ("r", "m"):
-                retval[group][rline] = self._css.dump_rline(group, rline)
+                retval["lines"][group][rline] = self._css.dump_rline(group, rline)
 
         return retval
 
 
 class SimpleBox:
+    _PORT2LINE_QuBE_OU_TypeA: Dict[int, Tuple[int, Union[int, str]]] = {
+        0: (0, 0),
+        1: (0, "r"),
+        2: (0, 1),
+        5: (0, 2),
+        6: (0, 3),
+        7: (1, 3),
+        8: (1, 2),
+        11: (1, 1),
+        12: (1, "r"),
+        13: (1, 0),
+    }
+
+    _PORT2LINE_QuBE_OU_TypeB: Dict[int, Tuple[int, Union[int, str]]] = {
+        0: (0, 0),
+        2: (0, 1),
+        5: (0, 2),
+        6: (0, 3),
+        7: (1, 3),
+        8: (1, 2),
+        11: (1, 1),
+        13: (1, 0),
+    }
+
+    _PORT2LINE_QuBE_RIKEN_TypeA: Dict[int, Tuple[int, Union[int, str]]] = {
+        0: (0, 0),
+        1: (0, "r"),
+        2: (0, 1),
+        4: (0, "m"),
+        5: (0, 2),
+        6: (0, 3),
+        7: (1, 3),
+        8: (1, 2),
+        9: (1, "m"),
+        11: (1, 1),
+        12: (1, "r"),
+        13: (1, 0),
+    }
+
+    _PORT2LINE_QuBE_RIKEN_TypeB: Dict[int, Tuple[int, Union[int, str]]] = {
+        0: (0, 0),
+        2: (0, 1),
+        4: (0, "m"),
+        5: (0, 2),
+        6: (0, 3),
+        7: (1, 3),
+        8: (1, 2),
+        9: (1, "m"),
+        11: (1, 1),
+        13: (1, 0),
+    }
+
+    _PORT2LINE_QuEL1_TypeA: Dict[int, Tuple[int, Union[int, str]]] = {
+        0: (0, "r"),
+        1: (0, 0),
+        2: (0, 2),
+        3: (0, 1),
+        4: (0, 3),
+        5: (0, "m"),
+        7: (1, "r"),
+        8: (1, 0),
+        9: (1, 3),
+        10: (1, 1),
+        11: (1, 2),
+        12: (1, "m"),
+    }
+
+    _PORT2LINE_QuEL1_TypeB: Dict[int, Tuple[int, Union[int, str]]] = {
+        1: (0, 0),
+        2: (0, 1),
+        3: (0, 2),
+        4: (0, 3),
+        5: (0, "m"),
+        8: (1, 0),
+        9: (1, 1),
+        10: (1, 3),
+        11: (1, 2),
+        12: (1, "m"),
+    }
+
     _PORT2LINE: Final[Dict[Quel1BoxType, Dict[int, Tuple[int, Union[int, str]]]]] = {
-        Quel1BoxType.QuEL1_TypeA: {
-            0: (0, "r"),
-            1: (0, 0),
-            2: (0, 2),
-            3: (0, 1),
-            4: (0, 3),
-            5: (0, "m"),
-            7: (1, "r"),
-            8: (1, 0),
-            9: (1, 3),
-            10: (1, 1),
-            11: (1, 2),
-            12: (1, "m"),
-        },
-        Quel1BoxType.QuEL1_TypeB: {
-            1: (0, 0),
-            2: (0, 1),
-            3: (0, 2),
-            4: (0, 3),
-            5: (0, "m"),
-            8: (1, 0),
-            9: (1, 1),
-            10: (1, 3),
-            11: (1, 2),
-            12: (1, "m"),
-        },
+        Quel1BoxType.QuBE_OU_TypeA: _PORT2LINE_QuBE_OU_TypeA,
+        Quel1BoxType.QuBE_OU_TypeB: _PORT2LINE_QuBE_OU_TypeB,
+        Quel1BoxType.QuBE_RIKEN_TypeA: _PORT2LINE_QuBE_RIKEN_TypeA,
+        Quel1BoxType.QuBE_RIKEN_TypeB: _PORT2LINE_QuBE_RIKEN_TypeB,
+        Quel1BoxType.QuEL1_TypeA: _PORT2LINE_QuEL1_TypeA,
+        Quel1BoxType.QuEL1_TypeB: _PORT2LINE_QuEL1_TypeB,
     }
 
     def __init__(
-        self, css: Quel1ConfigSubsystem, wss: Quel1WaveSubsystem, rmap: Union[Quel1E7ResourceMapper, None] = None
+        self, css: QubeConfigSubsystem, wss: Quel1WaveSubsystem, rmap: Union[Quel1E7ResourceMapper, None] = None
     ):
         self._dev = SimpleBoxIntrinsic(css, wss, rmap)
         self._boxtype = css._boxtype
@@ -501,20 +616,29 @@ class SimpleBox:
         return f"<{self.__class__.__name__}:{self._dev._wss._wss_addr}>"
 
     @property
-    def css(self) -> Quel1ConfigSubsystem:
+    def css(self) -> QubeConfigSubsystem:
         return self._dev.css
 
     @property
     def wss(self) -> Quel1WaveSubsystem:
         return self._dev.wss
 
-    def init(self, ignore_crc_error: bool = False) -> bool:
+    def init(
+        self,
+        mxfe_list: Union[Collection[int], None] = None,
+        ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+        ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
+    ) -> Dict[int, bool]:
         """establish a configuration link between a box and host. You need to establish datalink between AD9082
         and FPGA (a.k.a. linking-up the box) in advance.
-        :param ignore_crc_error: ignore CRC error of datalink between AD9082 and FPGA
+        :param ignore_crc_error_of_mxfe: list of MxFEs whose CRC error of the datalink is ignored.
         :return: True if success
         """
-        return self._dev.init(ignore_crc_error=ignore_crc_error)
+        return self._dev.init(
+            mxfe_list=mxfe_list,
+            ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
+            ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinary_converter_select_of_mxfe,
+        )
 
     def _convert_tx_port(self, port: int) -> Tuple[int, int]:
         if port not in self._PORT2LINE[self._boxtype]:
@@ -549,8 +673,8 @@ class SimpleBox:
         sideband: Union[str, None] = None,
         amplitude: float = SimpleBoxIntrinsic.DEFAULT_AMPLITUDE,
         duration: float = SimpleBoxIntrinsic.VERY_LONG_DURATION,
-        control_port_rfswtich: bool = True,
-        control_monitor_rfswtich: bool = False,
+        control_port_rfswitch: bool = True,
+        control_monitor_rfswitch: bool = False,
     ) -> None:
         """an easy-to-use API to generate continuous wave from a given channel.
 
@@ -563,8 +687,8 @@ class SimpleBox:
         :param sideband: the active sideband of the corresponding mixer, "U" for upper and "L" for lower.
         :param amplitude: the amplitude of the sinusoidal wave to be passed to DAC.
         :param duration: the duration of wave generation in second.
-        :param control_port_rfswtich: allowing the port corresponding to the line to emit the RF signal if True.
-        :param control_monitor_rfswtich: allowing the monitor-out port to emit the RF signal if True.
+        :param control_port_rfswitch: allowing the port corresponding to the line to emit the RF signal if True.
+        :param control_monitor_rfswitch: allowing the monitor-out port to emit the RF signal if True.
         :return: None
         """
 
@@ -580,8 +704,8 @@ class SimpleBox:
             sideband=sideband,
             amplitude=amplitude,
             duration=duration,
-            control_port_rfswitch=control_port_rfswtich,
-            control_monitor_rfswitch=control_monitor_rfswtich,
+            control_port_rfswitch=control_port_rfswitch,
+            control_monitor_rfswitch=control_monitor_rfswitch,
         )
 
     def easy_stop(
@@ -589,27 +713,27 @@ class SimpleBox:
         port: int,
         channel: Union[int, None] = None,
         *,
-        control_port_rfswtich: bool = True,
-        control_monitor_rfswtich: bool = False,
+        control_port_rfswitch: bool = True,
+        control_monitor_rfswitch: bool = False,
     ) -> None:
         """stopping the wave generation on a given channel.
 
         :param port: an index of a port which the channel belongs to.
         :param channel: a port-local index of the channel. stop the signal generation of all the channel of
                         the port if None.
-        :param control_port_rfswtich: blocking the emission of the RF signal from the corresponding port if True.
-        :param control_monitor_rfswtich: blocking the emission of the RF signal from the monitor-out port if True.
+        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
+        :param control_monitor_rfswitch: blocking the emission of the RF signal from the monitor-out port if True.
         :return: None
         """
         group, line = self._convert_tx_port(port)
         self._dev.easy_stop(
-            group, line, control_port_rfswtich=control_port_rfswtich, control_monitor_rfswtich=control_monitor_rfswtich
+            group, line, control_port_rfswitch=control_port_rfswitch, control_monitor_rfswitch=control_monitor_rfswitch
         )
 
     def easy_stop_all(self, control_port_rfswitch: bool = True) -> None:
         """stopping the signal generation on all the channels of the box.
 
-        :param control_port_rfswtich: blocking the emission of the RF signal from the corresponding port if True.
+        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
         :return: None
         """
         self._dev.easy_stop_all(control_port_rfswitch=control_port_rfswitch)
@@ -627,7 +751,7 @@ class SimpleBox:
     ) -> npt.NDArray[np.complex64]:
         """capturing the wave signal from a given receiver channel.
 
-        :param group: an index of a port which the channel belongs to.
+        :param port: an index of a port which the channel belongs to.
         :param rchannel: a port-local index of the channel.
         :param lo_freq: the frequency of the corresponding local oscillator in Hz. it must be multiple of 100_000_000.
         :param cnco_freq: the frequency of the corresponding CNCO in Hz.
@@ -819,24 +943,21 @@ class SimpleBox:
         """
         return self._dev.is_loopedback_read(group)
 
-    def dump_config(self, groups: Union[Sequence[int], None] = None) -> Dict[str, Dict[str, Any]]:
+    def dump_config(self) -> Dict[str, Dict[str, Any]]:
         """dumping the current configuration of the ports
 
-        :param groups: a sequence of groups to dump the current configuration of their ports.
         :return: the current configuration of ports in dictionary.
         """
         retval: Dict[str, Dict[str, Any]] = {}
 
-        if groups is None:
-            groups = list(self.css.get_all_groups())
-
-        for group in groups:
-            group_name = f"group-#{group}"
-            retval[group_name] = {
-                "channel_interporation_rate": self._dev._css.get_channel_interpolation_rate(group),
-                "main_interporation_rate": self._dev._css.get_main_interpolation_rate(group),
+        for mxfe_idx in self.css.get_all_mxfes():
+            mxfe_name = f"mxfe-#{mxfe_idx}"
+            retval[mxfe_name] = {
+                "channel_interporation_rate": self._dev._css.get_channel_interpolation_rate(mxfe_idx),
+                "main_interporation_rate": self._dev._css.get_main_interpolation_rate(mxfe_idx),
             }
 
+        groups = self.css.get_all_groups()
         for port, (group, line) in self._PORT2LINE[self._boxtype].items():
             if group not in groups:
                 continue
@@ -863,12 +984,18 @@ def init_box_with_linkup(
     config_root: Union[Path, None],
     config_options: Collection[Quel1ConfigOption],
     use_204b: bool = True,
+    skip_init: bool = False,
+    background_noise_threshold: Union[float, None] = None,
+    ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+    ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
+    ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
+    ignore_extraordinal_converter_select_of_mxfe: Union[Collection[int], None] = None,
     refer_by_port: bool = True,
 ) -> Tuple[
-    bool,
-    bool,
+    Dict[int, bool],
     Quel1AnyConfigSubsystem,
     Quel1WaveSubsystem,
+    Quel1E7ResourceMapper,
     LinkupFpgaMxfe,
     Union[SimpleBox, SimpleBoxIntrinsic, None],
 ]:
@@ -886,7 +1013,7 @@ def init_box_with_linkup(
     :return: QuEL testing objects
     """
 
-    css, wss, linkupper, box = create_box_objects(
+    css, wss, rmap, linkupper, box = create_box_objects(
         ipaddr_wss=ipaddr_wss,
         ipaddr_sss=ipaddr_sss,
         ipaddr_css=ipaddr_css,
@@ -896,9 +1023,72 @@ def init_box_with_linkup(
         refer_by_port=refer_by_port,
     )
 
-    linkup_g0, linkup_g1 = linkup(linkupper=linkupper, mxfe_list=mxfes_to_linkup, use_204b=use_204b)
+    linkup_ok = linkup(
+        linkupper=linkupper,
+        mxfe_list=mxfes_to_linkup,
+        use_204b=use_204b,
+        skip_init=skip_init,
+        background_noise_threshold=background_noise_threshold,
+        ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
+        ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+        ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
+        ignore_extraordinal_converter_select_of_mxfe=ignore_extraordinal_converter_select_of_mxfe,
+    )
 
-    return linkup_g0, linkup_g1, css, wss, linkupper, box
+    return linkup_ok, css, wss, rmap, linkupper, box
+
+
+def init_box_with_reconnect(
+    *,
+    ipaddr_wss: str,
+    ipaddr_sss: str,
+    ipaddr_css: str,
+    boxtype: Quel1BoxType,
+    mxfes_to_connect: Union[Sequence[int], None] = None,
+    ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+    ignore_extraordinal_converter_select_of_mxfe: Union[Collection[int], None] = None,
+    refer_by_port: bool = True,
+) -> Tuple[
+    Dict[int, bool],
+    Quel1AnyConfigSubsystem,
+    Quel1WaveSubsystem,
+    Quel1E7ResourceMapper,
+    LinkupFpgaMxfe,
+    Union[SimpleBox, SimpleBoxIntrinsic, None],
+]:
+    css, wss, rmap, linkupper, box = create_box_objects(
+        ipaddr_wss=ipaddr_wss,
+        ipaddr_sss=ipaddr_sss,
+        ipaddr_css=ipaddr_css,
+        boxtype=boxtype,
+        config_root=None,
+        config_options={},
+        refer_by_port=refer_by_port,
+    )
+
+    if mxfes_to_connect is None:
+        mxfes_to_connect = list(css.get_all_groups())
+        mxfes_to_connect.sort()
+
+    if box is not None:
+        link_ok: Dict[int, bool] = reconnect(
+            box=box,
+            mxfe_list=mxfes_to_connect,
+            ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
+            ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinal_converter_select_of_mxfe,
+        )
+    else:
+        link_ok = reconnect(
+            css=css,
+            wss=wss,
+            rmap=rmap,
+            mxfe_list=mxfes_to_connect,
+            ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
+            ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinal_converter_select_of_mxfe,
+        )
+
+    # TODO: return link_ok as dict in the next minor version update.
+    return link_ok, css, wss, rmap, linkupper, box
 
 
 def create_box_objects(
@@ -909,7 +1099,13 @@ def create_box_objects(
     config_root: Union[Path, None],
     config_options: Collection[Quel1ConfigOption],
     refer_by_port: bool = True,
-) -> Tuple[Quel1AnyConfigSubsystem, Quel1WaveSubsystem, LinkupFpgaMxfe, Union[SimpleBox, SimpleBoxIntrinsic, None],]:
+) -> Tuple[
+    Quel1AnyConfigSubsystem,
+    Quel1WaveSubsystem,
+    Quel1E7ResourceMapper,
+    LinkupFpgaMxfe,
+    Union[SimpleBox, SimpleBoxIntrinsic, None],
+]:
     """create QuEL testing objects and initialize it
 
     :param ipaddr_wss: IP address of the wave generation subsystem of the target box
@@ -922,22 +1118,61 @@ def create_box_objects(
     :return: QuEL testing objects
     """
     if boxtype in {
-        Quel1BoxType.QuBE_TypeA,
-        Quel1BoxType.QuBE_TypeB,
+        Quel1BoxType.QuBE_OU_TypeA,
+        Quel1BoxType.QuBE_RIKEN_TypeA,
         Quel1BoxType.QuEL1_TypeA,
+        Quel1BoxType.QuBE_OU_TypeB,
+        Quel1BoxType.QuBE_RIKEN_TypeB,
+        Quel1BoxType.QuEL1_TypeB,
+        Quel1BoxType.QuEL1_NEC,
+        Quel1BoxType.QuEL1SE_Adda,
+        Quel1BoxType.QuEL1SE_Proto8,
+        Quel1BoxType.QuEL1SE_Proto11,
+    }:
+        wss: Quel1WaveSubsystem = Quel1WaveSubsystem(ipaddr_wss)
+    else:
+        raise ValueError(f"unsupported boxtype: {boxtype}")
+
+    if wss.hw_lifestage == E7FwLifeStage.TO_DEPRECATE:
+        logger.warning(f"the firmware will deprecate soon, consider to update it as soon as possible: {wss.hw_version}")
+    elif wss.hw_lifestage == E7FwLifeStage.EXPERIMENTAL:
+        logger.warning(f"be aware that the firmware is still in an experimental stage: {wss.hw_version}")
+
+    wss.validate_installed_e7awgsw()
+    features: Set[Quel1Feature] = set()
+    if wss.hw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
+        features.add(Quel1Feature.SINGLE_ADC)
+    elif wss.hw_type in {E7FwType.FEEDBACK_VERYEARLY}:
+        features.add(Quel1Feature.BOTH_ADC_EARLY)
+    elif wss.hw_type in {E7FwType.FEEDBACK_EARLY}:
+        features.add(Quel1Feature.BOTH_ADC)
+    else:
+        raise ValueError(f"unsupported firmware is detected: {wss.hw_type}")
+
+    if boxtype in {
+        Quel1BoxType.QuBE_RIKEN_TypeA,
+        Quel1BoxType.QuEL1_TypeA,
+    }:
+        css: Quel1AnyConfigSubsystem = Quel1TypeAConfigSubsystem(
+            ipaddr_css, boxtype, features, config_root, config_options
+        )
+    elif boxtype in {
+        Quel1BoxType.QuBE_RIKEN_TypeB,
         Quel1BoxType.QuEL1_TypeB,
     }:
-        css: Quel1AnyConfigSubsystem = Quel1ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
-        wss: Quel1WaveSubsystem = Quel1WaveSubsystem(ipaddr_wss, E7HwType.SIMPLE_MULTI_CLASSIC)  # TODO:
+        css = Quel1TypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuBE_OU_TypeA:
+        css = QubeOuTypeAConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuBE_OU_TypeB:
+        css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuEL1_NEC:
+        css = Quel1NecConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_Adda:
-        css = Quel1SeProtoAddaConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
-        wss = Quel1WaveSubsystem(ipaddr_wss, E7HwType.SIMPLE_MULTI_CLASSIC)
+        css = Quel1SeProtoAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_Proto8:
-        css = Quel1SeProto8ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
-        wss = Quel1WaveSubsystem(ipaddr_wss, E7HwType.SIMPLE_MULTI_CLASSIC)
+        css = Quel1SeProto8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_Proto11:
-        css = Quel1SeProto11ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
-        wss = Quel1WaveSubsystem(ipaddr_wss, E7HwType.SIMPLE_MULTI_CLASSIC)
+        css = Quel1SeProto11ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     else:
         raise ValueError(f"unsupported boxtype: {boxtype}")
 
@@ -947,7 +1182,7 @@ def create_box_objects(
     rmap = Quel1E7ResourceMapper(css, wss)
     linkupper = LinkupFpgaMxfe(css, wss, rmap)
 
-    if isinstance(css, Quel1ConfigSubsystem):
+    if isinstance(css, QubeConfigSubsystem):
         if refer_by_port:
             box: Union[SimpleBox, SimpleBoxIntrinsic, None] = SimpleBox(css, wss, rmap)
         else:
@@ -958,7 +1193,7 @@ def create_box_objects(
     # TODO: write scheduler object creation here.
     _ = ipaddr_sss
 
-    return css, wss, linkupper, box
+    return css, wss, rmap, linkupper, box
 
 
 def linkup(
@@ -967,60 +1202,87 @@ def linkup(
     mxfe_list: Sequence[int],
     use_204b: bool = True,
     skip_init: bool = False,
-    ignore_crc_error=False,
+    background_noise_threshold: Union[float, None] = None,
+    ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+    ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
+    ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
+    ignore_extraordinal_converter_select_of_mxfe: Union[Collection[int], None] = None,
     save_dirpath: Union[Path, None] = None,
-) -> Tuple[bool, bool]:
-    linkup_ok = [False, False]
-    if not skip_init:
-        linkupper._css.configure_peripherals()
-        linkupper._css.configure_all_mxfe_clocks()
+) -> Dict[int, bool]:
+    if ignore_crc_error_of_mxfe is None:
+        ignore_crc_error_of_mxfe = {}
 
-    for mxfe in mxfe_list:
-        linkup_ok[mxfe] = linkupper.linkup_and_check(
-            mxfe, use_204b=use_204b, ignore_crc_error=ignore_crc_error, save_dirpath=save_dirpath
+    if ignore_access_failure_of_adrf6780 is None:
+        ignore_access_failure_of_adrf6780 = {}
+
+    if ignore_lock_failure_of_lmx2594 is None:
+        ignore_lock_failure_of_lmx2594 = {}
+
+    if ignore_extraordinal_converter_select_of_mxfe is None:
+        ignore_extraordinal_converter_select_of_mxfe = {}
+
+    if not skip_init:
+        linkupper._css.configure_peripherals(
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
+        )
+        linkupper._css.configure_all_mxfe_clocks(
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
 
-    return linkup_ok[0], linkup_ok[1]
+    linkup_ok: Dict[int, bool] = {}
+    for mxfe in mxfe_list:
+        linkup_ok[mxfe] = linkupper.linkup_and_check(
+            mxfe,
+            use_204b=use_204b,
+            background_noise_threshold=background_noise_threshold,
+            ignore_crc_error=mxfe in ignore_crc_error_of_mxfe,
+            ignore_extraordinal_converter_select=mxfe in ignore_extraordinal_converter_select_of_mxfe,
+            save_dirpath=save_dirpath,
+        )
+
+    return linkup_ok
 
 
-if __name__ == "__main__":
-    import argparse
+def reconnect(
+    *,
+    box: Union[SimpleBox, SimpleBoxIntrinsic, None] = None,
+    css: Union[Quel1AnyConfigSubsystem, None] = None,
+    wss: Union[Quel1WaveSubsystem, None] = None,
+    rmap: Union[Quel1E7ResourceMapper, None] = None,
+    mxfe_list: Sequence[int],
+    ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
+    ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
+) -> Dict[int, bool]:
+    if ignore_crc_error_of_mxfe is None:
+        ignore_crc_error_of_mxfe = {}
 
-    from quel_ic_config_utils.common_arguments import add_common_arguments, complete_ipaddrs
-
-    logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-    parser = argparse.ArgumentParser(
-        description="check the basic functionalities about wave generation of QuEL-1 with a spectrum analyzer"
-    )
-    add_common_arguments(parser, use_mxfe=True)
-    parser.add_argument(
-        "--use_204c",
-        action="store_true",
-        default=False,
-        help="enable JESD204C link instead of the conventional 204B one",
-    )
-    args = parser.parse_args()
-    complete_ipaddrs(args)
-
-    _: Any
-    css, wss, linkupper, box = create_box_objects(
-        ipaddr_wss=str(args.ipaddr_wss),
-        ipaddr_sss=str(args.ipaddr_sss),
-        ipaddr_css=str(args.ipaddr_css),
-        boxtype=args.boxtype,
-        config_root=args.config_root,
-        config_options=args.config_options,
-        refer_by_port=False,
-    )
-    if not isinstance(box, SimpleBoxIntrinsic):
-        raise AssertionError
+    if ignore_extraordinary_converter_select_of_mxfe is None:
+        ignore_extraordinary_converter_select_of_mxfe = {}
 
     if box is not None:
-        box.init()
-    else:
-        for g in css.get_all_groups():
+        return box.init(
+            mxfe_list=mxfe_list,
+            ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
+            ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinary_converter_select_of_mxfe,
+        )
+    elif css is not None and wss is not None and rmap is not None:
+        if mxfe_list is None:
+            mxfe_list = list(css.get_all_groups())
+            mxfe_list.sort()
+        link_ok: Dict[int, bool] = {}
+        for g in mxfe_list:
+            rmap.validate_configuration_integrity(
+                g, ignore_extraordinary_converter_select=g in ignore_extraordinary_converter_select_of_mxfe
+            )
             try:
-                if not css.configure_mxfe(g):
+                if not css.configure_mxfe(g, ignore_crc_error=g in ignore_crc_error_of_mxfe):
                     logger.error(f"AD9082-#{g} is not working, check power and link status before retrying")
+                css.ad9082[g].device_chip_id_get()
+                link_ok[g] = True
             except RuntimeError:
                 logger.error(f"failed to establish a configuration link with AD9082-#{g}")
+                link_ok[g] = False
+        return link_ok
+    else:
+        raise ValueError("no target objects are provided")

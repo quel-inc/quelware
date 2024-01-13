@@ -69,15 +69,24 @@ def dac2bit(unittype: Quel1BoxType, group: int, line: int) -> int:
     if group == 0:
         if unittype == Quel1BoxType.QuEL1_TypeA:
             sw_to_open: int = [0, 5, 2, 6][line]
-        elif unittype in {Quel1BoxType.QuEL1_TypeB, Quel1BoxType.QuBE_TypeA, Quel1BoxType.QuBE_TypeB}:
+        elif unittype in {
+            Quel1BoxType.QuEL1_TypeB,
+            Quel1BoxType.QuBE_RIKEN_TypeA,
+            Quel1BoxType.QuBE_RIKEN_TypeB,
+        }:
             sw_to_open = [0, 2, 5, 6][line]
         else:
             raise AssertionError
     elif group == 1:
         if unittype == Quel1BoxType.QuEL1_TypeA:
             sw_to_open = [12, 8, 7, 11][line]
-        elif unittype in {Quel1BoxType.QuEL1_TypeB, Quel1BoxType.QuBE_TypeA, Quel1BoxType.QuBE_TypeB}:
+        elif unittype == Quel1BoxType.QuEL1_TypeB:
             sw_to_open = [12, 11, 7, 8][line]
+        elif unittype in {
+            Quel1BoxType.QuBE_RIKEN_TypeA,
+            Quel1BoxType.QuBE_RIKEN_TypeB,
+        }:
+            sw_to_open = [12, 11, 8, 7][line]
         else:
             raise AssertionError
     else:
@@ -105,14 +114,14 @@ def dac2bit(unittype: Quel1BoxType, group: int, line: int) -> int:
         (Quel1BoxType.QuEL1_TypeB, 1, 1),
         (Quel1BoxType.QuEL1_TypeB, 1, 2),
         (Quel1BoxType.QuEL1_TypeB, 1, 3),
-        (Quel1BoxType.QuBE_TypeA, 0, 0),
-        (Quel1BoxType.QuBE_TypeA, 0, 1),
-        (Quel1BoxType.QuBE_TypeA, 0, 2),
-        (Quel1BoxType.QuBE_TypeA, 0, 3),
-        (Quel1BoxType.QuBE_TypeA, 1, 0),
-        (Quel1BoxType.QuBE_TypeA, 1, 1),
-        (Quel1BoxType.QuBE_TypeA, 1, 2),
-        (Quel1BoxType.QuBE_TypeA, 1, 3),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 0),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 1),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 2),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 3),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 0),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 1),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 2),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 3),
     ],
 )
 def test_quel1(boxtype, group, line):
@@ -120,7 +129,7 @@ def test_quel1(boxtype, group, line):
         obj: AbstractRfSwitchArrayMixin = JigQuel1TypeARfSwitchArray()
     elif boxtype == Quel1BoxType.QuEL1_TypeB:
         obj = JigQuel1TypeBRfSwitchArray()
-    elif boxtype == Quel1BoxType.QuBE_TypeA:
+    elif boxtype == Quel1BoxType.QuBE_RIKEN_TypeA:
         obj = JigQubeRfSwitchArray()
     else:
         raise AssertionError
@@ -135,7 +144,7 @@ def test_quel1(boxtype, group, line):
     helper.write_field(regname, **fields)
     helper.flush()
 
-    if boxtype == Quel1BoxType.QuBE_TypeA and line == 0:
+    if boxtype in {Quel1BoxType.QuBE_OU_TypeA, Quel1BoxType.QuBE_RIKEN_TypeA} and line == 0:
         v = 1 << dac2bit(boxtype, group, line)
         assert obj.dump_regs()[0] == (v | (v << 1))
     else:
@@ -169,16 +178,16 @@ def read_loop(group: int) -> int:
         (Quel1BoxType.QuEL1_TypeA, 1, 0),
         (Quel1BoxType.QuEL1_TypeA, 0, 1),
         (Quel1BoxType.QuEL1_TypeA, 1, 1),
-        (Quel1BoxType.QuBE_TypeA, 0, 0),
-        (Quel1BoxType.QuBE_TypeA, 1, 0),
-        (Quel1BoxType.QuBE_TypeA, 0, 1),
-        (Quel1BoxType.QuBE_TypeA, 1, 1),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 0),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 0),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 0, 1),
+        (Quel1BoxType.QuBE_RIKEN_TypeA, 1, 1),
     ],
 )
 def test_loopback_switch(boxtype: Quel1BoxType, group: int, adc_line: int):
     if boxtype == Quel1BoxType.QuEL1_TypeA:
         obj: AbstractRfSwitchArrayMixin = JigQuel1TypeARfSwitchArray()
-    elif boxtype == Quel1BoxType.QuBE_TypeA:
+    elif boxtype == Quel1BoxType.QuBE_RIKEN_TypeA:
         obj = JigQubeRfSwitchArray()
     else:
         raise AssertionError
@@ -201,7 +210,7 @@ def test_loopback_switch(boxtype: Quel1BoxType, group: int, adc_line: int):
     helper.write_field(regname, **fields)
     helper.flush()
 
-    if boxtype == Quel1BoxType.QuBE_TypeA:
+    if boxtype in {Quel1BoxType.QuBE_OU_TypeA, Quel1BoxType.QuBE_RIKEN_TypeA}:
         assert obj.dump_regs()[0] == ground_truth
     elif boxtype == Quel1BoxType.QuEL1_TypeA:
         v = obj.dump_regs()[0]
