@@ -11,6 +11,13 @@ from quel_staging_tool import Au50Programmer, ExstickgeProgrammer, QuelXilinxFpg
 logger = logging.getLogger()
 
 
+def _dir_path(path: str) -> Path:
+    if os.path.isdir(path):
+        return Path(path)
+    else:
+        raise argparse.ArgumentTypeError(f"'{path}' is not a valid path to a directory")
+
+
 def _common_parser(
     obj: QuelXilinxFpgaProgrammer,
     progname: str,
@@ -23,6 +30,7 @@ def _common_parser(
     use_port: bool = True,
     use_bit: bool = False,
     use_save: bool = False,
+    use_firmware_dir: bool = False,
 ) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=progname, description=description)
 
@@ -89,6 +97,14 @@ def _common_parser(
             help="keep the generated bit and mcs files at the current working directory",
         )
 
+    if use_firmware_dir:
+        parser.add_argument(
+            "--firmware_dir",
+            type=_dir_path,
+            default=None,
+            help="a path to user's firmware repository",
+        )
+
     return parser
 
 
@@ -138,10 +154,11 @@ def program_au50():
         "Alveo U50",
         use_bit=True,
         use_save=True,
+        use_firmware_dir=True,
     )
     args = parser.parse_args()
 
-    bitfiles = obj.get_bits()
+    bitfiles = obj.get_bits(args.firmware_dir)
     if args.firmware not in bitfiles:
         logger.error(f"invalid firmware: {args.firmware}")
         sys.exit(1)
@@ -174,9 +191,9 @@ def program_au50():
             sys.exit(1)
 
     try:
-        if args.save:
-            shutil.copy(e_path, ".")
         if args.bit:
+            if args.save:
+                shutil.copy(e_path, ".")
             obj.program_bit(e_path, args.host, args.port, args.adapter)
         else:
             m_path = obj.make_mcs(e_path)
