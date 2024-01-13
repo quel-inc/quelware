@@ -31,7 +31,7 @@ def ad9082_obj_4x6():
     with open("quel_ic_config/settings/quel-1/ad9082.json") as f:
         base_setting: Dict[str, Any] = json.load(f)
 
-    with open("quel_ic_config/settings/quel-1/ad9082_tx_channel_assign_for_mxfe0.json") as f:
+    with open("quel_ic_config/settings/quel-1/ad9082_dac_channel_assign_for_mxfe0.json") as f:
         additional_setting: Dict[str, Any] = json.load(f)
 
     setting = copy.copy(base_setting)

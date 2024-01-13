@@ -12,7 +12,7 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemRfswitch,
     Quel1ConfigSubsystemRoot,
 )
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
+from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
@@ -72,18 +72,18 @@ class ExstickgeProxyQuel1(_ExstickgeProxyBase):
         super().__init__(target_address, target_port, timeout, receiver_limit_by_binding, sock)
 
 
-class Quel1ConfigSubsystem(
+class QuelMeeBoardConfigSubsystem(
     Quel1ConfigSubsystemRoot,
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd5328Mixin,
-    Quel1ConfigSubsystemRfswitch,
 ):
     __slots__ = ()
 
     _DEFAULT_CONFIG_JSONFILE: str = "quel-1.json"
 
+    # TODO: move "gpio" to the appropriate place.
     _NUM_IC: Dict[str, int] = {
         "ad9082": 2,
         "lmx2594": 10,
@@ -93,23 +93,160 @@ class Quel1ConfigSubsystem(
     }
 
     _GROUPS: Set[int] = {0, 1}
+    _MXFE_IDXS: Set[int] = {0, 1}
 
-    _DAC_IDX: Dict[Tuple[int, int], int] = {
-        (0, 0): 0,
-        (0, 1): 1,
-        (0, 2): 2,
-        (0, 3): 3,
-        (1, 0): 3,
-        (1, 1): 2,
-        (1, 2): 1,
-        (1, 3): 0,
-    }
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        Quel1ConfigSubsystemRoot.__init__(
+            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
+        self._construct_ad9082()
+        self._construct_lmx2594()
+        self._construct_adrf6780()
+        self._construct_ad5328()
 
-    _ADC_IDX: Dict[Tuple[int, str], int] = {
-        (0, "r"): 3,
-        (0, "m"): 2,
-        (1, "r"): 3,
-        (1, "m"): 2,
+    def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
+        return ExstickgeProxyQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
+
+    def configure_peripherals(
+        self,
+        ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
+        ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
+    ) -> None:
+        if ignore_access_failure_of_adrf6780 is None:
+            ignore_access_failure_of_adrf6780 = {}
+
+        if ignore_lock_failure_of_lmx2594 is None:
+            ignore_lock_failure_of_lmx2594 = {}
+
+        self.init_ad5328(0)
+        for i in range(0, 8):
+            self.init_adrf6780(i, ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
+            self.init_lmx2594(i, ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
+
+    def configure_all_mxfe_clocks(self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None) -> None:
+        if ignore_lock_failure_of_lmx2594 is None:
+            ignore_lock_failure_of_lmx2594 = {}
+
+        for group in range(2):
+            lmx2594_idx = 8 + group
+            self.init_lmx2594(lmx2594_idx, ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594)
+
+    def configure_mxfe(
+        self,
+        mxfe_idx: int,
+        hard_reset: bool = False,
+        soft_reset: bool = False,
+        mxfe_init: bool = False,
+        use_204b: bool = True,
+        ignore_crc_error: bool = False,
+    ) -> bool:
+        self._validate_mxfe(mxfe_idx)
+
+        if hard_reset:
+            logger.warning(
+                f"QuEL-1 ({self._css_addr}) does not support hardware reset of AD9082-#{mxfe_idx}, "
+                "conducts software reset instead."
+            )
+            soft_reset = True
+
+        self.ad9082[mxfe_idx].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
+        link_valid = self.ad9082[mxfe_idx].check_link_status(ignore_crc_error=ignore_crc_error)
+        if not link_valid:
+            if mxfe_init:
+                logger.warning(f"failed to establish datalink between {self._css_addr}:AD9082-#{mxfe_idx} and FPGA")
+            else:
+                logger.warning(f"the link between {self._css_addr}:AD9082-#{mxfe_idx} and FPGA is not healthy")
+        return link_valid
+
+    def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
+        """dumping the current configuration of a transmitter channel.
+
+        :param group: an index of a group which the channel belongs to.
+        :param line: a group-local index of a line which the target channel belongs to.
+        :param channel: a line-local index of the channel.
+        :return: the current configuration information of the channel.
+        """
+        self._validate_channel(group, line, channel)
+        return {
+            "fnco_hz": self.get_dac_fnco(group, line, channel),
+        }
+
+    def dump_line(self, group: int, line: int) -> Dict[str, Any]:
+        """dumping the current configuration of a transmitter line.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: the current configuration information of the line.
+        """
+        self._validate_line(group, line)
+        r: Dict[str, Any] = {}
+        r["channels"] = [self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))]
+        r["cnco_hz"] = self.get_dac_cnco(group, line)
+        r["fsc_ua"] = self.get_fullscale_current(group, line)
+        if (group, line) in self._LO_IDX:
+            r["lo_hz"] = self.get_lo_multiplier(group, line) * 100_000_000
+        if (group, line) in self._VATT_IDX:
+            r["sideband"] = self.get_sideband(group, line)
+            vatt = self.get_vatt_carboncopy(group, line)
+            if vatt is not None:
+                r["vatt"] = vatt
+        return r
+
+    def dump_rchannel(self, group: int, rline: str, rchannel: int) -> Dict[str, Any]:
+        """dumping the current configuration of the receiver channel.
+
+        :param group: an index of a group which the channel belongs to.
+        :param rline: a group-local index of a line which the target channel belongs to.
+        :param rchannel: a line-local index of the target channel.
+        :return: the current configuration information of the channel.
+        """
+        self._validate_rchannel(group, rline, rchannel)
+        return {
+            "fnco_hz": self.get_adc_fnco(group, rline, rchannel),
+        }
+
+    def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
+        """dumping the current configuration of a receiver line.
+
+        :param group: an index of a group which the line belongs to.
+        :param rline: a group-local index of the line.
+        :return: the current configuration information of the line.
+        """
+        self._validate_rline(group, rline)
+        r: Dict[str, Any] = {}
+        if (group, rline) in self._LO_IDX:
+            r["lo_hz"] = self.get_lo_multiplier(group, rline) * 100_000_000
+        r["cnco_hz"] = self.get_adc_cnco(group, rline)
+        r["channels"] = [
+            self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
+        ]
+        return r
+
+
+class QubeConfigSubsystem(
+    QuelMeeBoardConfigSubsystem,
+):
+    __slots__ = ()
+
+    _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 1): (0, 1),
+        (0, 2): (0, 2),
+        (0, 3): (0, 3),
+        (1, 0): (1, 3),
+        (1, 1): (1, 2),
+        (1, 2): (1, 1),
+        (1, 3): (1, 0),
     }
 
     _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
@@ -149,6 +286,130 @@ class Quel1ConfigSubsystem(
         (1, 3): (0, 4),
     }
 
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
+
+
+class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
+    __slots__ = ()
+
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        QubeConfigSubsystem.__init__(
+            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
+        self._construct_rfswitch(0)
+
+    def configure_peripherals(
+        self,
+        ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
+        ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
+    ) -> None:
+        self.init_rfswitch()
+        super().configure_peripherals(ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594)
+
+    def dump_line(self, group: int, line: int) -> Dict[str, Any]:
+        r = super().dump_line(group, line)
+        if (group, line) in self._RFSWITCH_NAME:
+            r["rfswitch"] = "blocked" if self.is_blocked_line(group, line) else "passing"
+        return r
+
+    def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
+        r = super().dump_rline(group, rline)
+        if (group, rline) in self._RFSWITCH_NAME:
+            r["rfswitch"] = "looping back" if self.is_blocked_line(group, rline) else "opened"
+        return r
+
+
+class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
+    __slots__ = ()
+
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
+        (0, "r"): (0, 3),
+        (1, "r"): (1, 3),
+    }
+
+    # TODO: will be replaced with a parser method
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
+        (0, "r"): (5,),
+        (1, "r"): (5,),
+    }
+
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        if boxtype != Quel1BoxType.QuBE_OU_TypeA:
+            raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
+
+
+class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem):
+    __slots__ = ()
+
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {}
+
+    # TODO: will be replaced with a parser method
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {}
+
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        if boxtype != Quel1BoxType.QuBE_OU_TypeB:
+            raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
+
+
+class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
+    __slots__ = ()
+
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
+        (0, "r"): (0, 3),
+        (0, "m"): (0, 2),
+        (1, "r"): (1, 3),
+        (1, "m"): (1, 2),
+    }
+
     # TODO: will be replaced with a parser method
     _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
         (0, "r"): (5,),
@@ -176,132 +437,146 @@ class Quel1ConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = 16384,
         timeout: float = 0.5,
         sender_limit_by_binding: bool = False,
     ):
-        Quel1ConfigSubsystemRoot.__init__(
-            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
+        if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
+            raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
         )
-        self._construct_ad9082()
-        self._construct_lmx2594()
-        self._construct_adrf6780()
-        self._construct_ad5328()
-        self._construct_rfswitch(0)
 
-    def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
-        return ExstickgeProxyQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
 
-    def configure_peripherals(self) -> None:
-        self.init_rfswitch()
+class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
+    __slots__ = ()
 
-        self.init_ad5328(0)
-        for i in range(0, 8):
-            self.init_adrf6780(i)
-            is_locked = self.init_lmx2594(i)
-            if not is_locked:
-                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{i}")
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
+        (0, "m"): (0, 2),
+        (1, "m"): (1, 2),
+    }
 
-    def configure_all_mxfe_clocks(self) -> None:
-        for group in range(2):
-            lmx2594_idx = 8 + group
-            is_locked = self.init_lmx2594(lmx2594_idx)
-            if not is_locked:
-                raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{lmx2594_idx}")
+    # TODO: will be replaced with a parser method
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
+        (0, "m"): (4,),
+        (1, "m"): (4,),
+    }
 
-    def configure_mxfe(
+    _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {
+        (0, 0): (0, "path0"),
+        (0, 1): (0, "path1"),
+        (0, 2): (0, "path2"),
+        (0, 3): (0, "path3"),
+        (0, "m"): (0, "monitor"),
+        (1, 0): (1, "path0"),
+        (1, 1): (1, "path1"),
+        (1, 2): (1, "path2"),
+        (1, 3): (1, "path3"),
+        (1, "m"): (1, "monitor"),
+    }
+
+    def __init__(
         self,
-        group: int,
-        hard_reset: bool = False,
-        soft_reset: bool = False,
-        mxfe_init: bool = False,
-        use_204b: bool = True,
-        ignore_crc_error: bool = False,
-    ) -> bool:
-        self._validate_group(group)
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
+            raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )
 
-        if hard_reset:
-            logger.warning(
-                f"QuEL-1 ({self._css_addr}) does not support hardware reset of AD9082-#{group}, "
-                "conducts software reset instead."
-            )
-            soft_reset = True
 
-        self.ad9082[group].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
-        link_valid = self.ad9082[group].check_link_status(ignore_crc_error=ignore_crc_error)
-        if not link_valid:
-            if mxfe_init:
-                logger.warning(f"failed to establish datalink between {self._css_addr}:AD9082-#{group} and FPGA")
-            else:
-                logger.warning(f"the link between {self._css_addr}:AD9082-#{group} and FPGA is not healthy")
-        return link_valid
+class Quel1NecConfigSubsystem(
+    QuelMeeBoardConfigSubsystem,
+):
+    __slots__ = ()
 
-    def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
-        """dumping the current configuration of a transmitter channel.
+    _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 1): (0, 2),
+        (1, 0): (0, 1),
+        (1, 1): (0, 3),
+        (2, 0): (1, 2),
+        (2, 1): (1, 0),
+        (3, 0): (1, 3),
+        (3, 1): (1, 1),
+    }
 
-        :param group: an index of a group which the channel belongs to.
-        :param line: a group-local index of a line which the target channel belongs to.
-        :param channel: a line-local index of the channel.
-        :return: the current configuration information of the channel.
-        """
-        self._validate_channel(group, line, channel)
-        return {
-            "fnco_hz": self.get_dac_fnco(group, line, channel),
-        }
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
+        (0, 0): 0,
+        (0, 1): 2,
+        (1, 0): 1,
+        (1, 1): 3,
+        (2, 0): 6,
+        (2, 1): 4,
+        (3, 0): 7,
+        (3, 1): 5,
+        (0, "r"): 0,
+        (1, "r"): 1,
+        (2, "r"): 6,
+        (3, "r"): 7,
+    }
 
-    def dump_line(self, group: int, line: int) -> Dict[str, Any]:
-        """dumping the current configuration of a transmitter line.
+    _MIXER_IDX: Dict[Tuple[int, int], int] = {
+        (0, 0): 0,
+        (0, 1): 2,
+        (1, 0): 1,
+        (1, 1): 3,
+        (2, 0): 6,
+        (2, 1): 4,
+        (3, 0): 7,
+        (3, 1): 5,
+    }
 
-        :param group: an index of a group which the line belongs to.
-        :param line: a group-local index of the line.
-        :return: the current configuration information of the line.
-        """
-        self._validate_line(group, line)
-        r: Dict[str, Any] = {}
-        r["channels"] = [self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))]
-        r["cnco_hz"] = self.get_dac_cnco(group, line)
-        r["fsc_ua"] = self.get_fullscale_current(group, line)
-        if (group, line) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, line) * 100_000_000
-        if (group, line) in self._VATT_IDX:
-            r["sideband"] = self.get_sideband(group, line)
-            vatt = self.get_vatt_carboncopy(group, line)
-            if vatt is not None:
-                r["vatt"] = vatt
-        if (group, line) in self._RFSWITCH_NAME:
-            r["rfswitch"] = "blocked" if self.is_blocked_line(group, line) else "passing"
-        return r
+    _VATT_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 1): (0, 2),
+        (1, 0): (0, 1),
+        (1, 1): (0, 3),
+        (2, 0): (0, 6),
+        (2, 1): (0, 4),
+        (3, 0): (0, 7),
+        (3, 1): (0, 5),
+    }
 
-    def dump_rchannel(self, group: int, rline: str, rchannel: int) -> Dict[str, Any]:
-        """dumping the current configuration of the receiver channel.
+    _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
+        (0, "r"): (0, 3),
+        (1, "r"): (0, 2),
+        (2, "r"): (1, 3),
+        (3, "r"): (1, 2),
+    }
 
-        :param group: an index of a group which the channel belongs to.
-        :param rline: a group-local index of a line which the target channel belongs to.
-        :param rchannel: a line-local index of the target channel.
-        :return: the current configuration information of the channel.
-        """
-        self._validate_rchannel(group, rline, rchannel)
-        return {
-            "fnco_hz": self.get_adc_fnco(group, rline, rchannel),
-        }
+    # TODO: will be replaced with a parser method
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
+        (0, "r"): (5,),
+        (1, "r"): (4,),
+        (2, "r"): (5,),
+        (3, "r"): (4,),
+    }
 
-    def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
-        """dumping the current configuration of a receiver line.
-
-        :param group: an index of a group which the line belongs to.
-        :param rline: a group-local index of the line.
-        :return: the current configuration information of the line.
-        """
-        self._validate_rline(group, rline)
-        r: Dict[str, Any] = {}
-        if (group, rline) in self._RFSWITCH_NAME:
-            r["rfswitch"] = "looping back" if self.is_blocked_line(group, rline) else "opened"
-        if (group, rline) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, rline) * 100_000_000
-        r["cnco_hz"] = self.get_adc_cnco(group, rline)
-        r["channels"] = [
-            self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
-        ]
-        return r
+    def __init__(
+        self,
+        css_addr: str,
+        boxtype: Quel1BoxType,
+        features: Union[Collection[Quel1Feature], None] = None,
+        config_path: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        port: int = 16384,
+        timeout: float = 0.5,
+        sender_limit_by_binding: bool = False,
+    ):
+        if boxtype != Quel1BoxType.QuEL1_NEC:
+            raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
+        super().__init__(
+            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+        )

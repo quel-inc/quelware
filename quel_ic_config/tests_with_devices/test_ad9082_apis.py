@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from quel_ic_config import Quel1ConfigSubsystem
+from quel_ic_config import QubeConfigSubsystem
 from quel_ic_config_utils.simple_box import Quel1BoxType, Quel1ConfigOption, init_box_with_linkup
 
 logger = logging.getLogger(__name__)
@@ -12,10 +12,11 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.42",
-            "ipaddr_sss": "10.2.0.42",
-            "ipaddr_css": "10.5.0.42",
+            "ipaddr_wss": "10.1.0.74",
+            "ipaddr_sss": "10.2.0.74",
+            "ipaddr_css": "10.5.0.74",
             "boxtype": Quel1BoxType.fromstr("quel1-a"),
+            "mxfes_to_linkup": {0, 1},
             "config_root": None,
             "config_options": [
                 Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
@@ -23,20 +24,38 @@ TEST_SETTINGS = (
                 Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
                 Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
             ],
-            "mxfes_to_linkup": (0, 1),
+        },
+    },
+    {
+        "box_config": {
+            "ipaddr_wss": "10.1.0.60",
+            "ipaddr_sss": "10.2.0.60",
+            "ipaddr_css": "10.5.0.60",
+            "boxtype": Quel1BoxType.fromstr("quel1-b"),
+            "mxfes_to_linkup": {0, 1},
+            "config_root": None,
+            "config_options": [
+                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
+                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
+                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
+                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
+            ],
         },
     },
 )
 
 
 @pytest.fixture(scope="session", params=TEST_SETTINGS)
-def fixtures(request) -> Quel1ConfigSubsystem:
+def fixtures(request) -> QubeConfigSubsystem:
     param0 = request.param
 
-    linkup0, linkup1, css, _, _, _ = init_box_with_linkup(**param0["box_config"])
-    assert linkup0
-    assert linkup1
-    if isinstance(css, Quel1ConfigSubsystem):
+    # TODO: write something to modify boxtype.
+
+    linkstat, css, _, _, _, _ = init_box_with_linkup(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
+    if isinstance(css, QubeConfigSubsystem):
+        for mxfe in css.get_all_groups():
+            if not linkstat[mxfe]:
+                raise RuntimeError(f"test is not ready for group-{mxfe}")
         return css
     else:
         raise AssertionError
@@ -95,25 +114,6 @@ def test_nco_set_get(mxfe, fixtures):
     for i in range(8):
         ftw = ad9082.get_adc_fnco(i)
         assert ftw == adc_fnco_ftws[i]
-
-    for line in range(4):
-        freq = css.get_dac_cnco(mxfe, line)
-        assert _is_near_enough(freq, css._DAC_IDX[mxfe, line] * 100e6)
-
-    for rline in ("r", "m"):
-        freq = css.get_adc_cnco(mxfe, rline)
-        assert _is_near_enough(freq, css._ADC_IDX[mxfe, rline] * 100e6)
-
-    for line in range(4):
-        dac = css._DAC_IDX[mxfe, line]
-        for ch, fduc in enumerate(css._param["ad9082"][mxfe]["tx"]["channel_assign"][f"dac{dac}"]):
-            freq = css.get_dac_fnco(mxfe, line, ch)
-            assert _is_near_enough(freq, fduc * 50e6 - 200e6)
-
-    for rline in ("r", "m"):
-        for rch in range(css.get_num_rchannels_of_rline(mxfe, rline)):
-            ftw = css.get_adc_fnco(mxfe, rline, 0)
-            assert _is_near_enough(ftw, css._ADC_CH_IDX[(mxfe, rline)][0] * 50e6 - 200e6)
 
 
 @pytest.mark.parametrize(

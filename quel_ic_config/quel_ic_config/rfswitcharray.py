@@ -62,8 +62,8 @@ class QubeRfSwitchArray1(RfSwitchArray):
         self.path0 = self._parse_switch_pair((v & 0b11000000000000) >> 12)
         self.path1 = p_1bf_bool(v, 11)
         self.monitor = self._parse_switch_pair((v & 0b00011000000000) >> 9)
-        self.path2 = p_1bf_bool(v, 7)
-        self.path3 = p_1bf_bool(v, 8)
+        self.path2 = p_1bf_bool(v, 8)
+        self.path3 = p_1bf_bool(v, 7)
 
     def build(self) -> int:
         return (
@@ -72,8 +72,8 @@ class QubeRfSwitchArray1(RfSwitchArray):
             | b_1bf_bool(self.path1, 11)
             | b_1bf_bool(self.monitor, 10)
             | b_1bf_bool(self.monitor, 9)
-            | b_1bf_bool(self.path2, 7)
-            | b_1bf_bool(self.path3, 8)
+            | b_1bf_bool(self.path2, 8)
+            | b_1bf_bool(self.path3, 7)
         )
 
 

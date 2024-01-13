@@ -20,25 +20,28 @@ pip install build
 python -m build
 ```
 
-パッケージファイルは、`dist/quel_ic_config-X.Y.Z-cp38-cp38-linux_x86_64.whl` (X,Y,Z は実際にはバージョン番号になる) という名前で作成される。
+パッケージファイルは、`dist/quel_ic_config-X.Y.Z-cp39-cp39-linux_x86_64.whl` (X,Y,Z は実際にはバージョン番号になる) という名前で作成される。
 基本的にはこのファイルをインストールすればよいが、 pipで配布していない依存パッケージを先にインストールしておく必要がある。
+現状、simplemulti版のファームウェアとfeedback版のファームウェアとで、一部の依存パッケージを挿し替える必要があることの注意が必要である。
+simplemulti版のファームウェアを使うには、次のようにする。
 ```shell
-pip install dependency_pkgs/*.whl
+pip install dependency_pkgs/*.whl simplemulti/*.whl
 ```
 
-quel_ic_configの開発やハードウェアのテストに参加したい場合には、さらに追加のパッケージもインストールする。
+feedback版のファームウェアを使う場合には、次のようにする。
 ```shell
-pip install dependency_pkgs/extra/*.whl
+pip install dependency_pkgs/*.whl feedback/*.whl
 ```
 
 最後に、本体パッケージのインストールを行う (X,Y,Z を適切なバージョン番号に置き換える。）
 ```shell
-pip install dist/quel_ic_config-X.Y.Z-cp38-cp38-linux_x86_64.whl
+pip install dist/quel_ic_config-X.Y.Z-cp39-cp39-linux_x86_64.whl
 ```
 
 なお、静的解析ツールやテストドライバなどの開発用のパッケージも一緒にインストールしたい場合には、次のようにすればよい。
 ```shell
-pip install dist/quel_ic_config-X.Y.Z-cp38-cp38-linux_x86_64.whl\[dev\]
+pip install dependency_pkgs/extra/*.whl
+pip install dist/quel_ic_config-X.Y.Z-cp39-cp39-linux_x86_64.whl\[dev\]
 ```
 
 ## シェルコマンドを使ってみる
@@ -97,6 +100,7 @@ AD9082-#1: failed to sync with the hardware due to API_CMS_ERROR_ERROR
 通信に失敗しているので、`linkstatus`の取得に失敗していることがログから読み取れる。
 
 ### 装置の再初期化（リンクアップ）
+#### 基本的な使い方
 次のコマンドで、指定の制御装置の初期化ができる。
 ```shell
 quel1_linkup --ipaddr_wss 10.1.0.42 --boxtype quel1-a
@@ -129,6 +133,50 @@ Type-Aのときにはリード系をデフォルトにすることも考えた�
 リンクアップが失敗を繰り返す場合には、警告ログの内容と共に連絡を頂きたい。
 コマンドを`--verbose`オプション付きで実行すると、さらに詳細な情報が得られる。
 このログを頂ければ、対応検討の返答までの時間の短縮が期待できる。
+
+#### ハードウェアトラブルの一時的回避
+`quel1_linkup`コマンドは、リンクアップ中に発生し得るハードウェア異常を厳格にチェックすることで、その後の動作の安定を担保するが、
+時に部分的な異常を無視して、装置を応急的に使用可能状態に持ち込みたい場合には邪魔になる。
+このような状況に対応するために、いくつかの異常を無視して、動作を続行するためのオプションを用意した。
+あくまで応急的な問題の無視が目的なので、スクリプト内にハードコードして使うようなことは避けるべきである。
+
+- CRCエラー
+  - FPGAから送られてきた波形データの破損をAD9082が検出したことを示す。`(linkstatus = 0xe0, error_flag = 0x11)` でリンクアップが失敗することでCRCエラーの発生が分かる。
+  - `--ignore_crc_error_of_mxfe` にCRCエラーを無視したい MxFE (AD9082) のIDを与える。カンマで区切って複数のAD9082のIDを与えることもできる。
+- ミキサの起動不良
+  - QuBEの一部の機体において、電源投入時にミキサ(ADRF6780)の起動がうまく行かない事象が知られている。`unexpected chip revision of ADRF6780[n]`(n は0~7) で通信がうまく行っていないミキサのIDが分かる。   
+  - `--ignore_access_failure_of_adrf6780` にエラーを無視したいミキサのID (上述のn)を与える。
+
+これらの一部は他のコマンドと共通である。他のコマンドへの適用可否については、各コマンドの`--help`を参照されたい。
+これら以外にも、`ignore`系の引数がいくつかあるが、開発目的のものである。
+
+#### ADCの背景ノイズチェックについて
+リンクアップ手順の最後に、各ADCについて、無信号状態での読み値に大きなノイズが乗っていないことの確認をしている。
+QuEL-1の各個体については、キュエル株式会社がノイズが既定値(=256)よりも十分に小さいことを確認後に出荷しているが、QuBEについてはノイズが大きめの機体が存在する。
+
+```text
+max amplitude of capture data is XXXXX (>= 256), failed to linkup
+```
+
+のようなメッセージが5回以上繰り返し出て、リンクアップに失敗する場合には、`--background_noise_threshold` 引数で上限値を引き上げられる。
+目安としては、400くらいまでが個体差の範疇であると考えてよい。
+それよりも大きい値で失敗を繰り返す場合には、なんらかのハードウェア的な問題を示唆するので、装置のパワーサイクルを行い、それでも回復しない場合にはサポート窓口へ連絡して頂きたい。
+
+なお、リンクアップ中に30000以上の値が数回出た後に、リンクアップに成功するのは既知の事象であり、装置の使用上問題はない。
+初期化時のタイミングに依存した異常で、確率的に発生するが、一旦、異常なしの状態に持ち込めば、その後は安定動作する。
+なお、`quel1_linkup`コマンドは異常が発生しなくなるまでリンクアップを自動で繰り返す。
+
+#### 分かりにくい警告メッセージについて 
+QuBE-RIKENの制御装置を使用する際に `--boxtype` を `quel1-a` や `quel1-b` と誤って指定した後に、正しく `qube-riken-a` や `qube-riken-b` に
+指定し直した場合に、次のような警告メッセージが出ることがある。
+```
+invalid state of RF switch for loopback, considered as inside
+```
+
+`quel1_linkup` でこのメッセージが出る場合、つまり、当該装置を間違った boxtype で使用した後で、正しい boxtype で再リンクアップを試みた場合には、無害なので無視してよい。
+なぜならば、`quel1_linkup`コマンドがスイッチの状態を初期化するからである。
+他の状況でこのメッセージが出る場合には、すべてのRFスイッチの状態を再設定しておいた方がよいだろう。
+
 
 ### 装置の設定状態の確認
 各ポートの設定パラメタの一覧を次のコマンドで確認できる。
@@ -204,3 +252,14 @@ python -i scripts/getting_started_example.py --ipaddr_wss 10.1.0.42 --boxtype qu
 
 `easy_start` は `config_port`, `config_channel`, `open_rfswitch` 及び `start_channel` を適切な順番で呼び出している。
 そのレベルでの詳細は、ソースコード`quel_ic_config_util/simple_box.py` あたりを見られたい。
+
+## 次のステップ
+`scripts`ディレクトリ内にある`getting_started_example.py` 以外にもサンプルコードについて紹介しておく。
+定数がハードコートされているなど、使い勝手にやや難はあるが、参考になると思う。
+
+- `manual_test_code_prebox.py`: SimpleBoxオブジェクトの内部のオブジェクトを使った各種実行テストをするためのコンソール。
+- `simple_scheduled_loopback.py`: 内部のカウンタを使って、一定間隔で5回、キャプチャを繰り返す。対象機体（10.1.0.74がハードコートされている）の2つのモニタアウトをコンバイナを介して、グループ0のRead-inに繋いだ状態で使う。 
+- `twobox_scheduled_loopback.py`: 内部のカウンタを使って、2台の制御装置（10.1.0.74 と 10.1.0.58) を同期してキャプチャする。2台の制御装置の合計4つのモニタアウトをコンバイナを介して、1台目のグループ0のRead-inに繋いだ状態で使う。
+- `skew_scan.py`: `twobox_schedued_loopback.py`の内容を、開始タイミングを1クロックずつずらしながら17回行い、波形生成のタイミング関係に与える影響を確認するサンプル。
+
+なお、これらの実装の一部は、近い将来に公開される機能のテストベッドも含む。

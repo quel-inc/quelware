@@ -680,7 +680,7 @@ class Lmx2594Mixin(AbstractIcMixin):
         # checking the completion of calibration based on register value.
         t0 = time.perf_counter()
         for i in range(2):
-            n = (5, 500)[i]
+            n = (100, 500)[i]  # 500 is required for the conventional settings of the refclks.
             for _ in range(n):
                 time.sleep(0.001)
                 v110 = self.read_reg(110)

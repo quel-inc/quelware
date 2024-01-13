@@ -5,8 +5,8 @@ from typing import Any, Dict, Final, List, Mapping, Sequence, Set, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from quel_clock_master import QuBEMasterClient, SequencerClient
 
+from quel_clock_master import QuBEMasterClient, SequencerClient
 from quel_ic_config_utils import CaptureResults, CaptureReturnCode, SimpleBoxIntrinsic, create_box_objects
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ class BoxPool:
     SYSREF_PERIOD: Final[int] = 2000
     # TODO: find the best value by careful experiments. it seems that the best value is 6 or around.
     TIMING_OFFSET: Final[int] = 0
+    DEFAULT_NUM_SYSREF_MEASUREMENTS: Final[int] = 100
 
     def __init__(self, settings: Mapping[str, Mapping[str, Any]]):
         self._clock_master = QuBEMasterClient(settings["CLOCK_MASTER"]["ipaddr"])
@@ -28,7 +29,7 @@ class BoxPool:
     def _parse_settings(self, settings: Mapping[str, Mapping[str, Any]]):
         for k, v in settings.items():
             if k.startswith("BOX"):
-                _, _, _, box = create_box_objects(**v, refer_by_port=False)
+                _, _, _, _, box = create_box_objects(**v, refer_by_port=False)
                 if not isinstance(box, SimpleBoxIntrinsic):
                     raise ValueError(f"unsupported boxtype: {v['boxtype']}")
                 sqc = SequencerClient(v["ipaddr_sss"])
@@ -38,8 +39,8 @@ class BoxPool:
     def init(self, resync: bool = True):
         for name, (box, sqc) in self._boxes.items():
             link_status: bool = True
-            if not box.init():
-                if box.init(ignore_crc_error=True):
+            if not all(box.init().values()):
+                if all(box.init(ignore_crc_error_of_mxfe=box.css.get_all_groups()).values()):
                     logger.warning(f"crc error has been detected on MxFEs of {name}")
                 else:
                     logger.error(f"datalink between MxFE and FPGA of {name} is not working")
@@ -91,7 +92,12 @@ class BoxPool:
             raise ValueError(f"invalid name of box: '{name}'")
 
     def emit_at(
-        self, cp: "PulseCap", pgs: Set["PulseGen"], min_time_offset: int, time_counts=Sequence[int]
+        self,
+        cp: "PulseCap",
+        pgs: Set["PulseGen"],
+        min_time_offset: int,
+        time_counts=Sequence[int],
+        displacement: int = 0,
     ) -> Dict[str, List[int]]:
         if len(pgs) == 0:
             logger.warning("no pulse generator to activate")
@@ -131,6 +137,7 @@ class BoxPool:
         base_time = current_time + min_time_offset
         offset = (16 - (base_time - self._cap_sysref_time_offset) % 16) % 16
         base_time += offset
+        base_time += displacement  # inducing clock displacement for performance evaluation (must be 0 usually).
         base_time += self.TIMING_OFFSET  # Notes: the safest timing to issue trigger, at the middle of two AWG block.
         schedule: Dict[str, List[int]] = {boxname: [] for boxname in targets}
         for i, time_count in enumerate(time_counts):
@@ -143,7 +150,7 @@ class BoxPool:
         logger.info("scheduling completed")
         return schedule
 
-    def measure_timediff(self, cp: "PulseCap", num_iters: int = 100) -> None:
+    def measure_timediff(self, cp: "PulseCap", num_iters: int = DEFAULT_NUM_SYSREF_MEASUREMENTS) -> None:
         counter_at_sysref_clk: Dict[str, int] = {boxname: 0 for boxname in self._boxes}
 
         for i in range(num_iters):

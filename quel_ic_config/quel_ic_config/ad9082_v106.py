@@ -395,7 +395,7 @@ class Ad9082ShiftFreqConfig(NoExtraBaseModel):
     main: Tuple[int, int, int, int]
 
 
-class Ad9082TxConfig(NoExtraBaseModel):
+class Ad9082DacConfig(NoExtraBaseModel):
     jesd204: Ad9082JesdParam
     lane_xbar: Tuple[
         _Ad9082LaneConfigEnum,
@@ -569,7 +569,7 @@ class Ad9082ComplexToRealEnableConfig(NoExtraBaseModel):
     main: Tuple[bool, bool, bool, bool]
 
 
-class Ad9082RxConfig(NoExtraBaseModel):
+class Ad9082AdcConfig(NoExtraBaseModel):
     jesd204: Tuple[Ad9082JesdParam, Ad9082JesdParam]
     lane_xbar: Tuple[
         _Ad9082LaneConfigEnum,
@@ -591,8 +591,8 @@ class Ad9082Config(NoExtraBaseModel):
     spi: Ad9082SpiConfig
     clock: Ad9082ClockConfig
     serdes: Ad9082SerdesConfig
-    tx: Ad9082TxConfig
-    rx: Ad9082RxConfig
+    dac: Ad9082DacConfig
+    adc: Ad9082AdcConfig
 
 
 class Ad9082V106Mixin(AbstractIcMixin):
@@ -762,8 +762,8 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
 
         if link_init:
-            self._startup_tx(self.param.tx, use_204b)
-            self._startup_rx(self.param.rx, use_204b)
+            self._startup_tx(self.param.dac, use_204b)
+            self._startup_rx(self.param.adc, use_204b)
             self._establish_link()
 
         if use_204b and link_init:
@@ -774,7 +774,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
             self.device.dev_info.dac_freq_hz = self.param.clock.dac
             self.device.dev_info.adc_freq_hz = self.param.clock.adc
 
-    def _startup_tx(self, param_tx: Ad9082TxConfig, use_204b: bool) -> None:
+    def _startup_tx(self, param_tx: Ad9082DacConfig, use_204b: bool) -> None:
         logger.info("starting-up DACs")
 
         if use_204b:
@@ -831,7 +831,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         for i in range(4):
             self.set_fullscale_current(1 << i, param_tx.fullscale_current[i])
 
-    def _startup_rx(self, param_rx: Ad9082RxConfig, use_204b: bool) -> None:
+    def _startup_rx(self, param_rx: Ad9082AdcConfig, use_204b: bool) -> None:
         logger.info("starting up ADCs")
 
         if use_204b:
@@ -931,7 +931,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return ftw
 
     def calc_dac_fnco_ftw(self, shift_hz: int, fractional_mode=False) -> NcoFtw:
-        return self.calc_dac_cnco_ftw(shift_hz * self.param.tx.interpolation_rate.main, fractional_mode)
+        return self.calc_dac_cnco_ftw(shift_hz * self.param.dac.interpolation_rate.main, fractional_mode)
 
     def calc_dac_cnco_ftw_float(self, shift_hz: float, fractional_mode=False) -> NcoFtw:
         """
@@ -950,7 +950,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         raise NotImplementedError("not available due to the bug of hal_calc_nco_ftw_f()")
 
     def calc_dac_fnco_ftw_float(self, shift_hz: float, fractional_mode=False) -> NcoFtw:
-        return self.calc_dac_cnco_ftw_float(shift_hz * float(self.param.tx.interpolation_rate.main), fractional_mode)
+        return self.calc_dac_cnco_ftw_float(shift_hz * float(self.param.dac.interpolation_rate.main), fractional_mode)
 
     def calc_dac_cnco_ftw_rational(self, shift_nr_hz: int, shift_dn: int, fractional_mode=False) -> NcoFtw:
         if not (MIN_DAC_CNCO_SHIFT * shift_dn < shift_nr_hz < MAX_DAC_CNCO_SHIFT * shift_dn):
@@ -973,7 +973,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     def calc_dac_fnco_ftw_rational(self, shift_nr_hz: int, shift_dn: int, fractional_mode=False) -> NcoFtw:
         return self.calc_dac_cnco_ftw_rational(
-            shift_nr_hz * self.param.tx.interpolation_rate.main, shift_dn, fractional_mode
+            shift_nr_hz * self.param.dac.interpolation_rate.main, shift_dn, fractional_mode
         )
 
     def calc_dac_cnco_freq(self, ftw: NcoFtw) -> float:
@@ -990,7 +990,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return x * self.device.dev_info.dac_freq_hz / (1 << 48)
 
     def calc_dac_fnco_freq(self, ftw: NcoFtw) -> float:
-        return self.calc_dac_cnco_freq(ftw) / float(self.param.tx.interpolation_rate.main)
+        return self.calc_dac_cnco_freq(ftw) / float(self.param.dac.interpolation_rate.main)
 
     def set_dac_cnco(self, dacs: Collection[int], ftw: NcoFtw) -> None:
         # dacs is actually cducs.
@@ -1082,7 +1082,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
             )
             warn_once_yet = False
         # Notes: be aware that rounding error may be induced here.
-        return self.calc_adc_cnco_ftw(shift_hz * self.param.rx.decimation_rate.main[0], fractional_mode)
+        return self.calc_adc_cnco_ftw(shift_hz * self.param.adc.decimation_rate.main[0], fractional_mode)
 
     def calc_adc_cnco_freq(self, ftw: NcoFtw) -> float:
         if ftw.ftw < (1 << 47):
@@ -1105,7 +1105,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
                 "be aware the current implementation works only when all the ADCs shares identical decimation rate."
             )
             warn_once_yet = False
-        return self.calc_adc_cnco_freq(ftw) / float(self.param.rx.decimation_rate.main[0])
+        return self.calc_adc_cnco_freq(ftw) / float(self.param.adc.decimation_rate.main[0])
 
     def set_adc_cnco(self, adcs: Collection[int], ftw: NcoFtw) -> None:
         adc_mask: ad9081.AdcCoarseDdcSelect = ad9081.ADC_CDDC_NONE
@@ -1225,10 +1225,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return convsel
 
     def get_main_interpolation_rate(self) -> int:
-        return int(self.param.tx.interpolation_rate.main)
+        return int(self.param.dac.interpolation_rate.main)
 
     def get_channel_interpolation_rate(self) -> int:
-        return int(self.param.tx.interpolation_rate.channel)
+        return int(self.param.dac.interpolation_rate.channel)
 
     def get_temperatures(self) -> Tuple[int, int]:
         temperatures = ChipTemperatures()

@@ -49,10 +49,11 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
         if env_xilinx_vitis is None:
             raise RuntimeError("load settings64.sh of the right version of Vitis in advance")
 
-    def get_bits(self) -> Dict[str, Path]:
-        d: Path = self._bitdir_path()
-        dirs = {str(p) for p in os.listdir(d) if str(p).startswith(self._BITPREFIX)}
-        bitlist = {p[len(self._BITPREFIX) :]: d / p / "top.bit" for p in dirs}  # noqa: E203
+    def get_bits(self, bitdir_path: Union[Path, None] = None) -> Dict[str, Path]:
+        if bitdir_path is None:
+            bitdir_path = self._bitdir_path()
+        dirs = {str(p) for p in os.listdir(bitdir_path) if str(p).startswith(self._BITPREFIX)}
+        bitlist = {p[len(self._BITPREFIX) :]: bitdir_path / p / "top.bit" for p in dirs}  # noqa: E203
         return bitlist
 
     @abstractmethod
@@ -83,7 +84,7 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
         logger.info(f"executing {cmd}")
         retcode = subprocess.run(cmd.split())
         if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of create_mcs{self._TCLCMD_POSTFIX}.tcl")
+            raise RuntimeError(f"failed execution of create_mcs{self._TCLCMD_POSTFIX}")
         return mcspath
 
     def program(self, mcspath: Path, host: str, port: int, adapter_id: str) -> None:
@@ -95,7 +96,7 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
         logger.info(f"executing {cmd}")
         retcode = subprocess.run(cmd.split())
         if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of program_mcs{self._TCLCMD_POSTFIX}.tcl")
+            raise RuntimeError(f"failed execution of program_mcs{self._TCLCMD_POSTFIX}")
 
     def program_bit(self, bitpath: Path, host: str, port: int, adapter_id: str) -> None:
         self._validate_env()
@@ -106,7 +107,7 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
         logger.info(f"executing {cmd}")
         retcode = subprocess.run(cmd.split())
         if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of program_bit{self._TCLCMD_POSTFIX}.tcl")
+            raise RuntimeError(f"failed execution of program_bit{self._TCLCMD_POSTFIX}")
 
     def reboot(self, host: str, port: int, adapter_id: str) -> None:
         self._validate_env()

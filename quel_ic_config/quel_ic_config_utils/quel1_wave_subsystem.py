@@ -3,8 +3,9 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from enum import Enum
+from functools import cached_property
 from queue import SimpleQueue
-from typing import Any, Collection, Dict, Final, Iterator, List, Tuple, Union
+from typing import Any, Collection, Dict, Final, Iterator, List, Mapping, Set, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -16,18 +17,17 @@ from e7awgsw.memorymap import CaptureCtrlRegs
 # Notes: importing UdpRw to alter timeout duration (25s looks too long)
 from e7awgsw.udpaccess import UdpRw
 
-from quel_ic_config_utils.e7workaround import CaptureModule, CaptureUnit
+from quel_ic_config_utils.e7workaround import (
+    CaptureModule,
+    CaptureUnit,
+    E7FwLifeStage,
+    E7FwType,
+    E7LibBranch,
+    detect_branch_of_library,
+    resolve_hw_type,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class E7HwType(Enum):
-    AUTO_DETECT = 0  # TODO: implement auto detection feature.
-    SIMPLE_MULTI_CLASSIC = 1
-    FEEDBACK_EARLY = 2
-    NEC_EARLY = 3
-    SIMPLE_MULTI_WIDER_RX = 4
-    SENTINEL = 5
 
 
 class CaptureReturnCode(Enum):
@@ -70,24 +70,30 @@ class Quel1WaveSubsystem:
     DEFAULT_CAPTURE_TIMEOUT: Final[float] = 60.0
     DEFAULT_NUM_WORKERS: Final[int] = 4  # possible maximum number of capture modules
 
-    VERSION_TO_HWTYPE: Final[Dict[Tuple[str, str], E7HwType]] = {
-        ("*", "2022/07/14"): E7HwType.SIMPLE_MULTI_CLASSIC,
-        ("*", "*"): E7HwType.SIMPLE_MULTI_CLASSIC,  # DO NOT REMOVE THIS LINE
+    VALID_HWTYPES_FOR_LIBRARY_BRANCH: Final[Mapping[E7LibBranch, Set[E7FwType]]] = {
+        E7LibBranch.SIMPLEMULTI: {
+            E7FwType.SIMPLEMULTI_CLASSIC,
+        },
+        E7LibBranch.FEEDBACK: {
+            E7FwType.FEEDBACK_VERYEARLY,
+            E7FwType.FEEDBACK_EARLY,
+        },
     }
 
     # number of AWGs of the e7awghw
-    # Notes: currently awgctrl is almost common among hardwares and this data is not so meaningful.
-    AWG_STRUCTURE: Final[Dict[E7HwType, int]] = {
-        E7HwType.SIMPLE_MULTI_CLASSIC: 16,
-        E7HwType.FEEDBACK_EARLY: 16,
-        E7HwType.NEC_EARLY: 16,
-        E7HwType.SIMPLE_MULTI_WIDER_RX: 16,
+    # Notes: currently awgctrl is common among the most types of hardware and this data is not so meaningful.
+    AWG_STRUCTURE: Final[Dict[E7FwType, int]] = {
+        E7FwType.SIMPLEMULTI_CLASSIC: 16,
+        E7FwType.FEEDBACK_VERYEARLY: 16,
+        E7FwType.NEC_EARLY: 16,
+        E7FwType.SIMPLEMULTI_WIDE: 16,
+        E7FwType.FEEDBACK_EARLY: 16,
     }
 
     # module-unit-channel structure of the e7awghw.
     # Notes: be aware that the order of capunits within the inner mapping keeps significant information.
-    MUC_STRUCTURE: Final[Dict[E7HwType, Dict[int, Dict[int, int]]]] = {
-        E7HwType.SIMPLE_MULTI_CLASSIC: {
+    MUC_STRUCTURE: Final[Dict[E7FwType, Dict[int, Dict[int, int]]]] = {
+        E7FwType.SIMPLEMULTI_CLASSIC: {
             CaptureModule.U0: {
                 CaptureUnit.U0: 0,
                 CaptureUnit.U1: 0,
@@ -101,7 +107,7 @@ class Quel1WaveSubsystem:
                 CaptureUnit.U7: 0,
             },
         },
-        E7HwType.FEEDBACK_EARLY: {
+        E7FwType.FEEDBACK_VERYEARLY: {
             CaptureModule.U0: {
                 CaptureUnit.U0: 0,
                 CaptureUnit.U1: 0,
@@ -121,21 +127,43 @@ class Quel1WaveSubsystem:
                 CaptureUnit.U9: 0,
             },
         },
-        E7HwType.NEC_EARLY: {
+        E7FwType.FEEDBACK_EARLY: {
+            CaptureModule.U0: {
+                CaptureUnit.U0: 0,
+                CaptureUnit.U1: 0,
+                CaptureUnit.U2: 0,
+                CaptureUnit.U3: 0,
+            },
+            CaptureModule.U1: {
+                CaptureUnit.U4: 0,
+                CaptureUnit.U5: 0,
+                CaptureUnit.U6: 0,
+                CaptureUnit.U7: 0,
+            },
+            CaptureModule.U2: {
+                CaptureUnit.U8: 0,
+            },
+            CaptureModule.U3: {
+                CaptureUnit.U9: 0,
+            },
+        },
+        # NOTES: not used yet
+        E7FwType.NEC_EARLY: {
             CaptureModule.U0: {
                 CaptureUnit.U0: 0,
             },
             CaptureModule.U1: {
-                CaptureUnit.U1: 0,
+                CaptureUnit.U4: 0,
             },
             CaptureModule.U2: {
-                CaptureUnit.U2: 0,
+                CaptureUnit.U8: 0,
             },
             CaptureModule.U3: {
-                CaptureUnit.U3: 0,
+                CaptureUnit.U9: 0,
             },
         },
-        E7HwType.SIMPLE_MULTI_WIDER_RX: {
+        # NOTES: not used yet
+        E7FwType.SIMPLEMULTI_WIDE: {
             CaptureModule.U0: {
                 CaptureUnit.U0: 0,
                 CaptureUnit.U1: 1,
@@ -156,6 +184,7 @@ class Quel1WaveSubsystem:
     UdpRw.TIMEOUT = _DEFAULT_TIMEOUT_OVERRIDE
 
     __slots__ = (
+        "__dict__",  # TODO: remove it
         "_wss_addr",
         "_hw_type",
         "_hw_version_cache",
@@ -166,7 +195,7 @@ class Quel1WaveSubsystem:
         "_capctrl_lock",
     )
 
-    def __init__(self, wss_addr: str, hw_type: E7HwType = E7HwType.AUTO_DETECT):
+    def __init__(self, wss_addr: str, hw_type: E7FwType = E7FwType.AUTO_DETECT):
         # execution control
         self._executor = ThreadPoolExecutor(max_workers=self.DEFAULT_NUM_WORKERS)
         self._awgctrl_lock = threading.Lock()
@@ -175,50 +204,40 @@ class Quel1WaveSubsystem:
         # resource management
         self._wss_addr: Final[str] = wss_addr
         self._hw_type = hw_type
-        self._hw_version_cache: Union[None, Tuple[str, str]] = None
 
         self._awgctrl: Final[AwgCtrl] = AwgCtrl(self._wss_addr)
         self._capctrl: Final[CaptureCtrl] = CaptureCtrl(self._wss_addr)
 
-    @staticmethod
-    def _parse_xctrl_version(v: str, postfix: str) -> str:
-        sv = v.split(":")
-        if len(sv) != 2 and sv[0] == "K":
-            raise RuntimeError(f"unexpected version string: '{v}'")
-        ssv = sv[1].split("-")
-        if len(ssv) != 2 and ssv[1] == postfix:
-            raise RuntimeError(f"unexpected version string: '{v}'")
-        return ssv[0]
+    @cached_property
+    def _integrity_between_firmware_and_library(self) -> bool:
+        lib_branch = detect_branch_of_library()
+        return self.hw_type in self.VALID_HWTYPES_FOR_LIBRARY_BRANCH[lib_branch]
+
+    @cached_property
+    def hw_version(self) -> Tuple[str, str, str]:
+        with self._awgctrl_lock:
+            awgv = self._awgctrl.version()
+        with self._capctrl_lock:
+            capv = self._capctrl.version()
+        # TODO: sequencer version will be added in future.
+        # Notes: current feedback version e7awgsw has a bug and SequencerCtrl.version() doesn't work well.
+        return (awgv, capv, "")
+
+    @cached_property
+    def hw_type_and_lifestage(self) -> Tuple[E7FwType, E7FwLifeStage]:
+        if self._hw_type is E7FwType.AUTO_DETECT:
+            return resolve_hw_type(self.hw_version)
+        else:
+            logger.info(f"the hardware type is explicitly specified as {self._hw_type}")
+            return self._hw_type, E7FwLifeStage.UNKNOWN
 
     @property
-    def hw_version(self) -> Tuple[str, str]:
-        if self._hw_version_cache is None:
-            with self._awgctrl_lock:
-                awgv = self._parse_xctrl_version(self._awgctrl.version(), "1")
-            with self._capctrl_lock:
-                capv = self._parse_xctrl_version(self._capctrl.version(), "2")
-            self._hw_version_cache = (awgv, capv)
-        return self._hw_version_cache
+    def hw_type(self) -> E7FwType:
+        return self.hw_type_and_lifestage[0]
 
     @property
-    def hw_type(self) -> E7HwType:
-        if self._hw_type is None:
-            v = self.hw_version
-            if v in self.VERSION_TO_HWTYPE:
-                self._hw_type = self.VERSION_TO_HWTYPE[v]
-            elif ("*", v[1]) in self.VERSION_TO_HWTYPE:
-                self._hw_type = self.VERSION_TO_HWTYPE[("*", v[1])]
-            elif (v[0], "*") in self.VERSION_TO_HWTYPE:
-                self._hw_type = self.VERSION_TO_HWTYPE[(v[0], "*")]
-            elif ("*", "*") in self.VERSION_TO_HWTYPE:
-                self._hw_type = self.VERSION_TO_HWTYPE[("*", "*")]
-                logger.warning(
-                    "failed to resolve hardware features from the retrieved harware versions, "
-                    f"conventional hw_type {self._hw_type} is assumed"
-                )
-            else:
-                raise AssertionError
-        return self._hw_type
+    def hw_lifestage(self) -> E7FwLifeStage:
+        return self.hw_type_and_lifestage[1]
 
     def get_num_available_awg(self) -> int:
         return self.AWG_STRUCTURE[self.hw_type]
@@ -228,6 +247,8 @@ class Quel1WaveSubsystem:
 
     def is_monitor_shared_with_read(self) -> bool:
         # TODO: re-consider how to implement this.
+        # Notes: firmware configuration of SIMPLE_MULTI_WIDER_RX is not clarified.
+        #        this implementation looks the best currently.
         return len(self.get_muc_structure()) == 2
 
     def get_num_capunits_of_capmod(self, capmod: int) -> int:
@@ -256,18 +277,28 @@ class Quel1WaveSubsystem:
             hwidxs[hwidx] = m, u
         return hwidxs
 
+    def validate_installed_e7awgsw(self):
+        if not self._integrity_between_firmware_and_library:
+            raise RuntimeError(f"mismatched e7awgsw library with box@{self._wss_addr}")
+
     def initialize_awgs(self, awgs: Collection[int]):
+        self.validate_installed_e7awgsw()
+
         self._validate_awg_hwidxs(awgs)
         self._awgctrl.initialize(*awgs)
         self._awgctrl.terminate_awgs(*awgs)
 
     def initialize_all_awgs(self):
+        self.validate_installed_e7awgsw()
+
         awgs = AWG.all()
         self._validate_awg_hwidxs(awgs)
         self._awgctrl.initialize(*awgs)
         self._awgctrl.terminate_awgs(*awgs)
 
     def initialize_capunits(self, capunits: Collection[Tuple[int, int]]):
+        self.validate_installed_e7awgsw()
+
         hwidxs = self._get_capunit_hwidxs(capunits)
         self._capctrl.initialize(*hwidxs)
 
@@ -279,6 +310,8 @@ class Quel1WaveSubsystem:
         delay: int = 0,
         timeout: float = DEFAULT_SIMPLE_CAPTURE_TIMEOUT,
     ) -> Tuple[CaptureReturnCode, npt.NDArray[np.complex64]]:
+        self.validate_installed_e7awgsw()
+
         # Notes: paramters are validated in self.capture_start().
         future = self.simple_capture_start(
             capmod=capmod,
@@ -306,6 +339,8 @@ class Quel1WaveSubsystem:
         triggering_awg: Union[int, None] = None,
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
+        self.validate_installed_e7awgsw()
+
         self._validate_capmod_hwidxs({capmod})
         cuhwxs: Dict[int, Tuple[int, int]] = self._get_capunit_hwidxs([(capmod, capunit) for capunit in capunits])
         if triggering_awg is not None:
@@ -330,6 +365,8 @@ class Quel1WaveSubsystem:
         triggering_awg: int,
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> CaptureResults:
+        self.validate_installed_e7awgsw()
+
         self._validate_capmod_hwidxs({capmod})
         cuhwxs: Dict[int, Tuple[int, int]] = self._get_capunit_hwidxs([(capmod, capunit) for capunit in capunits])
         if triggering_awg is not None:
@@ -516,6 +553,7 @@ class Quel1WaveSubsystem:
         num_wave_blocks: int = 1,
         num_wait_words: Tuple[int, int] = (0, 0),
     ) -> None:
+        self.validate_installed_e7awgsw()
         self._validate_awg_hwidxs({awg})
         wave = WaveSequence(num_wait_words=num_wait_words[0], num_repeats=num_repeats[0])
         iq = np.zeros(wave.NUM_SAMPLES_IN_WAVE_BLOCK * num_wave_blocks, dtype=np.complex64)
@@ -536,6 +574,7 @@ class Quel1WaveSubsystem:
         num_repeats: Tuple[int, int],
         num_wait_words: Tuple[int, int] = (0, 0),
     ) -> None:
+        self.validate_installed_e7awgsw()
         self._validate_awg_hwidxs({awg})
         wave = WaveSequence(num_wait_words=num_wait_words[0], num_repeats=num_repeats[0])
         block_assq: List[Tuple[int, int]] = list(zip(iq.real.astype(int), iq.imag.astype(int)))
@@ -547,137 +586,22 @@ class Quel1WaveSubsystem:
             self._awgctrl.set_wave_sequence(awg, wave)
 
     def clear_before_starting_emission(self, awgs: Collection[int]):
+        self.validate_installed_e7awgsw()
         self._validate_awg_hwidxs(awgs)
         with self._awgctrl_lock:
             self._awgctrl.clear_awg_stop_flags(*awgs)
 
     def start_emission(self, awgs: Collection[int]):
+        self.validate_installed_e7awgsw()
         self.clear_before_starting_emission(awgs)
         logger.info(f"start emission from AWGs {','.join([str(awg) for awg in awgs])}")
         with self._awgctrl_lock:
             self._awgctrl.start_awgs(*awgs)
 
     def stop_emission(self, awgs: Collection[int]):
+        self.validate_installed_e7awgsw()
         self._validate_awg_hwidxs(awgs)
         logger.info(f"stop emission from AWGs {','.join([str(awg) for awg in awgs])}")
         with self._awgctrl_lock:
             self._awgctrl.terminate_awgs(*awgs)
             # TODO: should wait for confirming the termination (?)
-
-
-if __name__ == "__main__":
-    from quel_ic_config import Quel1BoxType, Quel1ConfigOption, Quel1ConfigSubsystem
-    from quel_ic_config_utils.e7resource_mapper import Quel1E7ResourceMapper
-
-    logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-
-    css = Quel1ConfigSubsystem(
-        css_addr="10.5.0.74",
-        boxtype=Quel1BoxType.QuEL1_TypeA,
-        config_path=None,
-        config_options=[Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1],
-    )
-    wss = Quel1WaveSubsystem(wss_addr="10.1.0.74", hw_type=E7HwType.SIMPLE_MULTI_CLASSIC)
-    rmap = Quel1E7ResourceMapper(css, wss)
-
-    assert css.configure_mxfe(0)
-    assert css.configure_mxfe(1)
-    css.set_lo_multiplier(group=0, line=0, freq_multiplier=85)
-    css.set_dac_cnco(group=0, line=0, freq_in_hz=int(1500e6))
-    css.set_dac_fnco(group=0, line=0, channel=0, freq_in_hz=int(0e6))
-    css.set_sideband(group=0, line=0, sideband="U")
-    css.set_vatt(group=0, line=0, vatt=0xA00)
-
-    css.set_lo_multiplier(group=0, line="m", freq_multiplier=85)
-
-    css.set_lo_multiplier(group=0, line=2, freq_multiplier=110)
-    css.set_dac_cnco(group=0, line=2, freq_in_hz=int(1500e6))
-    css.set_dac_fnco(group=0, line=2, channel=0, freq_in_hz=int(0e6))
-    css.set_sideband(group=0, line=2, sideband="L")
-    css.set_vatt(group=0, line=2, vatt=0xA00)
-
-    # testing emission
-    awg000 = rmap.get_awg_of_channel(0, 0, 0)
-    wss.initialize_awgs({awg000})
-    css.pass_line(group=0, line=0)
-    wss.set_cw(awg000, 16383.0, (0xFFFFFFFF, 0xFFFFFFFF))
-    wss.start_emission({awg000})
-    input("hit any key to proceed")
-
-    awg020 = rmap.get_awg_of_channel(0, 2, 0)
-    wss.initialize_awgs({awg020})
-    css.pass_line(group=0, line=2)
-    wss.set_cw(awg020, 16383.0, (0xFFFFFFFF, 0xFFFFFFFF))
-    wss.start_emission({awg020})
-    input("hit any key to proceed")
-
-    css.block_line(group=0, line=0)
-    css.block_line(group=0, line=2)
-    css.activate_monitor_loop(group=0)
-    time.sleep(0.1)
-
-    css.set_adc_cnco(group=0, rline="r", freq_in_hz=int(1350e6))
-    css.set_adc_fnco(group=0, rline="r", rchannel=0, freq_in_hz=int(0))
-    css.set_adc_cnco(group=0, rline="m", freq_in_hz=int(1100e6))
-    css.set_adc_fnco(group=0, rline="m", rchannel=0, freq_in_hz=int(0))
-
-    available_rlines = rmap.get_active_rlines_of_group(0)
-    logger.info(f"activated rlines of group0 = {available_rlines}")
-    assert len(available_rlines) == 1
-
-    if tuple(available_rlines)[0] == "r":
-        logger.info("captured data should have peak at 150MHz")
-    elif tuple(available_rlines)[0] == "m":
-        logger.info("captured data should have peak at -100MHz")
-    else:
-        raise AssertionError
-
-    u0r = rmap.get_capture_module_of_rline(0, "r")
-    wss.initialize_capunits({(u0r, 0)})
-    retcode_r, data_r = wss.simple_capture(u0r)
-    assert retcode_r == CaptureReturnCode.SUCCESS
-    f_r = np.fft.fft(data_r)
-    print(
-        "[r] peak freq. = ", np.fft.fftfreq(len(data_r), 1 / 500e6)[np.argmax(abs(f_r))]
-    )  # should be 150e6 if "r" is activated.
-    print("[r] peak amplitude = ", np.max(abs(data_r)))
-
-    u0m = rmap.get_capture_module_of_rline(0, "m")
-    wss.initialize_capunits({(u0m, 0)})
-    retcode_m, data_m = wss.simple_capture(u0m)
-    assert retcode_m == CaptureReturnCode.SUCCESS
-    f_m = np.fft.fft(data_m)
-    print(
-        "[m] peak freq. = ", np.fft.fftfreq(len(data_m), 1 / 500e6)[np.argmax(abs(f_m))]
-    )  # should be -100e6 if "m" is activated.
-    print("[m] peak amplitude = ", np.max(abs(data_m)))
-
-    wss.stop_emission({awg000, awg020})
-    input("hit any key to proceed")
-
-    thunk = wss.simple_capture_start(capmod=u0r, capunits={0}, num_words=1024, delay=0, triggering_awg=awg000)
-    time.sleep(0.5)
-    wss.start_emission({awg000})
-    retcode_rt, data_rts = thunk.result()
-    data_rt = data_rts[0]
-    wss.stop_emission({awg000})
-    assert retcode_rt == CaptureReturnCode.SUCCESS
-    f_rt = np.fft.fft(data_rt)
-    print(
-        "[r] peak freq. = ", np.fft.fftfreq(len(data_rt), 1 / 500e6)[np.argmax(abs(f_rt))]
-    )  # should be -100e6 if "m" is activated.
-    print("[r] peak amplitude = ", np.max(abs(data_rt)))
-
-    input("hit any key to proceed")
-    thunk = wss.simple_capture_start(capmod=u0m, capunits={0}, num_words=1024, delay=0, triggering_awg=awg020)
-    time.sleep(0.5)
-    wss.start_emission({awg020})
-    retcode_mt, data_mts = thunk.result()
-    data_mt = data_mts[0]
-    wss.stop_emission({awg020})
-    assert retcode_mt == CaptureReturnCode.SUCCESS
-    f_mt = np.fft.fft(data_mt)
-    print(
-        "[m] peak freq. = ", np.fft.fftfreq(len(data_mt), 1 / 500e6)[np.argmax(abs(f_mt))]
-    )  # should be -100e6 if "m" is activated.
-    print("[m] peak amplitude = ", np.max(abs(data_mt)))

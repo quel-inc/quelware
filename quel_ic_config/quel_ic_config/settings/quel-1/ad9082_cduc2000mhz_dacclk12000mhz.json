@@ -5,7 +5,7 @@
   "clock": {
     "dac": 12000000000
   },
-  "tx": {
+  "dac": {
     "interpolation_rate": {
       "channel": 4,
       "main": 6

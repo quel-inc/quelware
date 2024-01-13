@@ -5,20 +5,22 @@
   "ad9082": [
     [
       "quel-1/ad9082.json",
-      "quel-1/ad9082_tx_channel_assign_for_mxfe0.json",
-      {"file": "quel-1/ad9082_read.json", "boxtype": ["type-a-plus", "type-b-plus"]},
-      {"file": "quel-1/ad9082_read.json", "option": "use_read_in_mxfe0", "boxtype": "type-a"},
-      {"file": "quel-1/ad9082_monitor.json", "option": "use_monitor_in_mxfe0", "boxtype":  ["type-a", "type-b"]},
+      "quel-1/ad9082_dac_channel_assign_for_mxfe0.json",
+      {"file": "quel-1/ad9082_read.json", "feature": "both_adc"},
+      {"file": "quel-1/ad9082_workaround_feedback20231108.json", "feature": "both_adc_early"},
+      {"file": "quel-1/ad9082_read.json", "option": "use_read_in_mxfe0", "boxtype": ["type-a", "ou-type-a", "riken-type-a", "nec"], "feature": "single_adc"},
+      {"file": "quel-1/ad9082_monitor.json", "option": "use_monitor_in_mxfe0", "boxtype":  ["type-a", "type-b", "riken-type-a", "riken-type-b", "nec"], "feature": "single_adc"},
       {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe0"},
       {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe0"},
       {"file": "quel-1/ad9082_refclk12000mhz.json", "option": "refclk_12ghz_for_mxfe0"}
     ],
     [
       "quel-1/ad9082.json",
-      "quel-1/ad9082_tx_channel_assign_for_mxfe1.json",
-      {"file": "quel-1/ad9082_read.json", "boxtype": ["type-a-plus", "type-b-plus"]},
-      {"file": "quel-1/ad9082_read.json", "option": "use_read_in_mxfe1", "boxtype": "type-a"},
-      {"file": "quel-1/ad9082_monitor.json", "option": "use_monitor_in_mxfe1", "boxtype":  ["type-a", "type-b"]},
+      "quel-1/ad9082_dac_channel_assign_for_mxfe1.json",
+      {"file": "quel-1/ad9082_read.json", "feature": "both_adc"},
+      {"file": "quel-1/ad9082_workaround_feedback20231108.json", "feature": "both_adc_early"},
+      {"file": "quel-1/ad9082_read.json", "option": "use_read_in_mxfe1", "boxtype": ["type-a", "ou-type-a", "riken-type-a", "nec"], "feature": "single_adc"},
+      {"file": "quel-1/ad9082_monitor.json", "option": "use_monitor_in_mxfe1", "boxtype":  ["type-a", "type-b", "riken-type-a", "riken-type-b", "nec"], "feature": "single_adc"},
       {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe1"},
       {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe1"},
       {"file": "quel-1/ad9082_refclk12000mhz.json", "option": "refclk_12ghz_for_mxfe1"}
@@ -26,25 +28,25 @@
   ],
   "lmx2594": [
     [
-      {"file": "quel-1/lmx2594_lo_with_rx.json", "boxtype": "type-a"},
-      {"file": "quel-1/lmx2594_lo.json", "boxtype": "type-b"}
+      {"file": "quel-1/lmx2594_two_lo.json", "boxtype": ["type-a", "ou-type-a", "riken-type-a", "nec"]},
+      {"file": "quel-1/lmx2594_lo.json", "boxtype": ["type-b", "ou-type-b", "riken-type-b"]}
     ],
-    "quel-1/lmx2594_lo_with_rx.json",
+    "quel-1/lmx2594_two_lo.json",
     "quel-1/lmx2594_lo.json",
     "quel-1/lmx2594_lo.json",
     "quel-1/lmx2594_lo.json",
     "quel-1/lmx2594_lo.json",
-    "quel-1/lmx2594_lo_with_rx.json",
+    "quel-1/lmx2594_two_lo.json",
     [
-      {"file": "quel-1/lmx2594_lo_with_rx.json", "boxtype": "type-a"},
-      {"file": "quel-1/lmx2594_lo.json", "boxtype": "type-b"}
+      {"file": "quel-1/lmx2594_two_lo.json", "boxtype": ["type-a", "ou-type-a", "riken-type-a", "nec"]},
+      {"file": "quel-1/lmx2594_lo.json", "boxtype": ["type-b", "ou-type-b", "riken-type-b"]}
     ],
     [
-      "quel-1/lmx2594_refclk.json",
+      {"file": "quel-1/lmx2594_refclk_corrected.json", "option": "refclk_corrected_mxfe0", "otherwise": "quel-1/lmx2594_refclk.json"},
       {"file": "quel-1/lmx2594_refclk12000mhz.json", "option": "refclk_12ghz_for_mxfe0"}
     ],
     [
-      "quel-1/lmx2594_refclk.json",
+      {"file": "quel-1/lmx2594_refclk_corrected.json", "option": "refclk_corrected_mxfe1", "otherwise": "quel-1/lmx2594_refclk.json"},
       {"file": "quel-1/lmx2594_refclk12000mhz.json", "option": "refclk_12ghz_for_mxfe1"}
     ]
   ],
