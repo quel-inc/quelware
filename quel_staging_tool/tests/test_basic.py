@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import pathlib
 
 from quel_staging_tool import Au50Programmer, ExstickgeProgrammer
 
@@ -77,7 +78,7 @@ def test_basic_au50():
         generated = f.read()
     assert generated == answer
 
-    bitfiles = obj.get_bits()
+    bitfiles = obj.get_bits(bitdir_path=pathlib.Path("./old_firmwares"))
     assert "simplemulti_20230820" in bitfiles
 
     e_path = obj.make_embedded_bit(bitpath=bitfiles["simplemulti_20230820"], mempath=memfile_path)
@@ -91,16 +92,3 @@ def test_basic_au50():
     m_path = obj.make_mcs(e_path)
     logger.info(f"the generated mcs file: {m_path}")
 
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-    """
-    from ping3 import ping
-
-    adapter_id = "210249AEC362"
-    obj.program(m_path, adapter_id)
-    obj.reboot(adapter_id)
-
-    time.sleep(5)
-    assert ping("10.5.0.20")
-    """

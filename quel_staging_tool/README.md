@@ -16,8 +16,8 @@ source /tools/Xilinx/Vivado/2020.1/settings64.sh
 ```
 
 ## AlveoU50
-### ファームウェア過去込み
-`program_au50` コマンドを使用する。
+### ファームウェア書き込み
+`quel_program_au50` コマンドを使用する。
 以下の例は、アダプタID 500202A50xxxA に繋がっているFPGA(Alveo U50)に、simplemulti_20230820 のバージョンの
 ファームウェアを書き込む。この際に、MACアドレスを`00-0a-35-16-66-48`、IPアドレスを`10.1.0.250` に設定する。
 

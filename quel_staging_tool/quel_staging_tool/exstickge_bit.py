@@ -9,6 +9,26 @@ from typing import Dict, Final, Tuple, Union
 logger = logging.getLogger(__name__)
 
 
+def run_vivado_batch(script_dir: Path, script_file: str, tclargs: str) -> int:
+    with tempfile.TemporaryDirectory() as dname:
+        cmd = (
+            f"vivado -mode batch -nolog -nojournal -notrace -tempDir {dname} "
+            f"-source {script_dir / script_file} -tclargs {tclargs}"
+        )
+        logger.info(f"executing {cmd}")
+        retcode = subprocess.run(cmd.split(), capture_output=True)
+        for msg in retcode.stdout.decode().split("\n"):
+            if msg.startswith("INFO:"):
+                logger.debug(msg[5:].strip())  # Notes: shown only when --verbose option is provided in cli commands.
+            elif msg.startswith("XINFO:"):
+                logger.info(msg[6:].strip())
+            elif msg.startswith("ERROR:"):
+                logger.error(msg[6:].strip())
+        if retcode.returncode != 0:
+            raise RuntimeError(f"failed execution of {script_file}")
+        return retcode.returncode
+
+
 class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
     _BITPREFIX: str = "nonexistent_"
     _TCLCMD_POSTFIX: str = "_nonexistent.tcl"
@@ -66,56 +86,42 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
             mmipath = Path(os.path.dirname(bitpath)) / "ram_loc.mmi"
         outpath = Path(self._tmpdir.name) / (os.path.splitext(mempath)[0] + ".bit")
         retcode = subprocess.run(
-            f"updatemem -force -meminfo {mmipath} -data {mempath} -bit {bitpath} -proc dummy -out {outpath}".split()
+            f"updatemem -force -meminfo {mmipath} -data {mempath} -bit {bitpath} -proc dummy -out {outpath}".split(),
+            capture_output=True,
         )
         if retcode.returncode != 0:
             raise RuntimeError("failed execution of updatemem")
         return outpath
 
-    def make_mcs(self, bitpath: Path, mcspath: Union[Path, None] = None):
+    def make_mcs(self, bitpath: Path, mcspath: Union[Path, None] = None) -> Path:
         self._validate_env()
         if mcspath is None:
             mcspath = Path(os.path.splitext(bitpath)[0] + ".mcs")
+        retval = run_vivado_batch(self._tcldir_path(), f"create_mcs{self._TCLCMD_POSTFIX}", f"{bitpath} {mcspath}")
+        if retval == 0:
+            return mcspath
+        else:
+            raise AssertionError("not reached")
 
-        cmd = (
-            f"vivado -mode batch -source {self._tcldir_path()}/create_mcs{self._TCLCMD_POSTFIX} "
-            f"-tclargs {bitpath} {mcspath}"
-        )
-        logger.info(f"executing {cmd}")
-        retcode = subprocess.run(cmd.split())
-        if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of create_mcs{self._TCLCMD_POSTFIX}")
-        return mcspath
-
-    def program(self, mcspath: Path, host: str, port: int, adapter_id: str) -> None:
+    def program(self, mcspath: Path, host: str, port: int, adapter_id: str) -> int:
         self._validate_env()
-        cmd = (
-            f"vivado -mode batch -source {self._tcldir_path()}/program_mcs{self._TCLCMD_POSTFIX} "
-            f"-tclargs {mcspath} {host}:{port} {adapter_id}"
+        return run_vivado_batch(
+            self._tcldir_path(), f"program_mcs{self._TCLCMD_POSTFIX}", f"{mcspath} {host}:{port} {adapter_id}"
         )
-        logger.info(f"executing {cmd}")
-        retcode = subprocess.run(cmd.split())
-        if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of program_mcs{self._TCLCMD_POSTFIX}")
 
-    def program_bit(self, bitpath: Path, host: str, port: int, adapter_id: str) -> None:
+    def program_bit(self, bitpath: Path, host: str, port: int, adapter_id: str) -> int:
         self._validate_env()
-        cmd = (
-            f"vivado -mode batch -source {self._tcldir_path()}/program_bit{self._TCLCMD_POSTFIX} "
-            f"-tclargs {bitpath} {host}:{port} {adapter_id}"
+        return run_vivado_batch(
+            self._tcldir_path(), f"program_bit{self._TCLCMD_POSTFIX}", f"{bitpath} {host}:{port} {adapter_id}"
         )
-        logger.info(f"executing {cmd}")
-        retcode = subprocess.run(cmd.split())
-        if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of program_bit{self._TCLCMD_POSTFIX}")
 
-    def reboot(self, host: str, port: int, adapter_id: str) -> None:
+    def reboot(self, host: str, port: int, adapter_id: str) -> int:
         self._validate_env()
-        cmd = f"vivado -mode batch -source {self._tcldir_path()}/reboot.tcl -tclargs {host}:{port} {adapter_id}"
-        logger.info(f"executing {cmd}")
-        retcode = subprocess.run(cmd.split())
-        if retcode.returncode != 0:
-            raise RuntimeError("failed execution of reboot.tcl")
+        return run_vivado_batch(self._tcldir_path(), "reboot.tcl", f"{host}:{port} {adapter_id}")
+
+    def dry_run(self, host: str, port: int, adapter_id: str) -> int:
+        self._validate_env()
+        return run_vivado_batch(self._tcldir_path(), "dry_run.tcl", f"{host}:{port} {adapter_id}")
 
 
 class ExstickgeProgrammer(QuelXilinxFpgaProgrammer):

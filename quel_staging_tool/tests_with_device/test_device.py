@@ -1,13 +1,11 @@
 import logging
-import time
 
-from ping3 import ping
-
-from quel_staging_tool import ExstickgeProgrammer
+from quel_staging_tool import Au50Programmer
 
 logger = logging.getLogger(__name__)
 
-
+# TODO: will be activated as soon as test environment is available.
+"""
 def test_device_exstickge():
     obj = ExstickgeProgrammer()
 
@@ -28,3 +26,10 @@ def test_device_exstickge():
     logger.info("waiting 10 seconds to boot up...")
     time.sleep(10)
     assert ping("10.5.0.20")
+"""
+
+
+def test_device_au50():
+    obj = Au50Programmer()
+    adapter_id = "500202A50TIAA"
+    assert obj.dry_run("172.30.2.203", 3121, adapter_id) == 0

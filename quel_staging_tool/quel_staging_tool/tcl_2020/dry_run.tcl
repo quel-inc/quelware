@@ -8,8 +8,8 @@ proc graceful_quit {retval target msg} {
   quit $retval
 }
 
-if {$argc < 2} {
-  puts "usage: $argv0 SERVER_URI ADAPTER_ID"
+if {$argc < 1} {
+  puts "usage: $argv0 ADAPTER_ID"
   quit 1
 }
 
@@ -31,6 +31,5 @@ if {[string equal $dev ""]} {
   graceful_quit 1 $target "ERROR: the specified target looks invalid"
 }
 
-# reboot!
-boot_hw_device [lindex $dev 0]
-graceful_quit 0 $target "XINFO: rebooted successfully"
+# the completion of dry run.
+graceful_quit 0 $target "XINFO: the adapter $adapter is detected"
