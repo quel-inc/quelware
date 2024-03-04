@@ -506,9 +506,10 @@ class SimpleBoxIntrinsic:
             }
 
         for group in self.css.get_all_groups():
+            retval["lines"][group] = {}
             for line in self._css.get_all_lines_of_group(group):
                 retval["lines"][group][line] = self._css.dump_line(group, line)
-            for rline in ("r", "m"):
+            for rline in self._css.get_all_rlines_of_group(group):
                 retval["lines"][group][rline] = self._css.dump_rline(group, rline)
 
         return retval
