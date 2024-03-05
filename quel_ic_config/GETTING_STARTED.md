@@ -25,12 +25,12 @@ python -m build
 現状、simplemulti版のファームウェアとfeedback版のファームウェアとで、一部の依存パッケージを挿し替える必要があることの注意が必要である。
 simplemulti版のファームウェアを使うには、次のようにする。
 ```shell
-pip install dependency_pkgs/*.whl simplemulti/*.whl
+pip install dependency_pkgs/*.whl dependency_pkgs/simplemulti/*.whl
 ```
 
 feedback版のファームウェアを使う場合には、次のようにする。
 ```shell
-pip install dependency_pkgs/*.whl feedback/*.whl
+pip install dependency_pkgs/*.whl dependency_pkgs/feedback/*.whl
 ```
 
 最後に、本体パッケージのインストールを行う (X,Y,Z を適切なバージョン番号に置き換える。）
