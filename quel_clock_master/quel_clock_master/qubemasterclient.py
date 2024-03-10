@@ -43,7 +43,7 @@ class QuBEMasterClient(SimpleUdpClient):
                     "a state machine of the clock master may be hanged up, please **RESET** it before re-trying 'kick'"
                 )
             elif reply[0] != 0x33:
-                logger.warning("unexpected reply packet starting with {reply[0]:02x} is received")
+                logger.warning(f"unexpected reply packet starting with {reply[0]:02x} is received")
 
         return (raddr is not None) and (reply[0] == 0x33)
 
@@ -58,7 +58,7 @@ class QuBEMasterClient(SimpleUdpClient):
         else:
             logger.debug(f"receiving {':'.join(['{0:02x}'.format(x) for x in reply])} from {raddr[0]:s}:{raddr[1]:d}")
             if reply[0] != 0x33:
-                logger.warning("unexpected reply packet starting with {reply[0]:02x} is received")
+                logger.warning(f"unexpected reply packet starting with {reply[0]:02x} is received")
 
         return (raddr is not None) and (reply[0] == 0x33)
 
