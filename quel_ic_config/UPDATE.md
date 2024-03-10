@@ -3,6 +3,7 @@
 ## v0.8.7 (Public Release)
 - ドキュメントを更新。
 - 一部のINFOレベルのログをDEBUGレベルに下げた。
+- load_cw_into_channel() と load_iq_into_channel() のブランク長の指定をワード単位からサンプル単位に変更。
 
 ### v0.8.6
 - v0.8.5で混入したバグ修正

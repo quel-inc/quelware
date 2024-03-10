@@ -145,10 +145,11 @@ class Quel1BoxIntrinsic:
     )
 
     NUM_SAMPLE_IN_WAVE_BLOCK: Final[int] = 64  # TODO: should be defined in wss.
+    NUM_SAMPLE_IN_WORD: Final[int] = 4  # TODO: should be defined in wss.
     DEFAULT_AMPLITUDE: Final[float] = 16383.0
     DEFAULT_NUM_WAVE_SAMPLE: Final[int] = NUM_SAMPLE_IN_WAVE_BLOCK * 1
     DEFAULT_REPEATS: Final[Tuple[int, int]] = (0xFFFFFFFF, 0xFFFFFFFF)
-    DEFAULT_WAIT_WORDS: Final[Tuple[int, int]] = (0, 0)
+    DEFAULT_NUM_WAIT_SAMPLES: Final[Tuple[int, int]] = (0, 0)
     DEFAULT_NUM_CAPTURE_SAMPLE: Final[int] = 4096
     VERY_LONG_DURATION: float = 0x10000000000000000 * 128e-9
 
@@ -578,7 +579,7 @@ class Quel1BoxIntrinsic:
         amplitude: float = DEFAULT_AMPLITUDE,
         num_wave_sample: int = DEFAULT_NUM_WAVE_SAMPLE,
         num_repeats: Tuple[int, int] = DEFAULT_REPEATS,
-        num_wait_words: Tuple[int, int] = DEFAULT_WAIT_WORDS,
+        num_wait_samples: Tuple[int, int] = DEFAULT_NUM_WAIT_SAMPLES,
     ) -> None:
         """loading continuous wave data into a channel.
 
@@ -590,17 +591,28 @@ class Quel1BoxIntrinsic:
         :param num_repeats: number of repetitions of a unit wave data whose length is num_wave_sample.
                             given as a tuple of two integers that specifies the number of repetition as multiple of
                             the two.
-        :param num_wait_words: number of wait duration in words. given as a tuple of two integers that specify the
+        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
                                length of wait at the start of the whole wave sequence and the length of wait between
                                each repeated motifs, respectively.
         :return: None
         """
         if num_wave_sample % self.NUM_SAMPLE_IN_WAVE_BLOCK != 0:
             raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WAVE_BLOCK}")
+        if num_wait_samples[0] % self.NUM_SAMPLE_IN_WORD != 0:
+            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
+        if num_wait_samples[1] % self.NUM_SAMPLE_IN_WORD != 0:
+            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
 
         awg = self._rmap.get_awg_of_channel(group, line, channel)
         self._wss.set_cw(
-            awg, amplitude=amplitude, num_repeats=num_repeats, num_wave_blocks=1, num_wait_words=num_wait_words
+            awg,
+            amplitude=amplitude,
+            num_repeats=num_repeats,
+            num_wave_blocks=num_wave_sample // self.NUM_SAMPLE_IN_WAVE_BLOCK,
+            num_wait_words=(
+                num_wait_samples[0] // self.NUM_SAMPLE_IN_WORD,
+                num_wait_samples[1] // self.NUM_SAMPLE_IN_WORD,
+            ),
         )
 
     def load_iq_into_channel(
@@ -611,7 +623,7 @@ class Quel1BoxIntrinsic:
         *,
         iq: npt.NDArray[np.complex64],
         num_repeats: Tuple[int, int] = DEFAULT_REPEATS,
-        num_wait_words: Tuple[int, int] = DEFAULT_WAIT_WORDS,
+        num_wait_samples: Tuple[int, int] = DEFAULT_NUM_WAIT_SAMPLES,
     ) -> None:
         """loading arbitrary wave data into a channel.
 
@@ -622,13 +634,28 @@ class Quel1BoxIntrinsic:
                    within the range of -32768 -- 32767. its length must be a multiple of 64.
         :param num_repeats: the number of repetitions of the given wave data given as a tuple of two integers,
                             a product of the two is the number of repetitions.
-        :param num_wait_words: number of wait duration in words. given as a tuple of two integers that specify the
+        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
                                length of wait at the start of the whole wave sequence and the length of wait between
                                each repeated motifs, respectively.
         :return: None
         """
+        if len(iq) % self.NUM_SAMPLE_IN_WAVE_BLOCK != 0:
+            raise ValueError(f"the length of iq data must be multiple of {self.NUM_SAMPLE_IN_WAVE_BLOCK}")
+        if num_wait_samples[0] % self.NUM_SAMPLE_IN_WORD != 0:
+            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
+        if num_wait_samples[1] % self.NUM_SAMPLE_IN_WORD != 0:
+            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
+
         awg = self._rmap.get_awg_of_channel(group, line, channel)
-        self._wss.set_iq(awg, iq=iq, num_repeats=num_repeats, num_wait_words=num_wait_words)
+        self._wss.set_iq(
+            awg,
+            iq=iq,
+            num_repeats=num_repeats,
+            num_wait_words=(
+                num_wait_samples[0] // self.NUM_SAMPLE_IN_WORD,
+                num_wait_samples[1] // self.NUM_SAMPLE_IN_WORD,
+            ),
+        )
 
     def initialize_all_awgs(self) -> None:
         self.wss.initialize_all_awgs()

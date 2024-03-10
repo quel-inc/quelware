@@ -211,7 +211,7 @@ class PulseGen:
         self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel, fnco_freq=fnco_freq)
 
     def load_cw(
-        self, amplitude: float, num_wave_sample: int, num_repeats: Tuple[int, int], num_wait_words: Tuple[int, int]
+        self, amplitude: float, num_wave_sample: int, num_repeats: Tuple[int, int], num_wait_samples: Tuple[int, int]
     ) -> None:
         # TODO: define default values
         self.box.load_cw_into_channel(
@@ -221,7 +221,7 @@ class PulseGen:
             amplitude=amplitude,
             num_wave_sample=num_wave_sample,
             num_repeats=num_repeats,
-            num_wait_words=num_wait_words,
+            num_wait_samples=num_wait_samples,
         )
 
     def prepare_for_emission(self):
@@ -510,7 +510,7 @@ if __name__ == "__main__":
                 "amplitude": COMMON_SETTINGS["amplitude"],
                 "num_wave_sample": 64,
                 "num_repeats": (2, 1),
-                "num_wait_words": (0, 20),
+                "num_wait_samples": (0, 80),
             },
         },
     }
@@ -526,15 +526,15 @@ if __name__ == "__main__":
     box0, sqc0 = boxpool0.get_box("BOX0")
 
     # Notes: close loop before checking the noise
-    box0.activate_read_loop(0)
-    box0.activate_read_loop(1)
+    box0.config_rfswitch(port=0, rfswitch="loop")  # TODO: capturer should control its loop switch
+    box0.config_rfswitch(port=7, rfswitch="loop")
     box0.activate_monitor_loop(0)
     box0.activate_monitor_loop(1)
     cp0.check_noise(show_graph=False)
 
     # Notes: monitor should be
-    box0.deactivate_read_loop(0)
-    box0.deactivate_read_loop(1)
+    box0.config_rfswitch(port=0, rfswitch="open")
+    box0.config_rfswitch(port=7, rfswitch="open")
     box0.deactivate_monitor_loop(0)
     box0.deactivate_monitor_loop(1)
 

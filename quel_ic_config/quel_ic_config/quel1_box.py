@@ -551,7 +551,7 @@ class Quel1Box:
         amplitude: float = Quel1BoxIntrinsic.DEFAULT_AMPLITUDE,
         num_wave_sample: int = Quel1BoxIntrinsic.DEFAULT_NUM_WAVE_SAMPLE,
         num_repeats: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_REPEATS,
-        num_wait_words: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_WAIT_WORDS,
+        num_wait_samples: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_NUM_WAIT_SAMPLES,
     ) -> None:
         """loading continuous wave data into a channel.
 
@@ -563,7 +563,7 @@ class Quel1Box:
         :param num_repeats: number of repetitions of a unit wave data whose length is num_wave_sample.
                             given as a tuple of two integers that specifies the number of repetition as multiple of
                             the two.
-        :param num_wait_words: number of wait duration in words. given as a tuple of two integers that specify the
+        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
                                length of wait at the start of the whole wave sequence and the length of wait between
                                each repeated motifs, respectively.
         :return: None
@@ -576,7 +576,7 @@ class Quel1Box:
             amplitude=amplitude,
             num_wave_sample=num_wave_sample,
             num_repeats=num_repeats,
-            num_wait_words=num_wait_words,
+            num_wait_samples=num_wait_samples,
         )
 
     def load_iq_into_channel(
@@ -587,7 +587,7 @@ class Quel1Box:
         subport: int = 0,
         iq: npt.NDArray[np.complex64],
         num_repeats: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_REPEATS,
-        num_wait_words: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_WAIT_WORDS,
+        num_wait_samples: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_NUM_WAIT_SAMPLES,
     ) -> None:
         """loading arbitrary wave data into a channel.
 
@@ -598,11 +598,14 @@ class Quel1Box:
                    within the range of -32768 -- 32767. its length must be a multiple of 64.
         :param num_repeat: the number of repetitions of the given wave data given as a tuple of two integers,
                            a product of the two is the number of repetitions.
+        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
+                               length of wait at the start of the whole wave sequence and the length of wait between
+                               each repeated motifs, respectively.
         :return: None
         """
         group, line = self._convert_output_port_decoded(port, subport)
         self._dev.load_iq_into_channel(
-            group, line, channel, iq=iq, num_repeats=num_repeats, num_wait_words=num_wait_words
+            group, line, channel, iq=iq, num_repeats=num_repeats, num_wait_samples=num_wait_samples
         )
 
     # TODO: reconsider name of API
