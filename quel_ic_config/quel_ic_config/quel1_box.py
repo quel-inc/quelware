@@ -642,7 +642,7 @@ class Quel1Box:
         runits: Union[Collection[int], None] = None,
         *,
         num_samples: int = Quel1BoxIntrinsic.DEFAULT_NUM_CAPTURE_SAMPLE,
-        delay: int = 0,
+        delay_samples: int = 0,
         triggering_channel: Union[Tuple[Union[int, Tuple[int, int]], int], None] = None,
         timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
     ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
@@ -651,7 +651,7 @@ class Quel1Box:
         :param port: an index of a port to capture.
         :param runits: port-local indices of the capture units of the port.
         :param num_samples: number of samples to capture, recommended to be multiple of 4.
-        :param delay: delay in sampling clocks before starting capture.
+        :param delay_samples: delay in sampling clocks before starting capture.
         :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
                                    it is specified by a tuple of port and channel. the capture starts
                                    immediately if None.
@@ -687,7 +687,7 @@ class Quel1Box:
             cap_rline,
             runits=runits,
             num_samples=num_samples,
-            delay=delay,
+            delay_samples=delay_samples,
             triggering_channel=trg_ch3,
             timeout=timeout,
         )

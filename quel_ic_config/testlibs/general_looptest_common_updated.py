@@ -277,8 +277,8 @@ class PulseCap:
         self.box.config_port(port=self.port, **kwargs)
         self.box.config_runit(port=self.port, runit=0, fnco_freq=fnco_freq)  # should convert runit -> rchannel
 
-    def capture_now(self, *, num_samples: int, delay: int = 0):
-        thunk = self.box.simple_capture_start(port=self.port, runits=self.runits, num_samples=num_samples, delay=delay)
+    def capture_now(self, *, num_samples: int, delay_samples: int = 0):
+        thunk = self.box.simple_capture_start(port=self.port, runits=self.runits, num_samples=num_samples, delay_samples=delay_samples)
         status, iqs = thunk.result()
         return status, iqs
 
@@ -297,14 +297,14 @@ class PulseCap:
         else:
             raise RuntimeError(f"capture failure due to {status}")
 
-    def capture_at_single_trigger_of(self, *, pg: PulseGen, num_samples: int, delay: int = 0) -> Future:
+    def capture_at_single_trigger_of(self, *, pg: PulseGen, num_samples: int, delay_samples: int = 0) -> Future:
         if pg.box != self.box:
             raise ValueError("can not be triggered by an awg of the other box")
         return self.box.simple_capture_start(
             port=self.port,
             runits=self.runits,
             num_samples=num_samples,
-            delay=delay,
+            delay_samples=delay_samples,
             triggering_channel=pg.awg_spec,
         )
 
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     matplotlib.use("Qt5agg")
 
     def simple_trigger(cp1: PulseCap, pg1: PulseGen):
-        thunk = cp1.capture_at_single_trigger_of(pg=pg1, num_samples=1024, delay=0)
+        thunk = cp1.capture_at_single_trigger_of(pg=pg1, num_samples=1024, delay_samples=0)
         pg1.emit_now()
         s0, iq = thunk.result()
         iq0 = iq[0]
@@ -430,7 +430,7 @@ if __name__ == "__main__":
     def single_schedule(cp: PulseCap, pg_trigger: PulseGen, pgs: Set[PulseGen], boxpool: BoxPool):
         if pg_trigger not in pgs:
             raise ValueError("trigerring pulse generator is not included in activated pulse generators")
-        thunk = cp.capture_at_single_trigger_of(pg=pg_trigger, num_samples=1024, delay=0)
+        thunk = cp.capture_at_single_trigger_of(pg=pg_trigger, num_samples=1024, delay_samples=0)
         boxpool.emit_at(cp=cp, pgs=pgs, min_time_offset=125_000_000, time_counts=(0,))
 
         s0, iqs = thunk.result()

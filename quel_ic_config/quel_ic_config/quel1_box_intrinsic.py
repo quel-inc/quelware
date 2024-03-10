@@ -694,7 +694,7 @@ class Quel1BoxIntrinsic:
         runits: Union[Collection[int], None] = None,
         *,
         num_samples: int = DEFAULT_NUM_CAPTURE_SAMPLE,
-        delay: int = 0,
+        delay_samples: int = 0,
         triggering_channel: Union[Tuple[int, int, int], None] = None,
         timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
     ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
@@ -704,7 +704,7 @@ class Quel1BoxIntrinsic:
         :param rline: a group-local index of a line which the channel belongs to.
         :param runits: line-local indices of the capture units.
         :param num_samples: number of samples to capture, recommended to be multiple of 4.
-        :param delay: delay in sampling clocks before starting capture.
+        :param delay_samples: delay in sampling clocks before starting capture.
         :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
                                    it is specified by a tuple of group, line, and channel. the capture starts
                                    immediately if None.
@@ -728,13 +728,17 @@ class Quel1BoxIntrinsic:
         if num_samples % 4 != 0:
             num_samples = ((num_samples + 3) // 4) * 4
             logger.warning(f"num_samples is extended to multiples of 4: {num_samples}")
+        if delay_samples % 64 != 0:
+            logger.warning(
+                f"the effective delay_samples will be {((delay_samples + 32) // 64) * 64} (!= {delay_samples})"
+            )
         if num_samples > 0:
             capmod = self._rmap.get_capture_module_of_rline(group, input_line)
             return self._wss.simple_capture_start(
                 capmod=capmod,
                 capunits=runits,
                 num_words=num_samples // 4,
-                delay=delay,
+                delay=delay_samples // 4,
                 triggering_awg=triggering_awg,
                 timeout=timeout,
             )
