@@ -3,7 +3,7 @@ import socket
 from pathlib import Path
 from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
 
-from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
+from quel_ic_config.exstickge_sock_client import LsiKindId, _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd5328Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
@@ -11,14 +11,15 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemRoot,
 )
-from quel_ic_config.quel1se_proto_adda_config_subsystem import Quel1SeProtoAddaConfigSubsystemGpioMixin
+from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
+from quel_ic_config.quel1se_proto_adda_config_subsystem import Quel1seProtoAddaConfigSubsystemGpioMixin
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
 
 # Notes: this class is corresponding to e-trees/exstickge_spi_device_ctrl/source/top_poc.v
-class ExstickgeProxyQuel1SeProto8(_ExstickgeProxyBase):
+class ExstickgeSockClientQuel1seProto8(_ExstickgeSockClientBase):
     _AD9082_IF_0 = LsiKindId.AD9082
     _ADRF6780_IF_0 = LsiKindId.ADRF6780
     _LMX2594_IF_0 = LsiKindId.LMX2594
@@ -57,21 +58,22 @@ class ExstickgeProxyQuel1SeProto8(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address,
-        target_port=16384,
-        timeout: float = 2.0,
+        target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
         sock: Union[socket.socket, None] = None,
     ):
         super().__init__(target_address, target_port, timeout, receiver_limit_by_binding, sock)
 
 
-class Quel1SeProto8ConfigSubsystem(
+class Quel1seProto8ConfigSubsystem(
     Quel1ConfigSubsystemRoot,
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd5328Mixin,
-    Quel1SeProtoAddaConfigSubsystemGpioMixin,
+    Quel1seProtoAddaConfigSubsystemGpioMixin,
+    Quel1ConfigSubsystemTempctrlMixin,
 ):
     __slots__ = ()
 
@@ -106,12 +108,12 @@ class Quel1SeProto8ConfigSubsystem(
         (1, "m"): (1, 2),
     }
 
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
-        (0, 0): 0,
-        (0, 2): 2,
-        (0, "r"): 0,
-        (0, "m"): 1,
-        (1, "m"): 1,
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 2): (2, 0),
+        (0, "r"): (0, 1),
+        (0, "m"): (1, 0),
+        (1, "m"): (1, 1),
     }
 
     _MIXER_IDX: Dict[Tuple[int, int], int] = {
@@ -137,6 +139,8 @@ class Quel1SeProto8ConfigSubsystem(
 
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {}
 
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]] = {}
+
     def __init__(
         self,
         css_addr: str,
@@ -144,8 +148,8 @@ class Quel1SeProto8ConfigSubsystem(
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         Quel1ConfigSubsystemRoot.__init__(
@@ -157,8 +161,10 @@ class Quel1SeProto8ConfigSubsystem(
         self._construct_ad5328()
         self._construct_gpio()
 
-    def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
-        return ExstickgeProxyQuel1SeProto8(self._css_addr, port, timeout, sender_limit_by_binding)
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        return ExstickgeSockClientQuel1seProto8(self._css_addr, port, timeout, sender_limit_by_binding)
 
     def configure_peripherals(
         self,
@@ -199,6 +205,7 @@ class Quel1SeProto8ConfigSubsystem(
         hard_reset: bool = False,
         mxfe_init: bool = False,
         use_204b: bool = True,
+        use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
     ) -> bool:
         self._validate_group(mxfe_idx)
@@ -210,52 +217,50 @@ class Quel1SeProto8ConfigSubsystem(
             logger.info(f"negating a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
             self.set_ad9082_hard_reset(mxfe_idx, False)
 
-        self.ad9082[mxfe_idx].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
-        link_valid = self.ad9082[mxfe_idx].check_link_status(ignore_crc_error=ignore_crc_error)
-        if not link_valid:
-            if mxfe_init:
-                logger.warning(f"{self._css_addr}:AD9082-#{mxfe_idx} link-up failure")
-            else:
-                logger.warning(f"{self._css_addr}:AD9082-#{mxfe_idx} is not linked up yet")
-        return link_valid
+        self.ad9082[mxfe_idx].initialize(
+            reset=soft_reset, link_init=mxfe_init, use_204b=use_204b, use_bg_cal=use_bg_cal
+        )
+        return self.check_link_status(mxfe_idx, mxfe_init, ignore_crc_error)
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         self._validate_channel(group, line, channel)
         return {
-            "fnco_hz": self.get_dac_fnco(group, line, channel),
+            "fnco_freq": self.get_dac_fnco(group, line, channel),
         }
 
     def dump_line(self, group: int, line: int) -> Dict[str, Any]:
         self._validate_line(group, line)
         r: Dict[str, Any] = {}
-        r["channels"] = [self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))]
-        r["cnco_hz"] = self.get_dac_cnco(group, line)
+        r["channels"] = {
+            ch: self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))
+        }
+        r["cnco_freq"] = self.get_dac_cnco(group, line)
         if (group, line) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, line) * 100_000_000
+            r["lo_freq"] = self.get_lo_multiplier(group, line) * 100_000_000
         if (group, line) in self._VATT_IDX:
             r["sideband"] = self.get_sideband(group, line)
             vatt = self.get_vatt_carboncopy(group, line)
             if vatt is not None:
                 r["vatt"] = vatt
         # if (group, line) in self._RFSWITCH_NAME:
-        #     r["rfswitch"] = "blocked" if self.is_blocked_line(group, line) else "passing"
+        #     r["rfswitch"] = "block" if self.is_blocked_line(group, line) else "pass"
         return r
 
     def dump_rchannel(self, group: int, rline: str, rchannel: int) -> Dict[str, Any]:
         self._validate_rchannel(group, rline, rchannel)
         return {
-            "fnco_hz": self.get_adc_fnco(group, rline, rchannel),
+            "fnco_freq": self.get_adc_fnco(group, rline, rchannel),
         }
 
     def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
         self._validate_rline(group, rline)
         r: Dict[str, Any] = {}
         # if (group, rline) in self._RFSWITCH_NAME:
-        #     r["rfswitch"] = "loopback" if self.is_loopedback_read(group) else "opened"
+        #     r["rfswitch"] = "loop" if self.is_loopedback_read(group) else "open"
         if (group, rline) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, rline) * 100_000_000
-        r["cnco_hz"] = (self.get_adc_cnco(group, rline),)
-        r["channels"] = [
-            self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
-        ]
+            r["lo_freq"] = self.get_lo_multiplier(group, rline) * 100_000_000
+        r["cnco_freq"] = (self.get_adc_cnco(group, rline),)
+        r["channels"] = {
+            rch: self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
+        }
         return r

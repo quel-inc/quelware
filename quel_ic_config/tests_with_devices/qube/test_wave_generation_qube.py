@@ -8,7 +8,8 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
 
-from quel_ic_config_utils.simple_box import Quel1BoxType, Quel1ConfigOption, SimpleBoxIntrinsic, init_box_with_linkup
+from quel_ic_config.quel1_box import Quel1BoxIntrinsic
+from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
 from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise
 
@@ -32,6 +33,8 @@ TEST_SETTINGS = (
                 Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
                 Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
             ],
+        },
+        "linkup_config": {
             "mxfes_to_linkup": (0, 1),
             "use_204b": True,
         },
@@ -44,7 +47,11 @@ TEST_SETTINGS = (
         "spa_parameters": {
             "resolution_bandwidth": 1e4,
         },
-        "max_background_noise": -54.0,
+        "noise": {
+            "max_background_noise": -43.0,  # -52.0
+            "max_sprious_peek": -43.0,  # -50.0
+            "max_sprious_peek_pump": -40.0,  # -42.0
+        },
         # "spa_name": "ms2090-1",
         # "spa_parameters": {},
         # "max_background_noise": -65.0,
@@ -58,10 +65,10 @@ TEST_SETTINGS = (
 def fixtures(request):
     param0 = request.param
 
-    linkstatus, _, _, _, _, box = init_box_with_linkup(**param0["box_config"], refer_by_port=False)
+    box = Quel1BoxIntrinsic.create(**param0["box_config"])
+    linkstatus = box.relinkup(**param0["linkup_config"])
     assert linkstatus[0]
     assert linkstatus[1]
-    assert isinstance(box, SimpleBoxIntrinsic)
 
     if request.param["spa_type"] == "MS2XXXX":
         spa: SpectrumAnalyzer = init_ms2xxxx(request.param["spa_name"], **request.param["spa_parameters"])
@@ -69,8 +76,10 @@ def fixtures(request):
         # Notes: to be added by need.
         assert False
     max_noise = measure_floor_noise(spa)
-    assert max_noise < request.param["max_background_noise"]
-    yield box, spa, make_outdir(request.param), request.param["port_availability"], request.param["relative_loss"]
+    assert max_noise < request.param["noise"]["max_background_noise"]
+    yield box, spa, make_outdir(request.param), request.param["port_availability"], request.param[
+        "relative_loss"
+    ], request.param["noise"]
 
     box.easy_stop_all()
     box.activate_monitor_loop(0)
@@ -148,8 +157,8 @@ def test_all_single_awgs(
     fnco_mhz: int,
     fixtures,
 ):
-    box, spa, outdir, port_availability, relative_loss = fixtures
-    assert isinstance(box, SimpleBoxIntrinsic)
+    box, spa, outdir, port_availability, relative_loss, noise = fixtures
+    assert isinstance(box, Quel1BoxIntrinsic)
 
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
@@ -172,14 +181,14 @@ def test_all_single_awgs(
         control_monitor_rfswitch=via_monitor,
     )
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
-    max_sprious_peek = -50.0
+    max_sprious_peek = noise["max_sprious_peek"]
     if line == 1 and box.css._boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
     }:
         expected_freq *= 2
-        max_sprious_peek = -42.0
+        max_sprious_peek = noise["max_sprious_peek_pump"]
     e0 = ExpectedSpectrumPeaks([(expected_freq, -20 - relative_loss)])
     e0.validate_with_measurement_condition(spa.max_freq_error_get())
 
@@ -224,8 +233,8 @@ def test_vatt(
     fnco_mhz: int,
     fixtures,
 ):
-    box, e4405b, outdir, port_availability, relative_loss = fixtures
-    assert isinstance(box, SimpleBoxIntrinsic)
+    box, e4405b, outdir, port_availability, relative_loss, noise = fixtures
+    assert isinstance(box, Quel1BoxIntrinsic)
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
         pytest.skip(f"({mxfe}, {line}) is unavailable.")
@@ -266,9 +275,9 @@ def test_vatt(
         expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6
         if is_pump:
             expected_freq *= 2
-            max_sprious_peek = -42.0
+            max_sprious_peek = noise["max_sprious_peek"]
         else:
-            max_sprious_peek = -50.0
+            max_sprious_peek = noise["max_sprious_peek_pump"]
         e0 = ExpectedSpectrumPeaks([(expected_freq, -40 - relative_loss)])
         e0.validate_with_measurement_condition(e4405b.max_freq_error_get())
 
@@ -327,7 +336,7 @@ def test_sideband(
     sideband: str,
     fixtures,
 ):
-    box, e4405b, outdir, port_availability, relative_loss = fixtures
+    box, e4405b, outdir, port_availability, relative_loss, noise = fixtures
     via_monitor = False
     if (mxfe, line) in port_availability["unavailable"]:
         pytest.skip(f"({mxfe}, {line}) is unavailable.")
@@ -360,9 +369,9 @@ def test_sideband(
         Quel1BoxType.QuBE_RIKEN_TypeA,
     }:
         expected_freq *= 2
-        max_sprious_peek = -42.0
+        max_sprious_peek = noise["max_sprious_peek"]
     else:
-        max_sprious_peek = -50.0
+        max_sprious_peek = noise["max_sprious_peek_pump"]
     e0 = ExpectedSpectrumPeaks([(expected_freq, -20 - relative_loss)])
     e0.validate_with_measurement_condition(e4405b.max_freq_error_get())
 

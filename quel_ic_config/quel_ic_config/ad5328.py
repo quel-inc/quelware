@@ -182,7 +182,7 @@ class Ad5328ConfigHelper(AbstractIcConfigHelper):
     """
 
     def __init__(self, ic: Ad5328Mixin):
-        super().__init__(ic)
+        super().__init__(ic, no_read=True)
         self.modified: Set[int] = set()
 
     def _write_reg(self, addr: int, data: Union[int, AbstractIcReg]) -> None:

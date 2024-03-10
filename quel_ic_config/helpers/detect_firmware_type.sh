@@ -3,7 +3,7 @@
 set -eu
 
 python << EOS
-from quel_ic_config_utils import resolve_hw_type
+from quel_ic_config import resolve_hw_type
 import e7awgsw
 
 ac = e7awgsw.AwgCtrl("${1}")

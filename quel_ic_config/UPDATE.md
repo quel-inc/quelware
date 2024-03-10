@@ -1,6 +1,160 @@
-# API更新リスト
+# 更新リスト
 
-## v0.7.4
+## v0.8.7 (Public Release)
+- ドキュメントを更新。
+- 一部のINFOレベルのログをDEBUGレベルに下げた。
+- load_cw_into_channel() と load_iq_into_channel() のブランク長の指定をワード単位からサンプル単位に変更。
+- simple_capture_start() の delay の指定をワード単位からサンプル単位に変更。引数名をdelayからdelay_samplesに変更。
+- load_*_into_channel() の num_wait_words を num_wait_samples に名称変更し、ワード単位からサンプル単位での指定に変更。
+
+### v0.8.6
+- v0.8.5で混入したバグ修正
+
+### v0.8.5
+- 入力ポートのCNCO設定を出力ポートのCNCO設定で制約し、正確に同じ周波数設定をする機能を追加。
+  - Quel1Box.config_port() に cnco_locked_with 引数を追加。制約元の出力ポートを与えて使う。
+  - config_box() で複数のポートを同時に設定する場合には、cnco_locked_with の制約元ポートが、制約を受けるポートよりも必ず先に設定される。
+
+### v0.8.4
+- Boxレイヤのconfig / dump 系のAPIを整理。
+  - Boxの階層構造に基づいたAPI 
+    - config_box / config_port / (config_channel, config_runit)
+    - dump_box / dump_port
+  - RFスイッチの操作だけを行うAPI
+    - config_rfswitches / config_rfswitch
+    - block_all_output_port, pass_all_output_port
+    - dump_rfswitches / dump_rfswitch
+  - 削除されたAPIとその代替APIは次のとおり。
+    - open_rfswitch, close_rfswitch --> RFスイッチ系のAPI
+    - dump_config --> dump_box （改名）
+
+### v0.8.3
+- Boxレイヤに残っていた rchannel の概念を消し去り、runit に置き換え。
+   - config_channel() は入力チャネルには使えなくなり、代わりに、config_runit() を使うこと。
+   　　- 概念の明確化と将来の変更に向けての布石。
+   　　- 複数の runit がひとつの rchannelを共有している。Boxレイヤでは rchannel は陽に見せない方針。
+   - dump_config() の返り値の形式が変更。同様に、config_box() の引数の形式も変更。
+      - "channel" が "runit" に置き換え。
+- バグ修正
+   - Quel1Box.easy_stop_all() のバグ修正。
+   - 一部の機種で dump_config() が全てのポートを列挙しない問題を修正
+
+### v0.8.2
+- Quel1Boxの波形生成・取得のとりあえずのAPIを整理。（今後、DSP関連などの高度な機能を使うためのAPI拡張をする）
+   - initialize_all_awgs(): 追加 (wssの同名APIをリダイレクト)
+   - load_cw_into_channel(): 既存API (start_channel_with_cw) の一部と代替。これとstart_emission() を組み合わせる。
+   - load_iq_into_channel(): 同上
+   - prepare_for_emission(): 追加 (wssのclear_before_starting_emission へリダイレクト）
+   - start_emission(): 追加
+   - stop_emission(): 追加
+   - simple_capture_start() : 追加 (wssの同名APIをリダイレクト）
+- Config系ファームウェアの更新に対応。
+   - v1.0.2 
+- Boxレイヤと正しくつながるVirtualPortレイヤのプロトタイプを追加
+
+### v0.8.1
+- v0.8.0 でプッシュし忘れたファイルを追加（もうしわけありません）。
+
+### v0.8.0
+- SimpleBox を Quel1Box に改名し、simple_box.pyで実装していたヘルパ関数群を整理。
+  - init_box_with_*() の返り値からBoxオブジェクトを削除。開発専用のAPIとなり、通常用途の使用は非推奨。
+     - 代替手段として、Quel1Boxに新しいクラスメソッド create() を新設。
+  - reconnect(), linkup() を reconnect_dev(), linkup_dev() と改名。開発専用のAPIとなり、通常用途での使用は非推奨。
+     - 代替手段として、Quel1Boxの新しいメソッド reconnect() と relinkup() を新設。
+     - reconnect_dev(), linkup_dev() はQuel1Boxを引数に取れません。
+  - ご迷惑をおかけします。詳しくはマイグレーションガイドを参照してください。
+- Quel1Boxに、装置のIC群を一括で設定するAPIを新設。
+- Quel1Boxのeasy_capture API のデフォルト動作を設定し、既存設定を変更しないでキャプチャできるようにした。
+
+### v0.7.21
+- 年度末リリースの理化学研究所様向け QuEL-1 SE（2-8GHz版)のboxtypeのIDを`quel1se-riken8`に確定。
+   - 従来のデバグ用設定は、`x-quel1se-riken8` として残す。
+- QuEL-1 SE では、quel1_linkup コマンドの動作が、デフォルトで `--use_204c` が付いた状態になる。
+   - `--use_204c`無しでリンクアップしたい場合には、実験用コマンドの `quel1_test_linkup`コマンドが使える。
+
+### v0.7.20
+- SimpleBox.start_channel() の channel に誤ってデフォルト値が設定されたのを削除。
+  - 申し訳有りません。従来動作を維持するためには、`channel=0` を引数に追加してください。 
+- いくつかのAPIを拡張しAD9082のDACのfullscale_currentを変更を可能とした。
+  - cssレベルでは新規APIを追加
+  - boxレベルでは既存APIに引数を追加
+- QuEL-1 SE向けの改修
+  - のリンクアップ時にRF Switchを閉じられない不具合を修正。
+  - QuEL-1 SE のアナログコンバインポートを SimpleBoxのAPIで扱うために subport の概念を導入。
+    - アナログコンバインのない従来のポートには一切の影響無し。
+    - 将来的にデジタルコンバインポートも同様に扱う予定。
+  - boxレベルのAPIで7.5GHz以下のLO設定が簡単にできるようになった。
+
+### v0.7.19
+- リンクアップ関連のログ表示を整理
+- ConfigSubsystemのファームウェアインターフェースの改善
+  - FPGAとの通信をチューニング・堅牢化
+  - ファームウェアのバージョン検出を実装
+
+### v0.7.18
+- JESD204Cのリンクアップ周辺を適正化
+  - AD9082のキャリブレーションの設定を指定可能にした
+  - AD9082のCTLEフィルタの設定周辺の不具合修正
+    - 未公開機能だけに影響。この修正の効果を確認後、公開機能に格上げする予定。
+    
+### v0.7.17
+- キャプチャデータの長さが0になる異常ケースの処理を適正化
+- 設定系のパケットがたまに通らなくなる問題を解消
+- quel1_test_linkup を改修
+    - skip_init オプションを追加
+    - 失敗時の診断を詳細化
+
+### v0.7.16
+- 新しいファームウェア simplemulti_20240125 にツール群を適合
+  - quel1_test_linkup の結果集計を改善 
+
+### v0.7.15
+- 新しいファームウェア simplemulti_20240125 に暫定対応
+  - e7awgsw が3バージョンに分かれてしまっているのは改善する予定
+- quel1_linkup コマンドの初期化エラーを無視するための引数の書式を変更
+  - コロン区切りからカンマ区切りに変更
+
+### v0.7.14
+- quel1_test_linkup を QuEL-1 SE に対応
+  
+### v0.7.13
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応（その5の途中）
+  - Monitor-in系用のLOの設定用下層APIを追加
+  - 調温制御入りファームウェアへの対応
+
+### v0.7.12
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応（その4）
+  - Read-in系の設定・マッピングを適正化
+
+### v0.7.11
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応（その4）
+  - ヒータ制御に対応
+
+### v0.7.10
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応（その3）
+  - 各ボードの温度センサの開発用途向け読み出しに対応
+
+### v0.7.9
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応（その2）
+  - RF Switchに対応
+
+### v0.7.8
+- v0.7.7で混入したQuEL-1 SE関連のバグを修正
+
+### v0.7.7
+- 2023年度末リリース予定のQuEL-1 SE("x-quel1se-riken8")に仮対応
+  - ADDAボードとMixerボードが使用可能
+  - RF Switchは未対応
+  - 調温系も未対応
+
+### v0.7.6
+- ビルド済みパッケージの配布方法を変更。
+  - 詳しくは GETTING_STARTED.md を参照のこと。
+
+### v0.7.5
+- 2023年度末リリース予定のQuEL-1の変種（"quel1-nec")に仮対応
+
+## v0.7.4 (Public Release)
 - quel1_firmware_version コマンドを追加。
 - ファームウエアバージョン識別子を追加。
   - simplemulti_20231228
@@ -8,15 +162,15 @@
 - ファームウェアのライフサイクル管理に対応。サポート終了・および終了予定のファームウェアについて警告メッセージを出すようにした。
   - feedback_20231108 はサポート対象から除外予定。（当初よりベータ版）
 
-## v0.7.3 (not published)
+### v0.7.3
 - quel1_dump_config コマンドの --mxfe オプションを廃止。
 
-## v0.7.2 (not published)
+### v0.7.2
 - ファームウェアのバージョン識別子を追加。
    - simplemulti_20231216 を追加。
 - E7HwType を E7FwType に改名。
 
-### v0.7.1 (not published)
+### v0.7.1
 - QuBEに対応。新しい４つのboxtypeを追加し、{Type-A, Type-B} x {QuBE_OU, QuBE_RIKEN}を指定できるようにした。 
   - qube-ou-a: 最初期のモニタ系がないQuBEのType-A
   - qube-ou-b: 同Type-B
@@ -27,7 +181,7 @@
 - quel1_linkupコマンドに、制御装置の各種エラーを無視するための引数を追加。 
   - `--background_noise_threshold`: リンクアップ時にチェックするADCの背景ノイズの最大振幅の上限を変更する。デフォルト値は256。
 
-### v0.7.0 (not published)
+### v0.7.0
 - Quel1ConfigSubsystemクラスを、boxtype ごとにサブクラス化してライン構成の違いを保持し、実行時チェックを強化。
   - タイプAの機体はQuel1TypeAConfigSubsystemクラス、タイプBの機体はQuel1TypeBConfigSubclassクラスを使用する必要がある。
     - タイプBではハードウェア的に実装されていない read系の使用を試みた場合に例外を発生するよう、チェックを厳格化。
@@ -39,7 +193,7 @@
 - quel_ic_config_utils.init_box_with_reconnect() を追加した。再リンクアップ無しでハードウェアを使用するための初期化を行う。boxオブジェクトが存在すれば、box.init() を呼ぶだけなのだが、対応するboxクラスが定義されていないハードウェアを扱うためにこのヘルパー関数を用意した。
 - 設定用 json ファイルに、"feature" 条件を追加した。これは、ファームウェアバージョンの自動検出機能と連携して初期化内容を切り替えるのに用いるので、ユーザは直接触ることはない。
 
-### v0.6.8 (not published)
+### v0.6.8
 - 各CLIコマンドに、制御装置の各種エラーを無視するための引数を追加。 
   - `--ignore_crc_error_of_mxfe`: リンクアップ時および再接続時のCRC_ERRORを無視するMxFEを指定。
   - `--ignore_access_faulure_of_adrf6780`: リンクアップ時に疎通確認ができなくてもエラーを発しないADRF6780の個体番号を指定。
@@ -50,11 +204,11 @@
   - quel_ic_config_utils.create_box_objects() を使用する際に、ファームウェアバージョンの指定は不要。
   - e7awgswパッケージのファームウェアの整合性も自動チェックする。
 
-### v0.6.7 (not published)
+### v0.6.7
 - 設定用 json ファイル中のキー "tx"と"rx"を、それぞれ、"dac"と"adc"に変更した。
   - JESD204C の tx/rx と AD9082のAPI名で使用されている tx/rx は、互いに意味が逆になっている。tx/rxを不用意に使うことで生じる混乱を避けるための名前変更。
 
-## v0.6.6
+## v0.6.6 (Public Release)
 - Quel-1 のリンクアップや状態確認用のコマンド群を提供した初の公開バージョン。
   - いまだAPI設計が安定しているとは言えない部分があるが、変更点を提供できる程度には安定化してきているので本文書にて更新点のリストを提供開始する。
   - quel_ic_config パッケージの中はかなり安定してきている。

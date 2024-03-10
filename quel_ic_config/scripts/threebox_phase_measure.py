@@ -6,8 +6,7 @@ from typing import Any, Dict, Mapping
 import numpy as np
 import numpy.typing as npt
 
-from quel_ic_config import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config_utils import CaptureReturnCode
+from quel_ic_config import CaptureReturnCode, Quel1BoxType, Quel1ConfigOption
 from testlibs.general_looptest_common import BoxPool, find_chunks, init_pulsecap, init_pulsegen
 
 logger = logging.getLogger()
@@ -150,7 +149,8 @@ if __name__ == "__main__":
     boxpool = BoxPool(DEVICE_SETTINGS)
     boxpool.init(resync=False)
     pgs = init_pulsegen(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
-    cp = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cps = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cp = cps["CAPTURER"]
 
     cp.check_noise(show_graph=False)
     boxpool.measure_timediff(cp)

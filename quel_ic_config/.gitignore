@@ -3,4 +3,5 @@ deactivated/
 artifacts/
 generated/
 log/
-requirements.txt
+requirements*.txt
+dependency_pkgs/

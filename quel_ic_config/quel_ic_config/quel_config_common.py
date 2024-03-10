@@ -10,14 +10,25 @@ class Quel1BoxType(Enum):
     QuEL1_TypeA = ("quel-1", "type-a")
     QuEL1_TypeB = ("quel-1", "type-b")
     QuEL1_NTT = ("quel-1", "ntt")  # Notes: not fully supported yet.  TODO: implement automatic tests
-    QuEL1_NEC = ("quel-1", "nec")  # Notes: under development
+    QuEL1_NEC = ("quel-1", "nec")
+    QuEL1SE_RIKEN8 = ("quel-1se", "riken8")
+    QuEL1SE_RIKEN8DBG = ("quel-1se", "riken8dbg")  # for development purpose
+    # Notes: the following boxtypes can be eliminated without the prior notification.
     QuEL1SE_Adda = ("quel-1se", "adda")  # Prototype configuration
     QuEL1SE_Proto8 = ("quel-1se", "proto8")  # Prototype configuration
     QuEL1SE_Proto11 = ("quel-1se", "proto11")  # Prototype configuration
+    QuEL1SE_ProtoAdda = ("quel-1se", "protoadda")  # Prototype configuration
 
     @classmethod
     def fromstr(cls, label: str) -> "Quel1BoxType":
         return QUEL1_BOXTYPE_ALIAS[label]
+
+    def tostr(self):
+        for a, t in QUEL1_BOXTYPE_ALIAS.items():
+            if t is self:
+                return a
+        else:
+            raise AssertionError
 
 
 QUEL1_BOXTYPE_ALIAS: Final[Dict[str, Quel1BoxType]] = {
@@ -29,9 +40,12 @@ QUEL1_BOXTYPE_ALIAS: Final[Dict[str, Quel1BoxType]] = {
     "quel1-b": Quel1BoxType.QuEL1_TypeB,
     "quel1-ntt": Quel1BoxType.QuEL1_NTT,
     "quel1-nec": Quel1BoxType.QuEL1_NEC,
-    "x-quel1se-adda": Quel1BoxType.QuEL1SE_Adda,
+    "quel1se-riken8": Quel1BoxType.QuEL1SE_RIKEN8,
+    "x-quel1se-protoadda": Quel1BoxType.QuEL1SE_ProtoAdda,
     "x-quel1se-proto8": Quel1BoxType.QuEL1SE_Proto8,
     "x-quel1se-proto11": Quel1BoxType.QuEL1SE_Proto11,
+    "x-quel1se-adda": Quel1BoxType.QuEL1SE_Adda,
+    "x-quel1se-riken8": Quel1BoxType.QuEL1SE_RIKEN8DBG,
 }
 
 

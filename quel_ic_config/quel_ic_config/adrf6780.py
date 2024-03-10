@@ -220,16 +220,6 @@ class Adrf6780Mixin(AbstractIcMixin):
             regs[addr] = self.read_reg(addr)
         return regs
 
-    def _read_and_parse_reg(self, regname: str) -> Tuple[int, AbstractIcReg]:
-        addr = self.RegNames[regname]
-        regcls = self.Regs[addr]
-        reg = regcls()
-        reg.parse(self.read_reg(addr))
-        return addr, reg
-
-    def _build_and_write_reg(self, addr: int, regobj: AbstractIcReg) -> None:
-        self.write_reg(addr, regobj.build())
-
     def soft_reset(self, parity_enable: bool = False) -> None:
         """committing soft reset.
 

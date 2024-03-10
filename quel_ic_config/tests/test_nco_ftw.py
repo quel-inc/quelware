@@ -19,7 +19,12 @@ class Ad9082V106Dummy(Ad9082V106Mixin):
         return (True,)
 
     def initialize(
-        self, reset: bool = False, link_init: bool = False, use_204b: bool = False, wait_after_device_init: float = 0.1
+        self,
+        reset: bool = False,
+        link_init: bool = False,
+        use_204b: bool = False,
+        use_bg_cal=False,
+        wait_after_device_init: float = 0.1,
     ):
         self.device.dev_info.dev_freq_hz = self.param.clock.ref
         self.device.dev_info.dac_freq_hz = self.param.clock.dac

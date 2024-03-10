@@ -1,0 +1,17 @@
+{
+  "meta": {
+    "version": "0.0.1"
+  },
+  "registers": {
+    "Config": {
+      "write": true,
+      "seq": true,
+      "addr": 3,
+      "pm": 3,
+      "shadow": true,
+      "weak": false,
+      "range": true,
+      "coding": true
+    }
+  }
+}
