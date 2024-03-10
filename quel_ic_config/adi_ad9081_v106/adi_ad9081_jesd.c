@@ -840,7 +840,7 @@ int32_t adi_ad9081_jesd_rx_set_ctle_filter(adi_ad9081_device_t *device,
 	int32_t err;
 	AD9081_NULL_POINTER_RETURN(device);
 	AD9081_LOG_FUNC();
-	AD9081_INVALID_PARAM_RETURN(ctle_filter > 4)
+	AD9081_INVALID_PARAM_RETURN(ctle_filter < 1 || ctle_filter > 4); /*Range 1-4 corresponding CTLE cutoff frequency to channel insertion loss*/
 
 	err = adi_ad9081_hal_cbusjrx_reg_set(
 		device, 0xfd, (1 << ctle_filter) - 1,
@@ -1196,6 +1196,10 @@ int32_t adi_ad9081_jesd_rx_bring_up(adi_ad9081_device_t *device,
 							 AD9081_FULL_RATE) :
 			   ((bit_rate < 16230000000ULL) ? AD9081_HALF_RATE :
 							  AD9081_QUART_RATE);
+
+	err = adi_ad9081_hal_log_write(device, ADI_CMS_LOG_MSG, "204b_enable = %u, des_rate = %d", jesd204b_en, des_rate);
+	AD9081_ERROR_RETURN(err);
+
 	err = adi_ad9081_jesd_rx_startup_des(device, des_rate);
 	AD9081_ERROR_RETURN(err);
 

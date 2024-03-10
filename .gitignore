@@ -168,3 +168,5 @@ requirements.txt
 log/
 artifacts/
 *.orig/
+release_pkgs/
+old_files/

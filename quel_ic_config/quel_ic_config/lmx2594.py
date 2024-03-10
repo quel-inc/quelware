@@ -2,7 +2,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Dict, Union
+from typing import Dict, Final, List, Sequence, Tuple, Union, cast
 
 from quel_ic_config.abstract_ic import (
     AbstractIcConfigHelper,
@@ -650,6 +650,28 @@ class Lmx2594LockStatus(IntEnum):
 class Lmx2594Mixin(AbstractIcMixin):
     Regs: Dict[int, type] = Lmx2594Regs
     RegNames: Dict[str, int] = Lmx2594RegNames
+    MIN_FREQ_MULTIPLIER: Final[int] = 75
+    MAX_FREQ_MULTIPLIER: Final[int] = 150
+    CHDIV2RATIO: Final[Dict[int, int]] = {
+        0: 2,
+        1: 4,
+        2: 6,
+        3: 8,
+        4: 12,
+        5: 16,
+        6: 24,
+        7: 32,
+        8: 48,
+        9: 64,
+        10: 72,
+        11: 96,
+        12: 128,
+        13: 192,
+        14: 256,
+        15: 384,
+        16: 512,
+        17: 768,
+    }
 
     def __init__(self, name):
         super().__init__(name)
@@ -696,6 +718,144 @@ class Lmx2594Mixin(AbstractIcMixin):
         else:
             logger.warning(f"calibration of {self.name} is not finished within {(time.perf_counter()-t0)*1000:.1f}ms")
         return False
+
+    def _validate_freq_multiplier(self, freq_multiplier: int):
+        if not isinstance(freq_multiplier, int):
+            raise TypeError(f"unexpected frequency multiplier: {freq_multiplier}")
+        if not (self.MIN_FREQ_MULTIPLIER <= freq_multiplier <= self.MAX_FREQ_MULTIPLIER):
+            raise TypeError(f"invalid frequency multiplier: {freq_multiplier}")
+
+    def set_lo_multiplier(self, freq_multiplier: int) -> None:
+        addr34, reg34 = cast(Tuple[int, Lmx2594R34], self._read_and_parse_reg("R34"))
+        addr36, reg36 = cast(Tuple[int, Lmx2594R36], self._read_and_parse_reg("R36"))
+        reg34.pll_n_18_16 = (freq_multiplier >> 16) & 0x0007
+        reg36.pll_n = freq_multiplier & 0xFFFF
+        self._build_and_write_reg(addr34, reg34)
+        self._build_and_write_reg(addr36, reg36)
+        return
+
+    def get_lo_multiplier(self) -> int:
+        _, reg34 = cast(Tuple[int, Lmx2594R34], self._read_and_parse_reg("R34"))
+        _, reg36 = cast(Tuple[int, Lmx2594R36], self._read_and_parse_reg("R36"))
+        return (reg34.pll_n_18_16 << 16) + (reg36.pll_n)
+
+    def _parse_divide_ratio(
+        self, out_mux: Sequence[int], pwdn: Sequence[bool], enable_seg1: bool, chdiv: int
+    ) -> Tuple[int, int]:
+        ratio: List[int] = [0, 0]
+        for i in range(2):
+            if pwdn[i]:
+                continue
+
+            if out_mux[i] == 0:
+                if enable_seg1:
+                    if chdiv == 0:
+                        raise RuntimeError(
+                            f"invalid combination of seg1_enable(={enable_seg1}) and chdiv(= {chdiv}) at {self.name}"
+                        )
+                    elif chdiv in self.CHDIV2RATIO:
+                        ratio[i] = self.CHDIV2RATIO[chdiv]
+                    else:
+                        raise RuntimeError(f"invalid chdiv(= {chdiv}) at {self.name}")
+                else:
+                    if chdiv == 0:
+                        ratio[i] = 2
+                    else:
+                        raise RuntimeError(
+                            f"invalid combination of seg1_enable(={enable_seg1}) and chdiv(= {chdiv}) at {self.name}"
+                        )
+            elif out_mux[i] == 1:
+                ratio[i] = 1
+            elif out_mux[i] == 3:
+                # high_impedance output, equivalent to ratio = 0
+                pass
+            else:
+                # Note: Sysref should not be selected for LO.
+                raise AssertionError(f"unexpected mux of outpin:{i} of {self.name}")
+
+        return ratio[0], ratio[1]
+
+    def set_divider_ratio(self, ratio0: Union[int, None], ratio1: Union[int, None]) -> None:
+        addr44, reg44 = cast(Tuple[int, Lmx2594R44], self._read_and_parse_reg("R44"))
+        addr45, reg45 = cast(Tuple[int, Lmx2594R45], self._read_and_parse_reg("R45"))
+        addr46, reg46 = cast(Tuple[int, Lmx2594R46], self._read_and_parse_reg("R46"))
+        addr31, reg31 = cast(Tuple[int, Lmx2594R31], self._read_and_parse_reg("R31"))
+        addr75, reg75 = cast(Tuple[int, Lmx2594R75], self._read_and_parse_reg("R75"))
+
+        out_mux: Tuple[int, int] = reg45.outa_mux, reg46.outb_mux
+        pwdn: Tuple[bool, bool] = reg44.outa_pd, reg44.outb_pd
+        enable_seg1: bool = reg31.chdiv_div2
+        chdiv: int = reg75.chdiv
+
+        ratios = list(self._parse_divide_ratio(out_mux, pwdn, enable_seg1, chdiv))
+        if ratio0 is not None:
+            ratios[0] = ratio0
+        if ratio1 is not None:
+            ratios[1] = ratio1
+        if not (ratios[0] in {0, 1} or ratios[1] in {0, 1} or ratios[0] == ratios[1]):
+            raise ValueError(f"impossible combination of divide ratios ({ratios[0]}, {ratios[1]}) for {self.name}")
+
+        for i, ratio in enumerate(ratios):
+            if ratio == 1:
+                if i == 0:
+                    reg45.outa_mux = 1
+                    reg44.outa_pd = False
+                elif i == 1:
+                    reg46.outb_mux = 1
+                    reg44.outb_pd = False
+                else:
+                    raise AssertionError
+            elif ratio == 0:
+                if i == 0:
+                    reg45.outa_mux = 3
+                    reg44.outa_pd = True
+                elif i == 1:
+                    reg46.outb_mux = 3
+                    reg44.outb_pd = True
+                else:
+                    raise AssertionError
+            else:
+                if i == 0:
+                    reg45.outa_mux = 0
+                    reg44.outa_pd = False
+                elif i == 1:
+                    reg46.outb_mux = 0
+                    reg44.outb_pd = False
+                else:
+                    raise AssertionError
+
+        for i, ratio in enumerate(ratios):
+            if ratio in {0, 1}:
+                continue
+            else:
+                for k, v in self.CHDIV2RATIO.items():
+                    if v == ratio:
+                        chdiv = k
+                        break
+                else:
+                    raise ValueError(f"invalid frequency divider ratio {ratio} for outpin {i} of {self.name}")
+                reg31.chdiv_div2 = ratio != 2
+                reg75.chdiv = chdiv
+                break
+
+        self._build_and_write_reg(75, reg75)
+        self._build_and_write_reg(31, reg31)
+        self._build_and_write_reg(46, reg46)
+        self._build_and_write_reg(45, reg45)
+        self._build_and_write_reg(44, reg44)
+
+    def get_divider_ratio(self) -> Tuple[int, int]:
+        addr44, reg44 = cast(Tuple[int, Lmx2594R44], self._read_and_parse_reg("R44"))
+        addr45, reg45 = cast(Tuple[int, Lmx2594R45], self._read_and_parse_reg("R45"))
+        addr46, reg46 = cast(Tuple[int, Lmx2594R46], self._read_and_parse_reg("R46"))
+        addr31, reg31 = cast(Tuple[int, Lmx2594R31], self._read_and_parse_reg("R31"))
+        addr75, reg75 = cast(Tuple[int, Lmx2594R75], self._read_and_parse_reg("R75"))
+
+        out_mux: Tuple[int, int] = reg45.outa_mux, reg46.outb_mux
+        pwdn: Tuple[bool, bool] = reg44.outa_pd, reg44.outb_pd
+        enable_seg1: bool = reg31.chdiv_div2
+        chdiv: int = reg75.chdiv
+        return self._parse_divide_ratio(out_mux, pwdn, enable_seg1, chdiv)
 
 
 class Lmx2594ConfigHelper(AbstractIcConfigHelper):

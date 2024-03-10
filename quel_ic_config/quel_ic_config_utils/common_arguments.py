@@ -3,7 +3,7 @@ from ipaddress import ip_address
 from pathlib import Path
 from typing import Collection, List, Set, Tuple, Union
 
-from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1ConfigOption
+from quel_ic_config.quel_config_common import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1ConfigOption
 
 
 def parse_boxtype(boxtypename: str) -> Quel1BoxType:
@@ -33,18 +33,18 @@ def _parse_mxfe_combination(mxfe_combination: str) -> Tuple[int, ...]:
 
 
 def _parse_comma_separated_adrf6780_list(cslist: str) -> Set[int]:
-    parsed = [int(x) for x in cslist.split(":")]
+    parsed = [int(x) for x in cslist.split(",")]
     invalid = [x for x in parsed if not 0 <= x <= 7]
     if len(invalid) != 0:
-        raise ValueError(f"invalid indices of ADRF6780s: {':'.join([str(x) for x in invalid])}")
+        raise ValueError(f"invalid indices of ADRF6780s: {','.join([str(x) for x in invalid])}")
     return set(parsed)
 
 
 def _parse_comma_separated_lmx2594_list(cslist: str) -> Set[int]:
-    parsed = [int(x) for x in cslist.split(":")]
+    parsed = [int(x) for x in cslist.split(",")]
     invalid = [x for x in parsed if not 0 <= x <= 9]
     if len(invalid) != 0:
-        raise ValueError(f"invalid indices of LMX2594s: {':'.join([str(x) for x in invalid])}")
+        raise ValueError(f"invalid indices of LMX2594s: {','.join([str(x) for x in invalid])}")
     return set(parsed)
 
 
@@ -69,6 +69,7 @@ def add_common_arguments(
     default_config_root: Union[Path, None] = None,
     default_config_options: Union[Collection[str], None] = None,
     allow_implicit_mxfe: bool = False,
+    use_hard_reset: bool = False,
 ) -> None:
     """adding common arguments to testlibs of quel_ic_config for manual tests. allowing to accept unused arguments for
     your convenience
@@ -207,6 +208,14 @@ def add_common_arguments(
                 required=True,
                 help="combination of MxFEs under test, possible values are '0', '1', 'both', '0,1', '1,0', and 'none'",
             )
+
+    if use_hard_reset:
+        parser.add_argument(
+            "--hard_reset",
+            action="store_true",
+            default=False,
+            help="enable hard reset of AD9082 at the initialization",
+        )
 
 
 def add_common_workaround_arguments(

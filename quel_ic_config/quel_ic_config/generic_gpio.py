@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict
 
 from quel_ic_config.abstract_ic import AbstractIcConfigHelper, AbstractIcMixin, AbstractIcReg, b_1bf_bool, p_1bf_bool
 
@@ -84,16 +84,6 @@ class GenericGpioMixin(AbstractIcMixin):
         for addr in (0,):
             regs[addr] = self.read_reg(addr)  # actually addr is ignored by exstickge
         return regs
-
-    def _read_and_parse_reg(self, regname: str) -> Tuple[int, AbstractIcReg]:
-        addr = self.RegNames[regname]
-        regcls = self.Regs[addr]
-        reg = regcls()
-        reg.parse(self.read_reg(addr))
-        return addr, reg
-
-    def _build_and_write_reg(self, addr: int, regobj: AbstractIcReg) -> None:
-        self.write_reg(addr, regobj.build())
 
 
 class GenericGpioConfigHelper(AbstractIcConfigHelper):

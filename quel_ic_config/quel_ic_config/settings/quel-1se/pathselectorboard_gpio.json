@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "version": "0.0.1"
+  },
+  "registers": {
+    "RFSW": {
+      "b05": true,
+      "b04": true,
+      "b03": true,
+      "b02": true,
+      "b01": true,
+      "b00": true
+    }
+  }
+}

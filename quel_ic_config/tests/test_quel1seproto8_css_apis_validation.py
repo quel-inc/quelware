@@ -2,13 +2,13 @@ import logging
 
 import pytest
 
-from quel_ic_config import Quel1BoxType, Quel1Feature, Quel1SeProto8ConfigSubsystem
+from quel_ic_config import Quel1BoxType, Quel1Feature, Quel1seProto8ConfigSubsystem
 
 logger = logging.getLogger(__name__)
 
 
 def test_parameter_validation():
-    css = Quel1SeProto8ConfigSubsystem(
+    css = Quel1seProto8ConfigSubsystem(
         css_addr="10.254.253.252",
         boxtype=Quel1BoxType.QuEL1SE_Proto8,
         features={Quel1Feature.SINGLE_ADC},

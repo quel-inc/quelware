@@ -3,11 +3,15 @@ from abc import ABCMeta
 from typing import Any, Dict, Tuple, Union
 
 from quel_ic_config.ad5328 import Ad5328Mixin
+from quel_ic_config.ad7490 import Ad7490Mixin
 from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
 from quel_ic_config.adrf6780 import Adrf6780Mixin
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
 from quel_ic_config.generic_gpio import GenericGpioMixin
 from quel_ic_config.lmx2594 import Lmx2594Mixin
+from quel_ic_config.mixerboard_gpio import MixerboardGpioMixin
+from quel_ic_config.pathselectorboard_gpio import PathselectorboardGpioMixin
+from quel_ic_config.powerboard_pwm import PowerboardPwmMixin
 from quel_ic_config.rfswitcharray import (
     QubeRfSwitchArrayMixin,
     Quel1TypeARfSwitchArrayMixin,
@@ -95,6 +99,18 @@ class Ad5328(Ad5328Mixin, Quel1Ic):
         return Quel1Ic._write_reg(self, addr, data)
 
 
+class Ad7490(Ad7490Mixin, Quel1Ic):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        Ad7490Mixin.__init__(self, f"AD7490[{idx}]")
+        Quel1Ic.__init__(self, proxy, LsiKindId.AD7490, idx)
+
+    def read_reg(self, addr: int) -> int:
+        return Quel1Ic._read_reg(self, addr)
+
+    def write_reg(self, addr: int, data: int) -> None:
+        return Quel1Ic._write_reg(self, addr, data)
+
+
 # TODO: consider to subclass it into ForLo and ForRefClk or not.
 class Lmx2594(Lmx2594Mixin, Quel1Ic):
     def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
@@ -179,6 +195,42 @@ class GenericGpio(GenericGpioMixin, Quel1Ic):
     def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
         GenericGpioMixin.__init__(self, f"GenericGpio[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
+
+    def read_reg(self, addr: int) -> int:
+        return Quel1Ic._read_reg(self, addr)
+
+    def write_reg(self, addr: int, data: int) -> None:
+        return Quel1Ic._write_reg(self, addr, data)
+
+
+class MixerboardGpio(MixerboardGpioMixin, Quel1Ic):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        MixerboardGpioMixin.__init__(self, f"MixerboardGpio[{idx}]")
+        Quel1Ic.__init__(self, proxy, LsiKindId.MIXERBOARD_GPIO, idx)
+
+    def read_reg(self, addr: int) -> int:
+        return Quel1Ic._read_reg(self, addr)
+
+    def write_reg(self, addr: int, data: int) -> None:
+        return Quel1Ic._write_reg(self, addr, data)
+
+
+class PathselectorboardGpio(PathselectorboardGpioMixin, Quel1Ic):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        PathselectorboardGpioMixin.__init__(self, f"PathselectorboardGpio[{idx}]")
+        Quel1Ic.__init__(self, proxy, LsiKindId.PATHSELECTORBOARD_GPIO, idx)
+
+    def read_reg(self, addr: int) -> int:
+        return Quel1Ic._read_reg(self, addr)
+
+    def write_reg(self, addr: int, data: int) -> None:
+        return Quel1Ic._write_reg(self, addr, data)
+
+
+class PowerboardPwm(PowerboardPwmMixin, Quel1Ic):
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        PowerboardPwmMixin.__init__(self, f"PowerboardPwm[{idx}]")
+        Quel1Ic.__init__(self, proxy, LsiKindId.POWERBOARD_PWM, idx)
 
     def read_reg(self, addr: int) -> int:
         return Quel1Ic._read_reg(self, addr)

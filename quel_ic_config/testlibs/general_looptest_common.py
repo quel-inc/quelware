@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 
 from quel_clock_master import QuBEMasterClient, SequencerClient
-from quel_ic_config_utils import CaptureResults, CaptureReturnCode, SimpleBoxIntrinsic, create_box_objects
+from quel_ic_config import CaptureResults, CaptureReturnCode, Quel1BoxIntrinsic
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class BoxPool:
 
     def __init__(self, settings: Mapping[str, Mapping[str, Any]]):
         self._clock_master = QuBEMasterClient(settings["CLOCK_MASTER"]["ipaddr"])
-        self._boxes: Dict[str, Tuple[SimpleBoxIntrinsic, SequencerClient]] = {}
+        self._boxes: Dict[str, Tuple[Quel1BoxIntrinsic, SequencerClient]] = {}
         self._linkstatus: Dict[str, bool] = {}
         self._parse_settings(settings)
         self._estimated_timediff: Dict[str, int] = {boxname: 0 for boxname in self._boxes}
@@ -29,9 +29,7 @@ class BoxPool:
     def _parse_settings(self, settings: Mapping[str, Mapping[str, Any]]):
         for k, v in settings.items():
             if k.startswith("BOX"):
-                _, _, _, _, box = create_box_objects(**v, refer_by_port=False)
-                if not isinstance(box, SimpleBoxIntrinsic):
-                    raise ValueError(f"unsupported boxtype: {v['boxtype']}")
+                box = Quel1BoxIntrinsic.create(**v)
                 sqc = SequencerClient(v["ipaddr_sss"])
                 self._boxes[k] = (box, sqc)
                 self._linkstatus[k] = False
@@ -39,8 +37,8 @@ class BoxPool:
     def init(self, resync: bool = True):
         for name, (box, sqc) in self._boxes.items():
             link_status: bool = True
-            if not all(box.init().values()):
-                if all(box.init(ignore_crc_error_of_mxfe=box.css.get_all_groups()).values()):
+            if not all(box.reconnect().values()):
+                if all(box.reconnect(ignore_crc_error_of_mxfe=box.css.get_all_groups()).values()):
                     logger.warning(f"crc error has been detected on MxFEs of {name}")
                 else:
                     logger.error(f"datalink between MxFE and FPGA of {name} is not working")
@@ -84,7 +82,7 @@ class BoxPool:
                 logger.info(f"{name:s}: not found")
         return flag
 
-    def get_box(self, name: str) -> Tuple[bool, SimpleBoxIntrinsic, SequencerClient]:
+    def get_box(self, name: str) -> Tuple[bool, Quel1BoxIntrinsic, SequencerClient]:
         if name in self._boxes:
             box, sqc = self._boxes[name]
             return self._linkstatus[name], box, sqc
@@ -174,6 +172,7 @@ class PulseGen:
     def __init__(
         self,
         name: str,
+        *,
         box: str,
         group: int,
         line: int,
@@ -196,7 +195,7 @@ class PulseGen:
 
         self.name: str = name
         self.boxname: str = box
-        self.box: SimpleBoxIntrinsic = box_obj
+        self.box: Quel1BoxIntrinsic = box_obj
         self.sqc: SequencerClient = sqc
         self.group: int = group
         self.line: int = line
@@ -267,6 +266,7 @@ class PulseCap:
     def __init__(
         self,
         name: str,
+        *,
         box: str,
         group: int,
         rline: Union[None, str],
@@ -274,6 +274,7 @@ class PulseCap:
         cnco_freq: float,
         fnco_freq: float,
         background_noise_threshold: float,
+        gain: float = 1.0,
         boxpool: BoxPool,
     ):
         box_status, box_obj, _ = boxpool.get_box(box)
@@ -282,13 +283,14 @@ class PulseCap:
 
         self.name: str = name
         self.boxname: str = box
-        self.box: SimpleBoxIntrinsic = box_obj
+        self.box: Quel1BoxIntrinsic = box_obj
         self.group: int = group
         self.rline: str = self.box.rmap.resolve_rline(self.group, rline)
         self.runit: int = 0
         self.lo_freq = lo_freq
         self.cnco_freq = cnco_freq
         self.fnco_freq = fnco_freq
+        self.gain = gain
         self.background_noise_threshold = background_noise_threshold
 
         self.capmod = self.box.rmap.get_capture_module_of_rline(self.group, self.rline)
@@ -384,18 +386,22 @@ def init_pulsecap(
     settings: Mapping[str, Mapping[str, Any]],
     common_settings: Mapping[str, Any],
     boxpool: BoxPool,
-) -> PulseCap:
-    v = dict(settings["CAPTURER"])
-    for k in {"box", "group", "rline", "background_noise_threshold", "lo_freq", "cnco_freq", "fnco_freq"}:
-        if k not in v:
-            if k in common_settings:
-                v[k] = common_settings[k]
-            else:
-                raise ValueError(f"missing parameter '{k}' for PulseCap")
+) -> Dict[str, PulseCap]:
+    pcs: Dict[str, PulseCap] = {}
 
-    pc = PulseCap(name="_", **v, boxpool=boxpool)
-    pc.init()
-    return pc
+    capturers = [s for s in settings if s.startswith("CAPTURER")]
+    for capturer in capturers:
+        v = dict(settings[capturer])
+        for k in {"box", "group", "rline", "background_noise_threshold", "lo_freq", "cnco_freq", "fnco_freq"}:
+            if k not in v:
+                if k in common_settings:
+                    v[k] = common_settings[k]
+                else:
+                    raise ValueError(f"missing parameter '{k}' for PulseCap")
+
+        pcs[capturer] = PulseCap(name=capturer, **v, boxpool=boxpool)
+        pcs[capturer].init()
+    return pcs
 
 
 def find_chunks(
@@ -520,7 +526,8 @@ if __name__ == "__main__":
     boxpool = BoxPool(DEVICE_SETTINGS)
     boxpool.init(resync=False)
     pgs = init_pulsegen(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
-    cp = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cps = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cp = cps["CAPTURER"]
 
     cp.check_noise(show_graph=False)
     boxpool.measure_timediff(cp)

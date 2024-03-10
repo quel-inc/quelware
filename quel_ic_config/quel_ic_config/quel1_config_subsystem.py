@@ -3,7 +3,7 @@ import socket
 from pathlib import Path
 from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
 
-from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
+from quel_ic_config.exstickge_sock_client import LsiKindId, _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd5328Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
@@ -12,12 +12,13 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemRfswitch,
     Quel1ConfigSubsystemRoot,
 )
+from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
 
-class ExstickgeProxyQuel1(_ExstickgeProxyBase):
+class ExstickgeSockClientQuel1(_ExstickgeSockClientBase):
     _AD9082_IF_0 = LsiKindId.AD9082
     _ADRF6780_IF_0 = LsiKindId.ADRF6780
     _ADRF6780_IF_1 = LsiKindId.ADRF6780 + 1
@@ -64,8 +65,8 @@ class ExstickgeProxyQuel1(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address,
-        target_port=16384,
-        timeout: float = 2.0,
+        target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
         sock: Union[socket.socket, None] = None,
     ):
@@ -78,6 +79,7 @@ class QuelMeeBoardConfigSubsystem(
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd5328Mixin,
+    Quel1ConfigSubsystemTempctrlMixin,
 ):
     __slots__ = ()
 
@@ -102,8 +104,8 @@ class QuelMeeBoardConfigSubsystem(
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         Quel1ConfigSubsystemRoot.__init__(
@@ -114,8 +116,10 @@ class QuelMeeBoardConfigSubsystem(
         self._construct_adrf6780()
         self._construct_ad5328()
 
-    def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
-        return ExstickgeProxyQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        return ExstickgeSockClientQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
 
     def configure_peripherals(
         self,
@@ -148,6 +152,7 @@ class QuelMeeBoardConfigSubsystem(
         soft_reset: bool = False,
         mxfe_init: bool = False,
         use_204b: bool = True,
+        use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
     ) -> bool:
         self._validate_mxfe(mxfe_idx)
@@ -159,14 +164,10 @@ class QuelMeeBoardConfigSubsystem(
             )
             soft_reset = True
 
-        self.ad9082[mxfe_idx].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
-        link_valid = self.ad9082[mxfe_idx].check_link_status(ignore_crc_error=ignore_crc_error)
-        if not link_valid:
-            if mxfe_init:
-                logger.warning(f"failed to establish datalink between {self._css_addr}:AD9082-#{mxfe_idx} and FPGA")
-            else:
-                logger.warning(f"the link between {self._css_addr}:AD9082-#{mxfe_idx} and FPGA is not healthy")
-        return link_valid
+        self.ad9082[mxfe_idx].initialize(
+            reset=soft_reset, link_init=mxfe_init, use_204b=use_204b, use_bg_cal=use_bg_cal
+        )
+        return self.check_link_status(mxfe_idx, mxfe_init, ignore_crc_error)
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         """dumping the current configuration of a transmitter channel.
@@ -178,7 +179,7 @@ class QuelMeeBoardConfigSubsystem(
         """
         self._validate_channel(group, line, channel)
         return {
-            "fnco_hz": self.get_dac_fnco(group, line, channel),
+            "fnco_freq": self.get_dac_fnco(group, line, channel),
         }
 
     def dump_line(self, group: int, line: int) -> Dict[str, Any]:
@@ -190,11 +191,17 @@ class QuelMeeBoardConfigSubsystem(
         """
         self._validate_line(group, line)
         r: Dict[str, Any] = {}
-        r["channels"] = [self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))]
-        r["cnco_hz"] = self.get_dac_cnco(group, line)
-        r["fsc_ua"] = self.get_fullscale_current(group, line)
+        r["channels"] = {
+            ch: self.dump_channel(group, line, ch) for ch in range(self.get_num_channels_of_line(group, line))
+        }
+        r["cnco_freq"] = self.get_dac_cnco(group, line)
+        r["fullscale_current"] = self.get_fullscale_current(group, line)
         if (group, line) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, line) * 100_000_000
+            d_ratio = self.get_divider_ratio(group, line)
+            if d_ratio > 0:
+                r["lo_freq"] = self.get_lo_multiplier(group, line) * 100_000_000 // d_ratio
+            else:
+                r["lo_freq"] = 0
         if (group, line) in self._VATT_IDX:
             r["sideband"] = self.get_sideband(group, line)
             vatt = self.get_vatt_carboncopy(group, line)
@@ -212,7 +219,7 @@ class QuelMeeBoardConfigSubsystem(
         """
         self._validate_rchannel(group, rline, rchannel)
         return {
-            "fnco_hz": self.get_adc_fnco(group, rline, rchannel),
+            "fnco_freq": self.get_adc_fnco(group, rline, rchannel),
         }
 
     def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
@@ -225,11 +232,15 @@ class QuelMeeBoardConfigSubsystem(
         self._validate_rline(group, rline)
         r: Dict[str, Any] = {}
         if (group, rline) in self._LO_IDX:
-            r["lo_hz"] = self.get_lo_multiplier(group, rline) * 100_000_000
-        r["cnco_hz"] = self.get_adc_cnco(group, rline)
-        r["channels"] = [
-            self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
-        ]
+            d_ratio = self.get_divider_ratio(group, rline)
+            if d_ratio > 0:
+                r["lo_freq"] = self.get_lo_multiplier(group, rline) * 100_000_000 // d_ratio
+            else:
+                r["lo_freq"] = 0
+        r["cnco_freq"] = self.get_adc_cnco(group, rline)
+        r["channels"] = {
+            rch: self.dump_rchannel(group, rline, rch) for rch in range(self.get_num_rchannels_of_rline(group, rline))
+        }
         return r
 
 
@@ -249,19 +260,19 @@ class QubeConfigSubsystem(
         (1, 3): (1, 0),
     }
 
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
-        (0, 0): 0,
-        (0, 1): 1,
-        (0, 2): 2,
-        (0, 3): 3,
-        (1, 0): 7,
-        (1, 1): 6,
-        (1, 2): 5,
-        (1, 3): 4,
-        (0, "r"): 0,
-        (0, "m"): 1,
-        (1, "r"): 7,
-        (1, "m"): 6,
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 1): (1, 0),
+        (0, 2): (2, 0),
+        (0, 3): (3, 0),
+        (1, 0): (7, 0),
+        (1, 1): (6, 0),
+        (1, 2): (5, 0),
+        (1, 3): (4, 0),
+        (0, "r"): (0, 1),
+        (0, "m"): (1, 1),
+        (1, "r"): (7, 1),
+        (1, "m"): (6, 1),
     }
 
     _MIXER_IDX: Dict[Tuple[int, int], int] = {
@@ -293,8 +304,8 @@ class QubeConfigSubsystem(
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         super().__init__(
@@ -312,8 +323,8 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         QubeConfigSubsystem.__init__(
@@ -326,19 +337,21 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
+        # Notes: init_rfswitch() should be called at the head of configure_peripherals() to avoid the leakage of sprious
+        #        during the initialization of RF components.
         self.init_rfswitch()
         super().configure_peripherals(ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594)
 
     def dump_line(self, group: int, line: int) -> Dict[str, Any]:
         r = super().dump_line(group, line)
         if (group, line) in self._RFSWITCH_NAME:
-            r["rfswitch"] = "blocked" if self.is_blocked_line(group, line) else "passing"
+            r["rfswitch"] = "block" if self.is_blocked_line(group, line) else "pass"
         return r
 
     def dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
         r = super().dump_rline(group, rline)
         if (group, rline) in self._RFSWITCH_NAME:
-            r["rfswitch"] = "looping back" if self.is_blocked_line(group, rline) else "opened"
+            r["rfswitch"] = "loop" if self.is_blocked_line(group, rline) else "open"
         return r
 
 
@@ -363,8 +376,8 @@ class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeA:
@@ -389,8 +402,8 @@ class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeB:
@@ -433,6 +446,11 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
         (1, "m"): (1, "monitor"),
     }
 
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]] = {
+        (0, 0): (0, "r"),
+        (1, 0): (1, "r"),
+    }
+
     def __init__(
         self,
         css_addr: str,
@@ -440,8 +458,8 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
@@ -478,6 +496,8 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
         (1, "m"): (1, "monitor"),
     }
 
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]] = {}
+
     def __init__(
         self,
         css_addr: str,
@@ -485,8 +505,8 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
@@ -501,6 +521,8 @@ class Quel1NecConfigSubsystem(
 ):
     __slots__ = ()
 
+    _GROUPS: Set[int] = {0, 1, 2, 3}
+
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
         (0, 1): (0, 2),
@@ -512,19 +534,19 @@ class Quel1NecConfigSubsystem(
         (3, 1): (1, 1),
     }
 
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {
-        (0, 0): 0,
-        (0, 1): 2,
-        (1, 0): 1,
-        (1, 1): 3,
-        (2, 0): 6,
-        (2, 1): 4,
-        (3, 0): 7,
-        (3, 1): 5,
-        (0, "r"): 0,
-        (1, "r"): 1,
-        (2, "r"): 6,
-        (3, "r"): 7,
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]] = {
+        (0, 0): (0, 0),
+        (0, 1): (2, 0),
+        (1, 0): (1, 0),
+        (1, 1): (3, 0),
+        (2, 0): (6, 0),
+        (2, 1): (4, 0),
+        (3, 0): (7, 0),
+        (3, 1): (5, 0),
+        (0, "r"): (0, 1),
+        (1, "r"): (1, 1),
+        (2, "r"): (6, 1),
+        (3, "r"): (7, 1),
     }
 
     _MIXER_IDX: Dict[Tuple[int, int], int] = {
@@ -571,8 +593,8 @@ class Quel1NecConfigSubsystem(
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuEL1_NEC:

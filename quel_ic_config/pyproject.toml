@@ -18,5 +18,5 @@ line_length = 120
 python_version = 3.9
 
 [[tool.mypy.overrides]]
-module = "matplotlib.*"
+module = "matplotlib.*,aiocoap.*,ping3,e7awgsw.*"
 ignore_missing_imports = true

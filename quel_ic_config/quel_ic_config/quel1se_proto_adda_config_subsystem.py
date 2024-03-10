@@ -3,19 +3,20 @@ import socket
 from pathlib import Path
 from typing import Collection, Dict, Mapping, Set, Tuple, Union
 
-from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
+from quel_ic_config.exstickge_sock_client import LsiKindId, _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemGpioMixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemRoot,
 )
+from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
 
-class ExstickgeProxyQuel1SeProtoAdda(_ExstickgeProxyBase):
+class ExstickgeSockClientQuel1seProtoAdda(_ExstickgeSockClientBase):
     _AD9082_IF_0 = LsiKindId.AD9082
     _LMX2594_IF_1 = LsiKindId.LMX2594 + 1
     _GPIO_IF_0 = LsiKindId.GPIO
@@ -39,15 +40,15 @@ class ExstickgeProxyQuel1SeProtoAdda(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address,
-        target_port=16384,
-        timeout: float = 2.0,
+        target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
         sock: Union[socket.socket, None] = None,
     ):
         super().__init__(target_address, target_port, timeout, receiver_limit_by_binding, sock)
 
 
-class Quel1SeProtoAddaConfigSubsystemGpioMixin(Quel1ConfigSubsystemGpioMixin):
+class Quel1seProtoAddaConfigSubsystemGpioMixin(Quel1ConfigSubsystemGpioMixin):
     _GPIO_FOR_AD9082_HARDRESET: Dict[int, Tuple[int, str]]
 
     def _get_idx_for_ad9082_hard_reset(self, mxfe_idx: int) -> Tuple[int, str]:
@@ -71,11 +72,12 @@ class Quel1SeProtoAddaConfigSubsystemGpioMixin(Quel1ConfigSubsystemGpioMixin):
         self.gpio_helper[blk_idx].flush()
 
 
-class Quel1SeProtoAddaConfigSubsystem(
+class Quel1seProtoAddaConfigSubsystem(
     Quel1ConfigSubsystemRoot,
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
-    Quel1SeProtoAddaConfigSubsystemGpioMixin,
+    Quel1seProtoAddaConfigSubsystemGpioMixin,
+    Quel1ConfigSubsystemTempctrlMixin,
 ):
     __slots__ = ()
 
@@ -120,10 +122,11 @@ class Quel1SeProtoAddaConfigSubsystem(
         1: (1, "b01"),
     }
 
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], int] = {}
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]] = {}
     _MIXER_IDX: Dict[Tuple[int, int], int] = {}
-    _VATT_IDX: Dict[Tuple[int, int], int] = {}
+    _VATT_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {}
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {}
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]] = {}
 
     def __init__(
         self,
@@ -132,8 +135,8 @@ class Quel1SeProtoAddaConfigSubsystem(
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         Quel1ConfigSubsystemRoot.__init__(
@@ -143,8 +146,10 @@ class Quel1SeProtoAddaConfigSubsystem(
         self._construct_lmx2594()
         self._construct_gpio()
 
-    def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
-        return ExstickgeProxyQuel1SeProtoAdda(self._css_addr, port, timeout, sender_limit_by_binding)
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        return ExstickgeSockClientQuel1seProtoAdda(self._css_addr, port, timeout, sender_limit_by_binding)
 
     def configure_peripherals(
         self,
@@ -172,6 +177,7 @@ class Quel1SeProtoAddaConfigSubsystem(
         soft_reset: bool = False,
         mxfe_init: bool = False,
         use_204b: bool = True,
+        use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
     ) -> bool:
         self._validate_group(mxfe_idx)
@@ -183,12 +189,7 @@ class Quel1SeProtoAddaConfigSubsystem(
             logger.info(f"negating a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
             self.set_ad9082_hard_reset(mxfe_idx, False)
 
-        self.ad9082[mxfe_idx].initialize(reset=soft_reset, link_init=mxfe_init, use_204b=use_204b)
-        link_valid = self.ad9082[mxfe_idx].check_link_status(ignore_crc_error=ignore_crc_error)
-        if not link_valid:
-            if mxfe_init:
-                logger.warning(f"{self._css_addr}:AD9082-#{mxfe_idx} link-up failure")
-            else:
-                logger.warning(f"{self._css_addr}:AD9082-#{mxfe_idx} is not linked up yet")
-
-        return link_valid
+        self.ad9082[mxfe_idx].initialize(
+            reset=soft_reset, link_init=mxfe_init, use_204b=use_204b, use_bg_cal=use_bg_cal
+        )
+        return self.check_link_status(mxfe_idx, mxfe_init, ignore_crc_error)

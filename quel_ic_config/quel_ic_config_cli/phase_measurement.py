@@ -7,19 +7,24 @@ from typing import Any, Collection, Dict, Final, List, Mapping, Tuple, Union, ca
 
 import numpy as np
 import numpy.typing as npt
-from quel_cmod_scripting import QuelCmod
-from quel_pyxsdb import get_jtagterminal_port
 
-from quel_ic_config import QubeConfigSubsystem, Quel1BoxType, Quel1NormalThermistor, Quel1PathSelectorThermistor
-from quel_ic_config_utils import (
+from quel_cmod_scripting import QuelCmod
+from quel_ic_config import (
     CaptureReturnCode,
+    QubeConfigSubsystem,
+    Quel1BoxType,
     Quel1E7ResourceMapper,
+    Quel1NormalThermistor,
+    Quel1PathSelectorThermistor,
     Quel1WaveSubsystem,
+)
+from quel_ic_config_utils import (
     add_common_arguments,
     add_common_workaround_arguments,
     complete_ipaddrs,
     init_box_with_reconnect,
 )
+from quel_pyxsdb import get_jtagterminal_port
 
 DEFAULT_XSDB_PORT_FOR_CMOD: Final[int] = 36335
 DEFAULT_HWSVR_PORT_FOR_CMOD: Final[int] = 6121
@@ -248,14 +253,13 @@ def cli_body():
     #
     # Config (1/2) and Wave
     #
-    linkstat, css, wss, rmap, _, _ = init_box_with_reconnect(
+    linkstat, css, wss, rmap, _ = init_box_with_reconnect(
         ipaddr_wss=str(args.ipaddr_wss),
         ipaddr_sss=str(args.ipaddr_sss),
         ipaddr_css=str(args.ipaddr_css),
         boxtype=args.boxtype,
         mxfes_to_connect=mxfe_to_use,
         ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
-        refer_by_port=False,
     )
     if not isinstance(css, QubeConfigSubsystem):
         raise ValueError(f"unsupported boxtype: {args.boxtype}")

@@ -1,8 +1,7 @@
 import logging
 from typing import Any, Mapping
 
-from quel_ic_config import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config_utils import CaptureReturnCode
+from quel_ic_config import CaptureReturnCode, Quel1BoxType, Quel1ConfigOption
 from testlibs.general_looptest_common import BoxPool, PulseGen, find_chunks, init_pulsecap, init_pulsegen, plot_iqs
 
 COMMON_SETTINGS: Mapping[str, Any] = {
@@ -95,7 +94,8 @@ if __name__ == "__main__":
     boxpool = BoxPool(DEVICE_SETTINGS)
     boxpool.init(resync=True)
     pgs = init_pulsegen(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
-    cp = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cps = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cp = cps["CAPTURER"]
 
     cp.check_noise(show_graph=False)
     boxpool.measure_timediff(cp)
