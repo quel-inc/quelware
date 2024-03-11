@@ -8,8 +8,8 @@ proc graceful_quit {retval target msg} {
   quit $retval
 }
 
-if {$argc < 1} {
-  puts "usage: $argv0 ADAPTER_ID"
+if {$argc < 2} {
+  puts "usage: $argv0 SERVER_URI ADAPTER_ID"
   quit 1
 }
 
@@ -33,4 +33,4 @@ if {[string equal $dev ""]} {
 
 # reboot!
 boot_hw_device [lindex $dev 0]
-graceful_quit 0 $target "INFO: Rebooted successfully"
+graceful_quit 0 $target "XINFO: rebooted successfully"
