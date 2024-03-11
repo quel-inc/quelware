@@ -57,7 +57,7 @@ pip install -r requirements_simplemulti_classic.txt
 
 ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
 ```text
-pip install -r　requirements_simplemulti_classic.txt　-r requirements_dev_addon.txt
+pip install -r requirements_simplemulti_classic.txt -r requirements_dev_addon.txt
 ```
 
 #### `SIMPLEMULTI_STANDARD`の場合
@@ -68,7 +68,7 @@ pip install -r requirements_simplemulti_standard.txt
 
 ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
 ```text
-pip install -r　requirements_simplemulti_standard.txt　-r requirements_dev_addon.txt
+pip install -r requirements_simplemulti_standard.txt -r requirements_dev_addon.txt
 ```
 
 #### Feedback版のファームウェアを利用する場合（オプション）
@@ -82,7 +82,7 @@ pip install -r requirements_feedback.txt
 
 ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
 ```text
-pip install -r　requirements_feedback_classic.txt　-r requirements_dev_addon.txt
+pip install -r requirements_feedback_classic.txt -r requirements_dev_addon.txt
 ```
 
 ### quel_ic_config の再ビルド（オプション）
@@ -105,7 +105,7 @@ quel_ic_config のパッケージにはいくつかの便利なシェルコマ�
 次のコマンドで状態を確認できる。
 
 ```shell
-quel1_linkstatus  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
+quel1_linkstatus --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
 ```
 
 装置が正常な運用状態にあれば、次のような出力を得る。
