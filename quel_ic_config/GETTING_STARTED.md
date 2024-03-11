@@ -36,13 +36,13 @@ sudo apt install wget
 
 | ファームウェアの種類の名前　       | 概略                                                                                                     | 
 |----------------------|--------------------------------------------------------------------------------------------------------|
-| SIMPLEMULTI_CLASSIC  | 20240125より前のsimplemulti版ファームウェア <br> QuBE 及び QuEL-1 の出荷時ファームウェア。<br> SIMPLEMULTI_STANDARDへのアップグレートを推奨。 |
+| SIMPLEMULTI_CLASSIC  | 20240125より前のsimplemulti版ファームウェア <br> QuBE 及び QuEL-1 の出荷時ファームウェア。<br> SIMPLEMULTI_STANDARDへのアップグレードを推奨。 |
 | SIMPLEMULTI_STANDARD | 20240125以降のsimplemulti版ファームウェア <br> QuEL-1 SE 及び　NEC様向けモデルの標準ファームウェア                                   |
 | FEEDBACK | フィードバック研究用の実験なファームウェア（特定ユーザ様専用）|
 
 なお、装置にインストールされているファームウェアの種類は次のコマンドで確認できる。
 ```text
-helpers/detect_firmware_type.sh 10.1.0.xx
+helpers/detect_firmware_type.sh 10.1.0.xxx
 ```
 現状は、ファームウェアの種類の異なる装置を1つの仮想環境から使用することができない。
 この制限は、近い将来に撤廃される予定である。
@@ -367,7 +367,7 @@ abs(iq)
 
 ## 次のステップ
 最後に `getting_started_example.py` 以外の、より進んだ使用例のサンプルコードを紹介する。
-定数がハードコートされているなど、使い勝手にやや難はあるが、参考になると思う。
+定数がハードコードされているなど、使い勝手にやや難はあるが、参考になると思う。
 - [`general_loopback_test_update.py`](./testlibs/general_looptest_common_updated.py):  boxオブジェクトを使った信号発生と取得の例として分かりやすい。
 - [`simple_scheduled_loopback.py`](./scripts/simple_scheduled_loopback.py): boxオブジェクトを使って書き直すのが間に合っていないが、タイムトリガ実行のより実践的な例として有用。内部のカウンタを使って、一定間隔で5回、キャプチャを繰り返す。対象機体（10.1.0.74がハードコートされている）の2つのモニタアウトをコンバイナを介して、グループ0のRead-inに繋いだ状態で使う。 
 - [`twobox_scheduled_loopback.py`](./scripts/twobox_scheduled_loopback.py): `simple_scheduled_loopback.py`を複数の制御装置に拡張したもの。内部のカウンタを使って、2台の制御装置（10.1.0.74 と 10.1.0.58) を同期してキャプチャする。2台の制御装置の合計4つのモニタアウトをコンバイナを介して、1台目のグループ0のRead-inに繋いだ状態で使う。
