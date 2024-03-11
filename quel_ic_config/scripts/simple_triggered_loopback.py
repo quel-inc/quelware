@@ -1,8 +1,7 @@
 import logging
 from typing import Any, Mapping
 
-from quel_ic_config import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config_utils import CaptureReturnCode
+from quel_ic_config import CaptureReturnCode, Quel1BoxType, Quel1ConfigOption
 from testlibs.general_looptest_common import BoxPool, find_chunks, init_pulsecap, init_pulsegen, plot_iqs
 
 COMMON_SETTINGS: Mapping[str, Any] = {
@@ -35,7 +34,7 @@ DEVICE_SETTINGS: Mapping[str, Mapping[str, Any]] = {
     "SENDER0": {
         "box": "BOX0",
         "group": 1,
-        "line": 2,
+        "line": 0,
         "vatt": 0xA00,
         "wave_samples": 64,
         "num_repeats": (2, 1),
@@ -85,7 +84,8 @@ if __name__ == "__main__":
     boxpool = BoxPool(DEVICE_SETTINGS)
     boxpool.init(resync=True)
     pgs = init_pulsegen(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
-    cp = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cps = init_pulsecap(DEVICE_SETTINGS, COMMON_SETTINGS, boxpool)
+    cp = cps["CAPTURER"]
 
     cp.check_noise(show_graph=False)
 

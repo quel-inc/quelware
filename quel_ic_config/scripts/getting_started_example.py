@@ -1,8 +1,18 @@
 import logging
 
-from quel_ic_config_utils import create_box_objects
+from quel_ic_config import Quel1Box
 
 logger = logging.getLogger()
+
+
+def relinkup():
+    global box, args
+
+    is_quel1se = args.boxtype in {"quel1se-riken8", "x-quel1se-riken8"}
+    link_ok = box.relinkup(
+        use_204b=(not args.use_204c) if not is_quel1se else False,
+    )
+    return link_ok
 
 
 if __name__ == "__main__":
@@ -18,33 +28,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="check the basic functionalities of QuEL-1",
     )
-    add_common_arguments(parser, use_mxfe=True, allow_implicit_mxfe=True)
-    add_common_workaround_arguments(
-        parser, use_ignore_crc_error_of_mxfe=True, use_ignore_extraordinary_converter_select_of_mxfe=True
+    add_common_arguments(parser)
+    parser.add_argument(
+        "--use_204c",
+        action="store_true",
+        default=False,
+        help="enable JESD204C link calibration instead of the conventional 204B one",
     )
-    parser.add_argument("--dev", action="store_true", help="use (group, line, channel) instead of port")
-    parser.add_argument("--linkup", action="store_true", help="conducting link-up just after the initialization")
+    add_common_workaround_arguments(
+        parser, use_ignore_crc_error_of_mxfe=True, use_ignore_access_failure_of_adrf6780=True
+    )
     args = parser.parse_args()
     complete_ipaddrs(args)
 
-    css, wss, rmap, linkupper, box = create_box_objects(
+    box = Quel1Box.create(
         ipaddr_wss=str(args.ipaddr_wss),
         ipaddr_sss=str(args.ipaddr_sss),
         ipaddr_css=str(args.ipaddr_css),
         boxtype=args.boxtype,
         config_root=args.config_root,
         config_options=args.config_options,
-        refer_by_port=not args.dev,
+        ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
+        ignore_access_failure_of_adrf6780=args.ignore_access_failure_of_adrf6780,
     )
-
-    if box is not None:
-        status = box.init(
-            ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
-            ignore_extraordinary_converter_select_of_mxfe=args.ignore_extraordinary_converter_select_of_mxfe,
-        )
-
-        for mxfe_idx, s in status.items():
-            if not s:
-                logger.error(f"be aware that mxfe-#{mxfe_idx} is not linked-up properly")
-    else:
-        logger.error(f"boxtype {args.boxtype} is not ready for test with SimpleBox object.")
+    status = box.reconnect()
+    for mxfe_idx, s in status.items():
+        if not s:
+            logger.error(f"be aware that mxfe-#{mxfe_idx} is not linked-up properly")

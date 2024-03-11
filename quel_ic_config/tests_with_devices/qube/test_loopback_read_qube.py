@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from quel_ic_config_utils.simple_box import Quel1BoxType, Quel1ConfigOption, SimpleBoxIntrinsic, init_box_with_linkup
+from quel_ic_config.quel1_box import Quel1BoxIntrinsic
+from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -17,13 +18,15 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 DEVICE_SETTINGS = (
     {
         "label": "staging-017",
-        "config": {
+        "box_config": {
             "ipaddr_wss": "10.1.0.17",
             "ipaddr_sss": "10.2.0.17",
             "ipaddr_css": "10.5.0.17",
             "boxtype": Quel1BoxType.fromstr("qube-riken-a"),
             "config_root": None,
             "config_options": [Quel1ConfigOption.USE_READ_IN_MXFE0, Quel1ConfigOption.USE_READ_IN_MXFE1],
+        },
+        "linkup_config": {
             "mxfes_to_linkup": (0, 1),
             "use_204b": True,
         },
@@ -40,10 +43,10 @@ OUTPUT_SETTING = {
 def fixtures(request):
     param0 = request.param
 
-    linkstatus, _, _, _, _, box = init_box_with_linkup(**param0["config"], refer_by_port=False)
+    box = Quel1BoxIntrinsic.create(**param0["box_config"])
+    linkstatus = box.relinkup(**param0["linkup_config"])
     assert linkstatus[0]
     assert linkstatus[1]
-    assert isinstance(box, SimpleBoxIntrinsic)
     yield make_outdir(param0["label"]), box
 
     box.easy_stop_all()

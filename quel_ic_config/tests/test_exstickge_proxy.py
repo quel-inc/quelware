@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from quel_ic_config.exstickge_proxy import LsiKindId
-from quel_ic_config.quel1_config_subsystem import ExstickgeProxyQuel1
+from quel_ic_config.quel1_config_subsystem import ExstickgeSockClientQuel1
 
 
 # jig for unittest
@@ -42,7 +42,7 @@ def spkt(hexstring):
     ],
 )
 def test_wpakcet(lsitype, lsiidx, addr, value, pkt):
-    tgt = ExstickgeProxyQuel1("127.0.0.1")
+    tgt = ExstickgeSockClientQuel1("127.0.0.1")
     assert tgt._make_writepkt(lsitype, lsiidx, addr, value) == pkt
 
 
@@ -75,7 +75,7 @@ def test_wpakcet(lsitype, lsiidx, addr, value, pkt):
     ],
 )
 def test_rpakcet(lsitype, lsiidx, addr, pkt):
-    tgt = ExstickgeProxyQuel1("127.0.0.1")
+    tgt = ExstickgeSockClientQuel1("127.0.0.1")
     assert tgt._make_readpkt(lsitype, lsiidx, addr) == pkt
 
 
@@ -90,7 +90,7 @@ def test_loopback_write_normal(lsitype, lsiidx, addr, value, xrpl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 16384
     sock.bind(("127.0.0.1", port))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.write_reg, lsitype, lsiidx, addr, value)
@@ -112,7 +112,7 @@ def test_loopback_read_normal(lsitype, lsiidx, addr, value, xrpl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 16384
     sock.bind(("127.0.0.1", port))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.read_reg, lsitype, lsiidx, addr)
@@ -131,7 +131,7 @@ def test_loopback_read_normal(lsitype, lsiidx, addr, value, xrpl):
 )
 def test_loopback_write_timeout(lsitype, lsiidx, addr, value):
     port = 16384
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port, timeout=0.5)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port, timeout=0.5)
     assert not tgt.write_reg(lsitype, lsiidx, addr, value)
 
 
@@ -143,7 +143,7 @@ def test_loopback_write_timeout(lsitype, lsiidx, addr, value):
 )
 def test_loopback_read_timeout(lsitype, lsiidx, addr):
     port = 16384
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port, timeout=0.5)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port, timeout=0.5)
     assert tgt.read_reg(lsitype, lsiidx, addr) is None
 
 
@@ -158,7 +158,7 @@ def test_loopback_read_broken(lsitype, lsiidx, addr, value, xrpl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 16384
     sock.bind(("127.0.0.1", port))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port, timeout=2.0)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port, timeout=2.0)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.read_reg, lsitype, lsiidx, addr)
@@ -185,7 +185,7 @@ def test_loopback_write_broken(lsitype, lsiidx, addr, value, xrpl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 16384
     sock.bind(("127.0.0.1", port))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port, timeout=2.0)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port, timeout=2.0)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.write_reg, lsitype, lsiidx, addr, value)
@@ -211,7 +211,7 @@ def test_loopback_write_broken_toomany(lsitype, lsiidx, addr, value, xrpl):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 16384
     sock.bind(("127.0.0.1", port))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.write_reg, lsitype, lsiidx, addr, value)
@@ -240,7 +240,7 @@ def test_loopback_read_bogus_host(lsitype, lsiidx, addr, value, xrpl):
     sock1.bind(("127.0.0.1", port))
     sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock2.bind(("127.1.0.1", 0))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.read_reg, lsitype, lsiidx, addr)
@@ -269,7 +269,7 @@ def test_loopback_read_bogus_port(lsitype, lsiidx, addr, value, xrpl):
     sock1.bind(("127.0.0.1", port))
     sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock2.bind(("127.0.0.1", 0))
-    tgt = ExstickgeProxyQuel1("127.0.0.1", port)
+    tgt = ExstickgeSockClientQuel1("127.0.0.1", port)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(tgt.read_reg, lsitype, lsiidx, addr)

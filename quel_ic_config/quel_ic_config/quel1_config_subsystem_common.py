@@ -12,16 +12,23 @@ from pydantic.v1.utils import deep_update
 from quel_ic_config.ad5328 import Ad5328ConfigHelper
 from quel_ic_config.ad9082_v106 import NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband
-from quel_ic_config.exstickge_proxy import _ExstickgeProxyBase
+from quel_ic_config.exstickge_sock_client import _ExstickgeProxyBase
 from quel_ic_config.generic_gpio import GenericGpioConfigHelper
 from quel_ic_config.lmx2594 import Lmx2594ConfigHelper
+from quel_ic_config.mixerboard_gpio import MixerboardGpioConfigHelper
+from quel_ic_config.pathselectorboard_gpio import PathselectorboardGpioConfigHelper
+from quel_ic_config.powerboard_pwm import PowerboardPwmConfigHelper
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 from quel_ic_config.quel_ic import (
     Ad5328,
+    Ad7490,
     Ad9082V106,
     Adrf6780,
     GenericGpio,
     Lmx2594,
+    MixerboardGpio,
+    PathselectorboardGpio,
+    PowerboardPwm,
     QubeRfSwitchArray,
     Quel1TypeARfSwitchArray,
     Quel1TypeBRfSwitchArray,
@@ -47,11 +54,20 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         "_adrf6780_helper",
         "_ad5328",
         "_ad5328_helper",
+        "_ad7490",
         "_rfswitch",
         "_rfswitch_gpio_idx",
         "_rfswitch_helper",
         "_gpio",
         "_gpio_helper",
+        "_mixerboard_gpio",
+        "_mixerboard_gpio_helper",
+        "_pathselectorboard_gpio",
+        "_pathselectorboard_gpio_helper",
+        "_powerboard_pwm",
+        "_powerboard_pwm_helper",
+        "_tempctrl_watcher",
+        "_tempctrl_auto_start_at_linkup",
     )
 
     _DEFAULT_CONFIG_JSONFILE: str
@@ -99,6 +115,14 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
     def _validate_mxfe(self, mxfe_idx: int) -> None:
         if mxfe_idx not in self._MXFE_IDXS:
             raise ValueError("an invalid mxfe: {mxfe_idx}")
+
+    def get_all_any_lines(self) -> Set[Tuple[int, Union[int, str]]]:
+        any_lines: Set[Tuple[int, Union[int, str]]] = set()
+        for g, l in self._DAC_IDX:
+            any_lines.add((g, l))
+        for g, rl in self._ADC_IDX:
+            any_lines.add((g, rl))
+        return any_lines
 
     def get_all_lines_of_group(self, group: int) -> Set[int]:
         self._validate_group(group)
@@ -159,8 +183,8 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = 16384,
-        timeout: float = 0.5,
+        port: int = _ExstickgeProxyBase._DEFAULT_PORT,
+        timeout: float = _ExstickgeProxyBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         super(Quel1ConfigSubsystemRoot, self).__init__()
@@ -200,7 +224,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
                     v = [v]
                 if not isinstance(v, list):
                     raise TypeError(f"invalid type of 'boxtype': {k}")
-                if self._boxtype.value[1] not in v:
+                if self.boxtype.value[1] not in v:
                     flag = False
             elif k == "option":  # AND
                 if isinstance(v, str):
@@ -267,7 +291,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
 
     def _load_config(self) -> Dict[str, Any]:
         logger.info(f"loading configuration settings from '{self._config_path / self._DEFAULT_CONFIG_JSONFILE}'")
-        logger.info(f"boxtype = {self._boxtype}")
+        logger.info(f"boxtype = {self.boxtype}")
         logger.info(f"config_options = {self._config_options}")
         fired_options: Set[Quel1ConfigOption] = set()
 
@@ -299,6 +323,12 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
                 logger.warning(f"config option '{str(option)}' is not applicable")
 
         return config
+
+    @property
+    def boxtype(self) -> Quel1BoxType:
+        # Notes: at the css layer, boxtype is Quel1BoxType.
+        #        at the box layer, boxtype is its alias in string.
+        return self._boxtype
 
     @property
     def ipaddr_css(self) -> str:
@@ -339,6 +369,7 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         soft_reset: bool,
         mxfe_init: bool,
         use_204b: bool,
+        use_bg_cal: bool,
         ignore_crc_error: bool,
     ) -> bool:
         """configure an MxFE and its related data objects. PLLs for their clock must be set up in advance.
@@ -354,6 +385,9 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         """
         pass
 
+    def terminate(self):
+        self._proxy.terminate()
+
 
 class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
@@ -365,9 +399,55 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     def ad9082(self) -> Tuple[Ad9082V106, ...]:
         return self._ad9082
 
+    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool:
+        link_status, crc_flag = self.ad9082[mxfe_idx].get_link_status()
+        judge: bool = False
+        if link_status == 0xE0:
+            if crc_flag == 0x01:
+                judge = True
+            elif crc_flag == 0x11 and ignore_crc_error:
+                judge = True
+
+        if judge:
+            if crc_flag == 0x01:
+                if mxfe_init:
+                    logger.info(
+                        f"{self._css_addr}:AD9082-#{mxfe_idx} links up successfully "
+                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                    )
+                else:
+                    logger.info(
+                        f"{self._css_addr}:AD9082-#{mxfe_idx} has linked up healthy "
+                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                    )
+            else:
+                if mxfe_init:
+                    logger.warning(
+                        f"{self._css_addr}:AD9082-#{mxfe_idx} links up successfully with ignored crc error "
+                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                    )
+                else:
+                    logger.warning(
+                        f"{self._css_addr}:AD9082-#{mxfe_idx} has linked up with ignored crc error "
+                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                    )
+        else:
+            if mxfe_init:
+                logger.warning(
+                    f"{self._css_addr}:AD9082-#{mxfe_idx} fails to link up "
+                    f"(link_status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                )
+            else:
+                logger.warning(
+                    f"{self._css_addr}:AD9082-#{mxfe_idx} has not linked up yet "
+                    f"(link_status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
+                )
+
+        return judge
+
     def _validate_frequency_info(
-        self, mxfe_idx: int, freq_type: str, freq_in_hz: Union[int, None], ftw: Union[NcoFtw, None]
-    ) -> Tuple[int, NcoFtw]:
+        self, mxfe_idx: int, freq_type: str, freq_in_hz: Union[float, None], ftw: Union[NcoFtw, None]
+    ) -> Tuple[float, NcoFtw]:
         # Notes: Assuming that group is already validated.
         # Notes: decimation rates can be different among DACs, however,
         #        QuEL-1 doesn't allow such configuration currently.
@@ -390,16 +470,15 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
                 raise TypeError("unexpected ftw is given")
             # Notes: freq_in_hz is computed back from ftw for logger messages.
             if freq_type == "dac_cnco":
-                freq_in_hz_ = self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
+                freq_in_hz = self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
             elif freq_type == "dac_fnco":
-                freq_in_hz_ = self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
+                freq_in_hz = self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
             elif freq_type == "adc_cnco":
                 raise NotImplementedError
             elif freq_type == "adc_fnco":
                 raise NotImplementedError
             else:
                 raise ValueError(f"invalid freq_type: {freq_type}")
-            freq_in_hz = int(freq_in_hz_ + 0.5)
         else:
             raise AssertionError  # never happens
 
@@ -438,7 +517,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         return self._get_rchannels_of_rline(group, rline)[rchannel]
 
     def set_dac_cnco(
-        self, group: int, line: int, freq_in_hz: Union[int, None] = None, ftw: Union[NcoFtw, None] = None
+        self, group: int, line: int, freq_in_hz: Union[float, None] = None, ftw: Union[NcoFtw, None] = None
     ) -> None:
         """setting CNCO frequency of a transmitter line.
 
@@ -467,8 +546,17 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         ftw = self.ad9082[mxfe_idx].get_dac_cnco(dac_idx)
         return self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
 
+    def is_equivalent_dac_cnco(self, group: int, line: int, freq0: float, freq1: float) -> bool:
+        mxfe_idx, _ = self._get_dac_idx(group, line)
+        return self.ad9082[mxfe_idx].is_equivalent_dac_cnco(freq0, freq1)
+
     def set_dac_fnco(
-        self, group: int, line: int, channel: int, freq_in_hz: Union[int, None] = None, ftw: Union[NcoFtw, None] = None
+        self,
+        group: int,
+        line: int,
+        channel: int,
+        freq_in_hz: Union[float, None] = None,
+        ftw: Union[NcoFtw, None] = None,
     ) -> None:
         """setting FNCO frequency of the transmitter channel.
 
@@ -501,8 +589,12 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         ftw = self.ad9082[mxfe_idx].get_dac_fnco(fnco_idx)
         return self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
 
+    def is_equivalent_dac_fnco(self, group: int, line: int, freq0: float, freq1: float) -> bool:
+        mxfe_idx, _ = self._get_dac_idx(group, line)
+        return self.ad9082[mxfe_idx].is_equivalent_dac_fnco(freq0, freq1)
+
     def set_adc_cnco(
-        self, group: int, rline: str, freq_in_hz: Union[int, None] = None, ftw: Union[NcoFtw, None] = None
+        self, group: int, rline: str, freq_in_hz: Union[float, None] = None, ftw: Union[NcoFtw, None] = None
     ):
         """setting CNCO frequency of a receiver line.
 
@@ -531,12 +623,16 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         ftw = self.ad9082[mxfe_idx].get_adc_cnco(adc_idx)
         return self.ad9082[mxfe_idx].calc_adc_cnco_freq(ftw)
 
+    def is_equivalent_adc_cnco(self, group: int, rline: str, freq0: float, freq1: float) -> bool:
+        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        return self.ad9082[mxfe_idx].is_equivalent_adc_cnco(freq0, freq1)
+
     def set_adc_fnco(
         self,
         group: int,
         rline: str,
         rchannel: int,
-        freq_in_hz: Union[int, None] = None,
+        freq_in_hz: Union[float, None] = None,
         ftw: Union[NcoFtw, None] = None,
     ):
         """setting FNCO frequency of a receiver channel.
@@ -569,6 +665,33 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         fnco_idx = self._get_adc_rch_idx(group, rline, rchannel)
         ftw = self.ad9082[mxfe_idx].get_adc_fnco(fnco_idx)
         return self.ad9082[mxfe_idx].calc_adc_fnco_freq(ftw)
+
+    def is_equivalent_adc_fnco(self, group: int, rline: str, freq0: float, freq1: float) -> bool:
+        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        return self.ad9082[mxfe_idx].is_equivalent_adc_fnco(freq0, freq1)
+
+    def set_pair_cnco(self, group_dac: int, line_dac: int, group_adc: int, rline_adc: str, freq_in_hz: float) -> None:
+        dac_mxfe_idx, dac_idx = self._get_dac_idx(group_dac, line_dac)
+        adc_mxfe_idx, adc_idx = self._get_adc_idx(group_adc, rline_adc)
+
+        dac_clk = self.ad9082[dac_mxfe_idx].device.dev_info.dac_freq_hz
+        adc_clk = self.ad9082[adc_mxfe_idx].device.dev_info.adc_freq_hz
+        # TODO: relax constrains by-need basis.
+        if dac_clk % adc_clk != 0:
+            raise RuntimeError("ratio of dac_clk (= {dac_clk}Hz) and adc_clk (= {adc_clk}Hz) is not N:1")
+        ratio: int = dac_clk // adc_clk
+
+        freq_in_hz_, dac_ftw = self._validate_frequency_info(dac_mxfe_idx, "dac_cnco", freq_in_hz, None)
+        adc_ftw = NcoFtw()
+        adc_ftw.ftw = dac_ftw.ftw * ratio
+        logger.info(
+            f"DAC-CNCO{dac_idx} of MxFE{dac_mxfe_idx} and ADC-CNCO{adc_idx} of MxFE{adc_mxfe_idx} of {self._css_addr} "
+            f"are set to {freq_in_hz_}Hz "
+            f"(dac_ftw = {dac_ftw.ftw}, {dac_ftw.delta_a}, {dac_ftw.modulus_b})"
+            f"(adc_ftw = {adc_ftw.ftw}, {adc_ftw.delta_a}, {adc_ftw.modulus_b})"
+        )
+        self.ad9082[dac_mxfe_idx].set_dac_cnco({dac_idx}, dac_ftw)
+        self.ad9082[adc_mxfe_idx].set_adc_cnco({adc_idx}, adc_ftw)
 
     def get_link_status(self, mxfe_idx: int) -> Tuple[int, int]:
         """getting the status of the datalink between a MxFE in a group and the FPGA.
@@ -641,10 +764,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
 class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
-    MIN_FREQ_MULTIPLIER: Final[int] = 75
-    MAX_FREQ_MULTIPLIER: Final[int] = 150
-
-    _LO_IDX: Dict[Tuple[int, Union[int, str]], int]
+    _LO_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]]  # (group, line) --> (idx_of_ic, idx_of_output)
 
     def _construct_lmx2594(self):
         self._lmx2594: Tuple[Lmx2594, ...] = tuple(Lmx2594(self._proxy, idx) for idx in range(self._NUM_IC["lmx2594"]))
@@ -676,12 +796,6 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
                 raise RuntimeError(f"failed to lock PLL of {self._css_addr}:LMX2594-#{idx}")
         return is_locked
 
-    def _validate_freq_multiplier(self, freq_multiplier: int):
-        if not isinstance(freq_multiplier, int):
-            raise TypeError(f"unexpected frequency multiplier: {freq_multiplier}")
-        if not (self.MIN_FREQ_MULTIPLIER <= freq_multiplier <= self.MAX_FREQ_MULTIPLIER):
-            raise TypeError(f"invalid frequency multiplier: {freq_multiplier}")
-
     def set_lo_multiplier(self, group: int, line: Union[int, str], freq_multiplier: int) -> bool:
         """setting the frequency multiplier of a PLL of a line.
 
@@ -692,15 +806,11 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         self._validate_line_or_rline(group, line)
         if (group, line) not in self._LO_IDX:
-            raise ValueError("no LO is available for (group{group}, line{line})")
-        lo_idx: int = self._LO_IDX[(group, line)]
-        self._validate_freq_multiplier(freq_multiplier)
-
+            raise ValueError(f"no LO is available for (group:{group}, line:{line})")
+        lo_idx, _ = self._LO_IDX[(group, line)]
+        ic = self._lmx2594[lo_idx]
+        ic.set_lo_multiplier(freq_multiplier)
         logger.info(f"updating LO frequency[{lo_idx}] of {self._css_addr} to {freq_multiplier * 100}MHz")
-        ic, helper = self._lmx2594[lo_idx], self._lmx2594_helper[lo_idx]
-        helper.write_field("R34", pll_n_18_16=(freq_multiplier >> 16) & 0x0007)
-        helper.write_field("R36", pll_n=(freq_multiplier & 0xFFFF))
-        helper.flush()
         return ic.calibrate()
 
     def get_lo_multiplier(self, group: int, line: Union[int, str]) -> int:
@@ -712,11 +822,52 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         self._validate_line_or_rline(group, line)
         if (group, line) not in self._LO_IDX:
-            raise ValueError("no LO is available for (group{group}, line{line})")
-        lo_idx: int = self._LO_IDX[(group, line)]
+            raise ValueError(f"no LO is available for (group:{group}, line:{line})")
+        lo_idx, _ = self._LO_IDX[(group, line)]
+        return self._lmx2594[lo_idx].get_lo_multiplier()
 
-        helper = self._lmx2594_helper[lo_idx]
-        return (getattr(helper.read_reg("R34"), "pll_n_18_16") << 16) + getattr(helper.read_reg("R36"), "pll_n")
+    def set_divider_ratio(self, group: int, line: Union[int, str], divide_ratio: int) -> None:
+        """setting the output frequency divide ration of a line.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line which the PLL belongs to.
+        :param divide_ratio: a ratio of the frequency output divider.
+        """
+        self._validate_line_or_rline(group, line)
+        if (group, line) not in self._LO_IDX:
+            raise ValueError(f"no LO is available for (group:{group}, line:{line})")
+        if divide_ratio < 1:
+            raise ValueError(f"invalid divide ratio {divide_ratio} for (group:{group}, line:{line})")
+
+        lo_idx, outpin = self._LO_IDX[(group, line)]
+        ic = self._lmx2594[lo_idx]
+        current_ratios = ic.get_divider_ratio()
+        modified_ratios = list(current_ratios)
+        # Notes: both output pin should generate the same freq (an unused outpin is kept as is.)
+        for i, ratio in enumerate(current_ratios):
+            if ratio != 0:
+                modified_ratios[i] = divide_ratio
+        ic.set_divider_ratio(*modified_ratios)
+        logger.info(
+            f"updating frequency divide ratio of (group:{group}, line:{line}) of {self._css_addr} to {divide_ratio}"
+        )
+
+    def get_divider_ratio(self, group: int, line: Union[int, str]) -> int:
+        """get the current output frequency divide ratio of a line.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line which the PLL belongs to.
+        :return: the current frequency divide ratio of the output
+        """
+        self._validate_line_or_rline(group, line)
+        if (group, line) not in self._LO_IDX:
+            raise ValueError("no LO is available for (group:{group}, line:{line})")
+        lo_idx, outpin = self._LO_IDX[(group, line)]
+
+        ic = self._lmx2594[lo_idx]
+        if outpin not in {0, 1}:
+            raise AssertionError(f"invalid outpin '{outpin}' is specified in class definition")
+        return ic.get_divider_ratio()[outpin]
 
 
 class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
@@ -804,7 +955,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         mixer_idx = self._get_mixer_idx(group, line)
         if mixer_idx is None:
-            raise ValueError(f"no mixer is available for (group{group}, line{line})")
+            raise ValueError(f"no mixer is available for (group:{group}, line:{line})")
 
         ic = self._adrf6780[mixer_idx]
         ssb = ic.get_lo_sideband()
@@ -887,6 +1038,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]]
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]]
 
     # TODO: this is not good with respect to the hierarchical structure.
     def _construct_rfswitch(self, gpio_idx: int):
@@ -920,7 +1072,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
             helper.write_field(name, **fields)
         helper.flush()
 
-    def _alternate_loop_rfswitch(self, group: int, **sw_update: bool) -> None:
+    def _alternate_rfswitch(self, group: int, **sw_update: bool) -> None:
         # Note: assuming that group is already validated.
         ic, helper = self._rfswitch, self._rfswitch_helper
         current_sw: int = ic.read_reg(0)
@@ -928,7 +1080,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         helper.flush()
         altered_sw: int = ic.read_reg(0)
         time.sleep(0.01)
-        logger.info(
+        logger.debug(
             f"alter the state of RF switch array of {self._css_addr} from {current_sw:014b} to {altered_sw:014b}"
         )
 
@@ -937,6 +1089,9 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
             return self._RFSWITCH_NAME[(group, line)]
         else:
             raise ValueError("no switch available for group:{group}, line:{line}")
+
+    def is_subordinate_rfswitch(self, group: int, line: Union[int, str]) -> bool:
+        return (group, line) in self._RFSWITCH_SUBORDINATE_OF
 
     def pass_line(self, group: int, line: Union[int, str]) -> None:
         """allowing a line to emit RF signal from its corresponding SMA connector.
@@ -947,7 +1102,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"making (group:{group}, line:{line}) passing")
         swgroup, swname = self._get_rfswitch_name(group, line)
-        self._alternate_loop_rfswitch(swgroup, **{swname: False})
+        self._alternate_rfswitch(swgroup, **{swname: False})
 
     def block_line(self, group: int, line: Union[int, str]) -> None:
         """blocking a line to emit RF signal from its corresponding SMA connector.
@@ -958,7 +1113,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"making (group:{group}, line:{line}) blocked")
         swgroup, swname = self._get_rfswitch_name(group, line)
-        self._alternate_loop_rfswitch(swgroup, **{swname: True})
+        self._alternate_rfswitch(swgroup, **{swname: True})
 
     def is_blocked_line(self, group: int, line: Union[int, str]) -> bool:
         """checking if the emission of RF signal of a line is blocked or not.
@@ -987,7 +1142,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"activate monitor loop (group:{group})")
         swgroup, swname = self._get_rfswitch_name(group, "m")
-        self._alternate_loop_rfswitch(swgroup, **{swname: True})
+        self._alternate_rfswitch(swgroup, **{swname: True})
 
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal loop-back of a monitor path of a group.
@@ -997,7 +1152,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"deactivate monitor loop (group:{group})")
         swgroup, swname = self._get_rfswitch_name(group, "m")
-        self._alternate_loop_rfswitch(swgroup, **{swname: False})
+        self._alternate_rfswitch(swgroup, **{swname: False})
 
     def is_loopedback_monitor(self, group: int) -> bool:
         """checking if a monitor loop-back path of a group is activated or not.
@@ -1016,7 +1171,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"activate read loop (group:{group})")
         swgroup, swname = self._get_rfswitch_name(group, "r")
-        self._alternate_loop_rfswitch(swgroup, **{swname: True})
+        self._alternate_rfswitch(swgroup, **{swname: True})
 
     def deactivate_read_loop(self, group: int) -> None:
         """disabling an internal loop-back of a read path of a group.
@@ -1026,7 +1181,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         logger.info(f"deactivate read loop (group:{group})")
         swgroup, swname = self._get_rfswitch_name(group, "r")
-        self._alternate_loop_rfswitch(swgroup, **{swname: False})
+        self._alternate_rfswitch(swgroup, **{swname: False})
 
     def is_loopedback_read(self, group: int) -> bool:
         """checking if a read loop-back path of a group is activated or not.
@@ -1061,3 +1216,221 @@ class Quel1ConfigSubsystemGpioMixin(Quel1ConfigSubsystemBaseSlot):
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
+
+
+class Quel1ConfigSubsystemMixerboardGpioMixin(Quel1ConfigSubsystemBaseSlot):
+    __slots__ = ()
+
+    def _construct_mixerboard_gpio(self):
+        self._mixerboard_gpio: Tuple[MixerboardGpio, ...] = tuple(
+            MixerboardGpio(self._proxy, idx) for idx in range(self._NUM_IC["mixerboard_gpio"])
+        )
+
+        self._mixerboard_gpio_helper: Tuple[MixerboardGpioConfigHelper, ...] = tuple(
+            MixerboardGpioConfigHelper(ic) for ic in self._mixerboard_gpio
+        )
+
+    @property
+    def mixerboard_gpio(self) -> Tuple[MixerboardGpio, ...]:
+        return self._mixerboard_gpio
+
+    @property
+    def mixerboard_gpio_helper(self) -> Tuple[MixerboardGpioConfigHelper, ...]:
+        return self._mixerboard_gpio_helper
+
+    def init_mixerboard_gpio(self, idx) -> None:
+        helper = self.mixerboard_gpio_helper[idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["mixerboard_gpio"][idx]
+        for name, fields in param["registers"].items():
+            helper.write_field(name, **fields)
+        helper.flush()
+
+
+# TODO: reconsider the design, this looks too wet.
+class Quel1ConfigSubsystemPathselectorboardGpioMixin(Quel1ConfigSubsystemBaseSlot):
+    __slots__ = ()
+
+    _RFSWITCH_IDX: Dict[Tuple[int, Union[int, str]], Tuple[int, int]]
+    _RFSWITCH_SUBORDINATE_OF: Dict[Tuple[int, Union[int, str]], Tuple[int, Union[int, str]]]
+
+    def _construct_pathselectorboard_gpio(self):
+        self._pathselectorboard_gpio: Tuple[PathselectorboardGpio, ...] = tuple(
+            PathselectorboardGpio(self._proxy, idx) for idx in range(self._NUM_IC["pathselectorboard_gpio"])
+        )
+
+        self._pathselectorboard_gpio_helper: Tuple[PathselectorboardGpioConfigHelper, ...] = tuple(
+            PathselectorboardGpioConfigHelper(ic) for ic in self._pathselectorboard_gpio
+        )
+
+    @property
+    def pathselectorboard_gpio(self) -> Tuple[PathselectorboardGpio, ...]:
+        return self._pathselectorboard_gpio
+
+    @property
+    def pathselectorboard_gpio_helper(self) -> Tuple[PathselectorboardGpioConfigHelper, ...]:
+        return self._pathselectorboard_gpio_helper
+
+    def init_pathselectorboard_gpio(self, idx) -> None:
+        helper = self.pathselectorboard_gpio_helper[idx]
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["pathselectorboard_gpio"][idx]
+        for name, fields in param["registers"].items():
+            helper.write_field(name, **fields)
+        helper.flush()
+
+    def is_subordinate_rfswitch(self, group: int, line: Union[int, str]) -> bool:
+        return (group, line) in self._RFSWITCH_SUBORDINATE_OF
+
+    def _alternate_rfswitch(self, idx: int, **sw_update: bool) -> None:
+        # Note: assuming that group is already validated.
+        ic, helper = self._pathselectorboard_gpio, self._pathselectorboard_gpio_helper
+        current_sw: int = ic[idx].read_reg(0)
+        helper[idx].write_field(0, **sw_update)
+        helper[idx].flush()
+        altered_sw: int = ic[idx].read_reg(0)
+        time.sleep(0.01)
+        logger.debug(
+            f"alter the state of RF switch array {idx} of {self._css_addr} from {current_sw:06b} to {altered_sw:06b}"
+        )
+
+    def _get_rfswitch_name(self, group: int, line: Union[int, str]) -> Tuple[int, str]:
+        if (group, line) in self._RFSWITCH_IDX:
+            idx, bit = self._RFSWITCH_IDX[(group, line)]
+            return idx, f"b{bit:02}"
+        else:
+            raise ValueError("no switch available for group:{group}, line:{line}")
+
+    def pass_line(self, group: int, line: Union[int, str]) -> None:
+        """allowing a line to emit RF signal from its corresponding SMA connector.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: None
+        """
+        logger.info(f"making (group:{group}, line:{line}) passing")
+        swgroup, swname = self._get_rfswitch_name(group, line)
+        self._alternate_rfswitch(swgroup, **{swname: False})
+
+    def block_line(self, group: int, line: Union[int, str]) -> None:
+        """blocking a line to emit RF signal from its corresponding SMA connector.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: None
+        """
+        logger.info(f"making (group:{group}, line:{line}) blocked")
+        swgroup, swname = self._get_rfswitch_name(group, line)
+        self._alternate_rfswitch(swgroup, **{swname: True})
+
+    def is_blocked_line(self, group: int, line: Union[int, str]) -> bool:
+        """checking if the emission of RF signal of a line is blocked or not.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: True if the RF signal emission from its corresponding SMA connector is blocked.
+        """
+        swgroup, swname = self._get_rfswitch_name(group, line)
+        return getattr(self._pathselectorboard_gpio_helper[swgroup].read_reg(0), swname)
+
+    def is_passed_line(self, group: int, line: Union[int, str]) -> bool:
+        """checking if the emission of RF signal from a line is passed or not.
+
+        :param group: an index of a group which the line belongs to.
+        :param line: a group-local index of the line.
+        :return: True if the RF signal emission from its corresponding SMA connector is passed.
+        """
+        return not self.is_blocked_line(group, line)
+
+    def activate_monitor_loop(self, group: int) -> None:
+        """enabling an internal loop-back of a monitor path of a group, from monitor-out to monitor-in.
+
+        :param group: an index of the group.
+        :return: None
+        """
+        logger.info(f"activate monitor loop (group:{group})")
+        swgroup, swname = self._get_rfswitch_name(group, "m")
+        self._alternate_rfswitch(swgroup, **{swname: True})
+
+    def deactivate_monitor_loop(self, group: int) -> None:
+        """disabling an internal loop-back of a monitor path of a group.
+
+        :param group: an index of the group.
+        :return: None
+        """
+        logger.info(f"deactivate monitor loop (group:{group})")
+        swgroup, swname = self._get_rfswitch_name(group, "m")
+        self._alternate_rfswitch(swgroup, **{swname: False})
+
+    def is_loopedback_monitor(self, group: int) -> bool:
+        """checking if a monitor loop-back path of a group is activated or not.
+
+        :param group: an index of the group.
+        :return: True if the monitor loop-back path of the group is activated.
+        """
+        swgroup, swname = self._get_rfswitch_name(group, "m")
+        return getattr(self._pathselectorboard_gpio_helper[swgroup].read_reg(0), swname)
+
+    def activate_read_loop(self, group: int) -> None:
+        """enabling an internal loop-back of a read path of a group, from monitor-out to monitor-in.
+
+        :param group: an index of the group.
+        :return: None
+        """
+        logger.info(f"activate read loop (group:{group})")
+        swgroup, swname = self._get_rfswitch_name(group, "r")
+        self._alternate_rfswitch(swgroup, **{swname: True})
+
+    def deactivate_read_loop(self, group: int) -> None:
+        """disabling an internal loop-back of a read path of a group.
+
+        :param group: an index of the group.
+        :return: None
+        """
+        logger.info(f"deactivate read loop (group:{group})")
+        swgroup, swname = self._get_rfswitch_name(group, "r")
+        self._alternate_rfswitch(swgroup, **{swname: False})
+
+    def is_loopedback_read(self, group: int) -> bool:
+        """checking if a read loop-back path of a group is activated or not.
+
+        :param group: an index of the group.
+        :return: True if the read loop-back path of the group is activated.
+        """
+        swgroup, swname = self._get_rfswitch_name(group, "r")
+        return getattr(self._pathselectorboard_gpio_helper[swgroup].read_reg(0), swname)
+
+
+class Quel1ConfigSubsystemAd7490Mixin(Quel1ConfigSubsystemBaseSlot):
+    __slots__ = ()
+
+    def _construct_ad7490(self):
+        self._ad7490: Tuple[Ad7490, ...] = tuple(Ad7490(self._proxy, idx) for idx in range(self._NUM_IC["ad7490"]))
+
+    @property
+    def ad7490(self) -> Tuple[Ad7490, ...]:
+        return self._ad7490
+
+    def init_ad7490(self, idx) -> None:
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["ad7490"][idx]
+        self._ad7490[idx].set_default_config(**param["registers"]["Config"])
+        # Notes: default_config is not applied to the IC now because it'll be applied just before reading channels.
+
+
+class Quel1ConfigSubsystemPowerboardPwmMixin(Quel1ConfigSubsystemBaseSlot):
+    __slots__ = ()
+
+    def _construct_powerboard_pwm(self):
+        self._powerboard_pwm: Tuple[PowerboardPwm, ...] = tuple(
+            PowerboardPwm(self._proxy, idx) for idx in range(self._NUM_IC["powerboard_pwm"])
+        )
+
+        self._powerboard_pwm_helper: Tuple[PowerboardPwmConfigHelper, ...] = tuple(
+            PowerboardPwmConfigHelper(ic) for ic in self._powerboard_pwm
+        )
+
+    @property
+    def powerboard_pwm(self) -> Tuple[PowerboardPwm, ...]:
+        return self._powerboard_pwm
+
+    @property
+    def powerboard_pwm_helper(self) -> Tuple[PowerboardPwmConfigHelper, ...]:
+        return self._powerboard_pwm_helper

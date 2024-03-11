@@ -153,7 +153,7 @@ class XsctClient:
     ) -> int:
         rc, msg = self.exec("targets -target-properties")
         if not rc:
-            raise RuntimeError("'targets -target-properties' is failed due with a message '{msg}'")
+            raise RuntimeError(f"'targets -target-properties' is failed due with a message '{msg}'")
         if len(msg) != 1:
             raise RuntimeError(f"unexpected output of 'targets -target-properties': {msg}")
 

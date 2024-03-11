@@ -82,7 +82,7 @@ class SequencerClient(SimpleUdpClient):
                 except struct.error as e:
                     logger.error(e)
             else:
-                logger.warning("unexpected reply packet starting with {reply[0]:02x} is received")
+                logger.warning(f"unexpected reply packet starting with {reply[0]:02x} is received")
 
         return flag, clock, sysref_latch
 

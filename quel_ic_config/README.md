@@ -40,8 +40,10 @@ QuEL-1 の元になった制御装置で、最初期型の QuBE-OU と、その�
 - QuEL-1 最初期型: `qube-riken-a`
 - QuEL-1 標準型： `quel1-a` または `quel1-b`
 - QuEL-1 7GHzモデル： `quel1-a`  (将来的に対応周波数帯域の差をケアするコマンドを実装する際には、`quel1-ntt` を新設する。）
-- QuBE-OU: `qube-ou-a` または、`qube-ou-b`
-- QuBE-RIKEN:  `qube-riken-a` または、`qube-riken-b`
+- QuEL-1 NEC モデル: `quel1-nec`
+- QuBE
+  - QuBE-OU: `qube-ou-a` または、`qube-ou-b`
+  - QuBE-RIKEN:  `qube-riken-a` または、`qube-riken-b`
 
 これら以外の識別子は開発用途のものなので、サポート対象外である。
   
