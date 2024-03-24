@@ -233,8 +233,7 @@ def program_exstickge_zephyr_common(bitfile_name: str):
     try:
         ebitpath = obj.make_embedded_bit(bitpath=bitfile, mmipath=mmifile, elfpath=eelfpath)
         mcspath = obj.make_mcs_with_macaddr(bitpath=ebitpath, macaddrpath=macaddrpath)
-        obj.program(mcspath, args.host, args.port, args.adapter)
-        obj.reboot(args.host, args.port, args.adapter)
+        obj.program(mcspath, args.host, args.port, args.adapter, "Digilent/JTAG-HS2/")
     except Exception as e:
         logger.error(e)
         sys.exit(1)

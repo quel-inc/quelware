@@ -12,9 +12,9 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.85",
-            "ipaddr_sss": "10.2.0.85",
-            "ipaddr_css": "10.5.0.85",
+            "ipaddr_wss": "10.1.0.94",
+            "ipaddr_sss": "10.2.0.94",
+            "ipaddr_css": "10.5.0.94",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
             "config_root": None,
             "config_options": [],
@@ -56,9 +56,9 @@ def test_just_run_apis(box):
     box.initialize_all_awgs()
 
     box.prepare_for_emission({(1, 0)})
-    with pytest.raises(ValueError, match="invalid channel-#1 of subport-#0 of port-#1"):
+    with pytest.raises(ValueError, match="invalid channel-#1 of subport-#0 of port-#01"):
         box.prepare_for_emission({(1, 1)})
-    with pytest.raises(ValueError, match="port-#0 is not an output port"):
+    with pytest.raises(ValueError, match="port-#00 is not an output port"):
         box.prepare_for_emission({(0, 0)})
     with pytest.raises(ValueError, match="invalid port of quel1se-riken8: 5"):
         box.prepare_for_emission({(5, 0)})
@@ -78,18 +78,18 @@ def test_just_run_apis(box):
     assert sp == 1
 
     box.easy_stop_all()
-    with pytest.raises(ValueError, match="port-#0 is not an output port"):
+    with pytest.raises(ValueError, match="port-#00 is not an output port"):
         box.easy_stop(port=0)
     box.easy_stop(port=1)
     box.easy_stop(port=1, subport=1)
-    with pytest.raises(ValueError, match="invalid subport-#2 of port-#1"):
+    with pytest.raises(ValueError, match="invalid subport-#2 of port-#01"):
         box.easy_stop(port=1, subport=2)
     box.easy_stop(port=1, subport=1, channel=0)
-    with pytest.raises(ValueError, match=re.escape("invalid channel-#1 of subport-#1 of port-#1")):
+    with pytest.raises(ValueError, match=re.escape("invalid channel-#1 of subport-#1 of port-#01")):
         box.easy_stop(port=1, subport=1, channel=1)
     box.easy_stop(port=2)
     box.easy_stop(port=3)
-    with pytest.raises(ValueError, match="port-#4 is not an output port"):
+    with pytest.raises(ValueError, match="port-#04 is not an output port"):
         box.easy_stop(port=4)
     with pytest.raises(ValueError, match="invalid port: 5"):
         box.easy_stop(port=5)

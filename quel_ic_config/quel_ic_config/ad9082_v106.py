@@ -1222,6 +1222,12 @@ class Ad9082V106Mixin(AbstractIcMixin):
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"{CmsError(rc).name}")
 
+    def decode_fullscale_current(self, r117: int, r118: int) -> int:
+        fscmin = (r117 >> 4) & 0x0F
+        fscctrl_1_0 = r117 & 0x03
+        fscctrl_9_2 = r118 & 0xFF
+        return round((fscmin / 16 + ((fscctrl_9_2 << 2) + fscctrl_1_0) / 1024) * 25000)
+
     def get_fullscale_current(self, dac: int) -> int:
         if not 0 <= dac <= 3:
             raise ValueError(f"invalid index of dac: {dac}")
@@ -1231,10 +1237,13 @@ class Ad9082V106Mixin(AbstractIcMixin):
             raise RuntimeError(f"ad9081.dac_duc_nco_enable_set() failed with error code: {rc}")
 
         r117 = self.hal_reg_get(0x117)
-        fscmin = (r117 >> 4) & 0x0F
-        fscctrl_1_0 = r117 & 0x03
-        fscctrl_9_2 = self.hal_reg_get(0x118) & 0xFF
-        return round((fscmin / 16 + ((fscctrl_9_2 << 2) + fscctrl_1_0) / 1024) * 25000)
+        r118 = self.hal_reg_get(0x118)
+        return self.decode_fullscale_current(r117, r118)
+
+    def is_equal_fullscale_current(self, cur0: int, cur1: int):
+        # Notes: rounding error is at most 13 (= ceil(25000 / 1024 / 2)).
+        # Notes: one of the given values must be calculated from the actual register values.
+        return abs(cur0 - cur1) <= 13
 
     def get_virtual_adc_select(self) -> List[int]:
         # Notes: 16 comes from the value of JESD M parameter. (see p.68 of UG-1578 rev.A)

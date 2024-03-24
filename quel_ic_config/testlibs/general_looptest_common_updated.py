@@ -91,7 +91,7 @@ class BoxPool:
                 logger.info(f"{name:s}: not found")
         return flag
 
-    def get_box(self, name: str) -> [Quel1Box, SequencerClient]:
+    def get_box(self, name: str) -> Tuple[Quel1Box, SequencerClient]:
         if name in self._boxes:
             box, sqc = self._boxes[name]
             return box, sqc
@@ -116,8 +116,13 @@ class BoxPool:
             logger.warning("no pulse generator to activate")
 
         pg_by_box: Dict[str, Set["PulseGen"]] = {box: set() for box in self._boxes}
+        bitmap_by_box: Dict[str, int] = {box: 0 for box in self._boxes}
         for pg in pgs:
             pg_by_box[pg.boxname].add(pg)
+            # TODO: move the following logic to the right place
+            b = self._boxes[pg.boxname][0]
+            awg_idx = b.rmap.get_awg_of_channel(*(b._convert_output_channel(pg.awg_spec)))
+            bitmap_by_box[pg.boxname] |= 1 << awg_idx
 
         if cp.boxname not in pg_by_box:
             raise RuntimeError("impossible to trigger the capturer")
@@ -155,7 +160,7 @@ class BoxPool:
         for i, time_count in enumerate(time_counts):
             for boxname, sqc in targets.items():
                 t = base_time + time_count + self._estimated_timediff[boxname]
-                valid_sched = sqc.add_sequencer(t)
+                valid_sched = sqc.add_sequencer(t, awg_bitmap=bitmap_by_box[boxname])
                 if not valid_sched:
                     raise RuntimeError("failed to schedule AWG start")
                 schedule[boxname].append(t)
@@ -278,7 +283,9 @@ class PulseCap:
         self.box.config_runit(port=self.port, runit=0, fnco_freq=fnco_freq)  # should convert runit -> rchannel
 
     def capture_now(self, *, num_samples: int, delay_samples: int = 0):
-        thunk = self.box.simple_capture_start(port=self.port, runits=self.runits, num_samples=num_samples, delay_samples=delay_samples)
+        thunk = self.box.simple_capture_start(
+            port=self.port, runits=self.runits, num_samples=num_samples, delay_samples=delay_samples
+        )
         status, iqs = thunk.result()
         return status, iqs
 

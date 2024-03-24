@@ -32,6 +32,7 @@ set_property PROGRAM.CHECKSUM    0 [ get_property PROGRAM.HW_CFGMEM $dev]
 create_hw_bitstream -hw_device $dev [get_property PROGRAM.HW_CFGMEM_BITFILE $dev]
 program_hw_devices $dev
 program_hw_cfgmem -hw_cfgmem [ get_property PROGRAM.HW_CFGMEM $dev]
+boot_hw_device $dev
 
 close_hw_target $target
 disconnect_hw_server
