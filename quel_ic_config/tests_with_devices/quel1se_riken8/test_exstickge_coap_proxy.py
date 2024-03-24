@@ -11,9 +11,9 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 DEVICE_SETTINGS = (
     {
-        "label": "staging-085",
+        "label": "staging-094",
         "config": {
-            "ipaddr_css": "10.5.0.85",
+            "ipaddr_css": "10.5.0.94",
         },
     },
 )

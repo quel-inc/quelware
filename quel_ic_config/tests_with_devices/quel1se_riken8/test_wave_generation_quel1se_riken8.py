@@ -19,9 +19,9 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.85",
-            "ipaddr_sss": "10.2.0.85",
-            "ipaddr_css": "10.5.0.85",
+            "ipaddr_wss": "10.1.0.94",
+            "ipaddr_sss": "10.2.0.94",
+            "ipaddr_css": "10.5.0.94",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
             "config_root": None,
             "config_options": [],

@@ -89,7 +89,7 @@ from quel_ic_config.thermistor import (
     Quel1seProtoThermistor,
 )
 
-__version__ = "0.8.7"
+__version__ = "0.8.8"
 
 __all__ = (
     "Ad5328",

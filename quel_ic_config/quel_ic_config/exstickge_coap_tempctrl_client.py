@@ -61,7 +61,7 @@ class _ExstickgeCoapClientQuel1seTempctrlBase(_ExstickgeCoapClientBase):
         if not 1 <= new_count <= 0xFFFFFFFF:
             raise ValueError("invalid count value: {new_count}")
         uri = f"coap://{self._target[0]}/tempctrl/state/count"
-        res = self._core.request_and_wait(code=aiocoap.PUT, payload=f"0x{new_count:08x}".encode(), uri=uri)
+        res = self._core.request_and_wait(code=aiocoap.PUT, payload=f"{new_count:08x}".encode(), uri=uri)
         self._coap_return_check(res, uri)
         return
 

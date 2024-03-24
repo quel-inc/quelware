@@ -1,5 +1,14 @@
 # 更新リスト
 
+## v0.8.8 (Public Release)
+- QuEL-1 SE Riken-8 を公式サポート開始
+- Quel1BoxのいくつかのAPIのエラーメッセージを改善
+- Quel1Box.config_box() の fullscale_current の同一性確認の不具合を修正
+- 恒温システムの状態確認とリセットのコマンドを追加
+- 恒温システムのウォームアップタイマ設定の不具合を修正
+- quel1_linkstatusコマンドの --ignore_crc_error_of_mxfe オブション付加時のレポート文言を変更
+- ドキュメントを更新
+
 ## v0.8.7 (Public Release)
 - ドキュメントを更新。
 - 一部のINFOレベルのログをDEBUGレベルに下げた。

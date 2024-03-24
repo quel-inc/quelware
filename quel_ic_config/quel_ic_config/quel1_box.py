@@ -335,7 +335,7 @@ class Quel1Box:
             group, line = self._PORT2LINE[self._boxtype][port]
         else:
             if (port, subport) not in self._PORT2LINE[self._boxtype]:
-                raise ValueError(f"invalid subport-#{subport} of port-#{port}")
+                raise ValueError(f"invalid subport-#{subport} of port-#{port:02d}")
             group, line = self._PORT2LINE[self._boxtype][port, subport]
         return group, line
 
@@ -346,14 +346,14 @@ class Quel1Box:
     def _convert_output_port_decoded(self, port: int, subport: int = 0) -> Tuple[int, int]:
         group, line = self._convert_any_port(port, subport)
         if not self._dev.is_output_line(group, line):
-            raise ValueError(f"port-#{port} is not an output port")
+            raise ValueError(f"port-#{port:02d} is not an output port")
         return group, cast(int, line)
 
     # Notes: currently no subport of input port is implemented.
     def _convert_input_port(self, port) -> Tuple[int, str]:
         group, line = self._convert_any_port(port, 0)
         if not self._dev.is_input_line(group, line):
-            raise ValueError(f"port-#{port} is not an input port")
+            raise ValueError(f"port-#{port:02d} is not an input port")
         return group, cast(str, line)
 
     def _convert_output_channel(self, channel: Tuple[Union[int, Tuple[int, int]], int]) -> Tuple[int, int, int]:
@@ -369,7 +369,7 @@ class Quel1Box:
         if channel < self.css.get_num_channels_of_line(group, line):
             ch3 = (group, line, channel)
         else:
-            raise ValueError(f"invalid channel-#{channel} of subport-#{subport} of port-#{port}")
+            raise ValueError(f"invalid channel-#{channel} of subport-#{subport} of port-#{port:02d}")
         return ch3
 
     def _convert_output_channels(
@@ -526,7 +526,7 @@ class Quel1Box:
             rrline: str = self._dev.rmap.resolve_rline(group, None)
             if rrline != rline:
                 logger.warning(
-                    f"the specified port {port} may not be connected to any ADC under the current configuration"
+                    f"the specified port-#{port:02d} may not be connected to any ADC under the current configuration"
                 )
         except ValueError:
             pass
@@ -664,7 +664,7 @@ class Quel1Box:
             rrline: str = self._dev.rmap.resolve_rline(cap_group, None)
             if rrline != cap_rline:
                 logger.warning(
-                    f"the specified port {port} may not be connected to any ADC under the current configuration"
+                    f"the specified port-#{port:02d} may not be connected to any ADC under the current configuration"
                 )
         except ValueError:
             # Notes: failure of resolution means the mxfe in the group has multiple capture lines.
@@ -736,7 +736,7 @@ class Quel1Box:
 
         if not ignore_validation:
             if not self.config_validate_box(box_conf):
-                raise ValueError("the provided settings looks have inconsistent settings")
+                raise ValueError("the provided settings looks to be inconsistent")
 
     def _config_validate_port(self, port_subport: Union[int, Tuple[int, int]], lc: Dict[str, Any]) -> bool:
         if isinstance(port_subport, int):
@@ -748,7 +748,7 @@ class Quel1Box:
             and isinstance(port_subport[0], int)
             and isinstance(port_subport[1], int)
         ):
-            port_name = f"port-#{port_subport[0]:02d} subport-#{port_subport[1]:02d}"
+            port_name = f"port-#{port_subport[0]:02d}, subport-#{port_subport[1]:d}"
             port, subport = port_subport
         else:
             raise AssertionError
@@ -757,12 +757,26 @@ class Quel1Box:
         if self._dev.is_output_line(group, line):
             alc: Dict[str, Any] = self.css.dump_line(group, cast(int, line))
             ad: str = "out"
+            line_name: str = f"group:{group}, line:{line}"
         elif self._dev.is_input_line(group, line):
             alc = self.css.dump_rline(group, cast(str, line))
             ad = "in"
+            line_name = f"group:{group}, rline:{line}"
         else:
             raise ValueError(f"invalid port: {port_name}")
 
+        try:
+            # Notes: it is troublesome to call _dev._config_validate_line() due to the handling of cnco_locked_with.
+            return self._config_validate_port_inner(group, line, lc, port_name, alc, ad)
+        except ValueError as e:
+            if line_name in e.args[0]:
+                raise ValueError(e.args[0].replace(line_name, port_name))
+            else:
+                raise
+
+    def _config_validate_port_inner(
+        self, group: int, line: Union[int, str], lc: Dict[str, Any], port_name: str, alc: Dict[str, Any], ad: str
+    ) -> bool:
         valid = True
         for k in lc:
             if k == "channels":
@@ -776,9 +790,12 @@ class Quel1Box:
                     valid = False
                     logger.error(f"unexpected settings of {port_name}:" f"direction = {ad} (!= {lc['direction']})")
             elif k in {"cnco_freq", "fnco_freq"}:
-                if not self._dev._config_validate_frequency(group, line, k, lc[k], alc[k]):
+                if k not in alc:
                     valid = False
-                    logger.error(f"unexpected settings at {port_name}:line-{line}:{k} = {alc[k]} (!= {lc[k]})")
+                    logger.error(f"unexpected settings at {port_name}, '{k}' is not available")
+                elif not self._dev._config_validate_frequency(group, line, k, lc[k], alc[k]):
+                    valid = False
+                    logger.error(f"unexpected settings at {port_name}:{k} = {alc[k]} (!= {lc[k]})")
             elif k == "cnco_locked_with":
                 dac_p, dac_sp = self.decode_port(lc[k])
                 dac_g, dac_l = self._convert_output_port_decoded(dac_p, dac_sp)
@@ -790,8 +807,18 @@ class Quel1Box:
                         f"unexpected settings at {port_name}:cnco_freq = {alf} (!= {lf}, "
                         f"that is cnco frequency of port-#{lc[k]})"
                     )
+            elif k == "fullscale_current":
+                if k not in alc:
+                    valid = False
+                    logger.error(f"unexpected settings at {port_name}, '{k}' is not available")
+                elif not self._dev._config_validate_fsc(group, cast(int, line), lc[k], alc[k]):
+                    valid = False
+                    logger.error(f"unexpected settings at {port_name}:{k} = {alc[k]} (!= {lc[k]})")
             else:
-                if lc[k] != alc[k]:
+                if k not in alc:
+                    valid = False
+                    logger.error(f"unexpected settings at {port_name}, '{k}' is not available")
+                elif lc[k] != alc[k]:
                     valid = False
                     logger.error(f"unexpected settings at {port_name}:{k} = {alc[k]} (!= {lc[k]})")
         return valid
@@ -840,35 +867,54 @@ class Quel1Box:
         group, line = self._convert_any_port(port, subport)
         if self._dev.is_output_line(group, line):
             if cnco_locked_with is not None:
-                raise ValueError(f"no cnco_locked_with is available for the output port {port}")
-            self._dev.config_line(
-                group,
-                cast(int, line),
-                lo_freq=lo_freq,
-                cnco_freq=cnco_freq,
-                vatt=vatt,
-                sideband=sideband,
-                fullscale_current=fullscale_current,
-                rfswitch=rfswitch,
-            )
+                raise ValueError(f"no cnco_locked_with is available for the output port-#{port:02d}")
+            try:
+                self._dev.config_line(
+                    group,
+                    cast(int, line),
+                    lo_freq=lo_freq,
+                    cnco_freq=cnco_freq,
+                    vatt=vatt,
+                    sideband=sideband,
+                    fullscale_current=fullscale_current,
+                    rfswitch=rfswitch,
+                )
+            except ValueError as e:
+                # Notes: tweaking error message
+                line_name = f"group:{group}, line:{line}"
+                port_name = f"port-#{port:02d}" if subport == 0 else f"port-#{port:02d}, subport-#{subport:d}"
+                if line_name in e.args[0]:
+                    raise ValueError(e.args[0].replace(line_name, port_name))
+                else:
+                    raise
+
         elif self._dev.is_input_line(group, line):
             if vatt is not None or sideband is not None:
-                raise ValueError(f"no mixer is available for the input port {port}")
+                raise ValueError(f"no mixer is available for the input port-#{port:02d}")
             if fullscale_current is not None:
-                raise ValueError(f"no DAC is available for the input port {port}")
+                raise ValueError(f"no DAC is available for the input port-#{port:02d}")
             if cnco_locked_with is not None:
                 p, sp = self.decode_port(cnco_locked_with)
                 converted_cnco_lock_with = self._convert_output_port_decoded(p, sp)
             else:
                 converted_cnco_lock_with = None
-            self._dev.config_rline(
-                group,
-                cast(str, line),
-                lo_freq=lo_freq,
-                cnco_freq=cnco_freq,
-                cnco_locked_with=converted_cnco_lock_with,
-                rfswitch=rfswitch,
-            )
+            try:
+                self._dev.config_rline(
+                    group,
+                    cast(str, line),
+                    lo_freq=lo_freq,
+                    cnco_freq=cnco_freq,
+                    cnco_locked_with=converted_cnco_lock_with,
+                    rfswitch=rfswitch,
+                )
+            except ValueError as e:
+                # Notes: tweaking error message
+                line_name = f"group:{group}, rline:{line}"
+                port_name = f"port-#{port:02d}"
+                if line_name in e.args[0]:
+                    raise ValueError(e.args[0].replace(line_name, port_name))
+                else:
+                    raise
         else:
             raise AssertionError
 
@@ -884,9 +930,17 @@ class Quel1Box:
         """
         group, line = self._convert_any_port(port, subport)
         if self._dev.is_output_line(group, line):
-            self._dev.config_channel(group, cast(int, line), channel, fnco_freq=fnco_freq)
+            try:
+                self._dev.config_channel(group, cast(int, line), channel, fnco_freq=fnco_freq)
+            except ValueError as e:
+                line_name = f"group:{group}, line:{line}"
+                port_name = f"port-#{port:02d}"
+                if line_name in e.args[0]:
+                    raise ValueError(e.args[0].replace(line_name, port_name))
+                else:
+                    raise
         else:
-            raise ValueError(f"a given port (= {port}) is not an output port, not applicable")
+            raise ValueError(f"port-#{port:02d} is not an output port, not applicable")
 
     def config_runit(self, port: int, runit: int, *, fnco_freq: Union[float, None]) -> None:
         """configuring parameters of a given receiver channel.
@@ -899,9 +953,18 @@ class Quel1Box:
         """
         group, rline = self._convert_any_port(port, 0)
         if self._dev.is_input_line(group, rline):
-            self._dev.config_runit(group, cast(str, rline), runit, fnco_freq=fnco_freq)
+            try:
+                self._dev.config_runit(group, cast(str, rline), runit, fnco_freq=fnco_freq)
+            except ValueError as e:
+                # Notes: tweaking error message
+                line_name = f"group:{group}, rline:{rline}"
+                port_name = f"port-#{port:02d}"
+                if line_name in e.args[0]:
+                    raise ValueError(e.args[0].replace(line_name, port_name))
+                else:
+                    raise
         else:
-            raise ValueError(f"a given port (= {port}) is not an input port, not applicable")
+            raise ValueError(f"port-#{port:02d} is not an input port, not applicable")
 
     def block_all_output_ports(self) -> None:
         """set RF switch of all output ports to block.
@@ -930,7 +993,7 @@ class Quel1Box:
             arc = self.dump_rfswitch(p)
             if rc != arc:
                 valid = False
-                logger.warning(f"rfswitch of port-#{p} is finally set to {arc} (!= {rc})")
+                logger.warning(f"rfswitch of port-#{p:02d} is finally set to {arc} (!= {rc})")
 
         if not (ignore_validation or valid):
             raise ValueError("the specified configuration of rf switches is not realizable")

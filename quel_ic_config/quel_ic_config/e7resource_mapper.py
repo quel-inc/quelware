@@ -170,7 +170,7 @@ class Quel1E7ResourceMapper:
         if channel < len(fducs):
             return self._AWGS_FROM_FDUC[mxfe_idx, fducs[channel]]
         else:
-            raise ValueError(f"invalid combination of (group, line, channel) = ({group}, {line}, {channel})") from None
+            raise ValueError(f"invalid combination of group:{group}, line:{line}, channel:{channel}")
 
     def get_capture_module_of_adc(self, mxfe_idx: int, adc_idx: int) -> int:
         if self._wss.is_monitor_shared_with_read():
@@ -202,4 +202,4 @@ class Quel1E7ResourceMapper:
             capunit = tuple(capunit2rchannel.keys())[runit]
             return capunit2rchannel[capunit]
         else:
-            raise ValueError(f"invalid runit: {runit} for (group: {group}, rline: {rline})")
+            raise ValueError(f"invalid runit:{runit} for group:{group}, rline:{rline}")

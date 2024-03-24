@@ -861,7 +861,7 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         self._validate_line_or_rline(group, line)
         if (group, line) not in self._LO_IDX:
-            raise ValueError("no LO is available for (group:{group}, line:{line})")
+            raise ValueError("no LO is available for group:{group}, line:{line}")
         lo_idx, outpin = self._LO_IDX[(group, line)]
 
         ic = self._lmx2594[lo_idx]
@@ -923,7 +923,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
     def _get_mixer_idx(self, group, line):
         if (group, line) in self._MIXER_IDX:
             return self._MIXER_IDX[(group, line)]
-        raise ValueError(f"no mixer is available for (group:{group}, line:{line})")
+        raise ValueError(f"no mixer is available for group:{group}, line:{line}")
 
     def set_sideband(self, group: int, line: int, sideband: str) -> None:
         """setting the active sideband of a mixer of a line.
@@ -955,7 +955,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         mixer_idx = self._get_mixer_idx(group, line)
         if mixer_idx is None:
-            raise ValueError(f"no mixer is available for (group:{group}, line:{line})")
+            raise ValueError(f"no mixer is available for group:{group}, line:{line}")
 
         ic = self._adrf6780[mixer_idx]
         ssb = ic.get_lo_sideband()
@@ -1006,7 +1006,7 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
         if (group, line) in self._VATT_IDX:
             return self._VATT_IDX[(group, line)]
         else:
-            raise ValueError(f"no variable attenuator is available for (group:{group}, line:{line})")
+            raise ValueError(f"no variable attenuator is available for group:{group}, line:{line}")
 
     def set_vatt(self, group: int, line: int, vatt: int) -> None:
         """setting the VATT control voltage of a mixer of a line.

@@ -840,18 +840,19 @@ class Quel1BoxIntrinsic:
         for ch, cc in confs.items():
             acc = self.css.dump_channel(group, line, ch)
             for kk in cc:
-                if cc[kk] != acc[kk]:
+                if kk not in acc:
                     valid = False
-                    logger.error(
-                        f"unexpected settings at {parent_name}:channel-{ch}:" f"{kk} = {acc[kk]} (!= {cc[kk]})"
-                    )
+                    logger.error(f"unexpected settings at {parent_name}:channel-{ch}, '{kk}' is unavailable")
+                elif cc[kk] != acc[kk]:
+                    valid = False
+                    logger.error(f"unexpected settings at {parent_name}:channel-{ch}: {kk} = {acc[kk]} (!= {cc[kk]})")
         return valid
 
     def _config_validate_runits(
         self, group: int, rline: Union[int, str], runits_conf: Dict[int, Dict[str, Any]], parent_name: str
     ) -> bool:
         if not self.is_input_line(group, rline):
-            logger.error(f"'runit' appears at {parent_name}")
+            logger.error(f"'runits' is unavailable at {parent_name}")
             return False
 
         rline = cast(str, rline)
@@ -859,11 +860,12 @@ class Quel1BoxIntrinsic:
         for runit, uc in runits_conf.items():
             auc = self._dump_runit(group, rline, runit)
             for kk in uc:
-                if uc[kk] != auc[kk]:
+                if kk not in auc:
                     valid = False
-                    logger.error(
-                        f"unexpected settings at {parent_name}:runit-{runit}:" f"{kk} = {auc[kk]} (!= {uc[kk]})"
-                    )
+                    logger.error(f"unexpected settings at {parent_name}:runit-{runit}, '{kk}' is unavailable")
+                elif uc[kk] != auc[kk]:
+                    valid = False
+                    logger.error(f"unexpected settings at {parent_name}:runit-{runit}: {kk} = {auc[kk]} (!= {uc[kk]})")
         return valid
 
     def _config_validate_frequency(self, group: int, line: Union[int, str], k: str, freq0: float, freq1: float) -> bool:
@@ -879,13 +881,17 @@ class Quel1BoxIntrinsic:
                 return self.css.is_equivalent_adc_fnco(group, cast(str, line), freq0, freq1)
         raise AssertionError
 
+    def _config_validate_fsc(self, group: int, line: int, fsc0: int, fsc1: int) -> bool:
+        mxfe_idx, _ = self._css._get_dac_idx(group, line)
+        return self._css.ad9082[mxfe_idx].is_equal_fullscale_current(fsc0, fsc1)
+
     def _config_validate_line(self, group: int, line: Union[int, str], lc: Dict[str, Any]) -> bool:
         if self.is_output_line(group, line):
-            line_name: str = f"group-{group}:line-{line}"
+            line_name: str = f"group:{group}, line:{line}"
             alc: Dict[str, Any] = self.css.dump_line(group, cast(int, line))
             ad: str = "out"
         elif self.is_input_line(group, line):
-            line_name = f"group-{group}:rline-{line}"
+            line_name = f"group:{group}, rline:{line}"
             alc = self.css.dump_rline(group, cast(str, line))
             ad = "in"
         else:
@@ -917,6 +923,10 @@ class Quel1BoxIntrinsic:
                         f"unexpected settings at {line_name}:cnco_freq = {alf} (!= {lf}, "
                         f"that is cnco frequency of group-{dac_g}:line-{dac_l})"
                     )
+            elif k == "fullscale_current":
+                if not self._config_validate_fsc(group, cast(int, line), lc[k], alc[k]):
+                    valid = False
+                    logger.error(f"unexpected settings at {line_name}:{k} = {alc[k]} (!= {lc[k]})")
             else:
                 if lc[k] != alc[k]:
                     valid = False
@@ -1151,7 +1161,7 @@ class Quel1BoxIntrinsic:
         elif self.is_input_line(group, line):
             return "loop" if block else "open"
         else:
-            raise ValueError(f"invalid line: ({group}, {line})")
+            raise ValueError(f"invalid group:{group}, line:{line})")
 
     def _encode_rfswitch_conf(self, group: int, line: Union[int, str], conf: str) -> bool:
         if self.is_output_line(group, line):
@@ -1169,7 +1179,7 @@ class Quel1BoxIntrinsic:
             else:
                 raise ValueError(f"invalid configuration of an input switch: {conf}")
         else:
-            raise ValueError(f"invalid line: ({group}, {line})")
+            raise ValueError(f"invalid group:{group}, line:{line}")
 
     def activate_monitor_loop(self, group: int) -> None:
         """enabling an internal monitor loop-back path from a monitor-out port to a monitor-in port.
