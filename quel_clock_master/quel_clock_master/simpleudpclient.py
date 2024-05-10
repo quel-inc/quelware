@@ -33,7 +33,7 @@ class SimpleUdpClient:
 
     def _send_recv_generic(self, port: int, data: bytes) -> Tuple[bytes, Union[Tuple[str, int], None]]:
         if len(data) > self.SEND_MAX_PKTSIZE:
-            raise ValueError(f"too large packget size ({len(data)} > {self.SEND_MAX_PKTSIZE})")
+            raise ValueError(f"too large packet size ({len(data)} > {self.SEND_MAX_PKTSIZE})")
 
         with self._lock:
             self._sock.sendto(data, (self._server_ipaddr, port))
