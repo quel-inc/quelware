@@ -192,7 +192,7 @@ class ExstickgeCoapClientQuel1seRiken8Dev2(_ExstickgeCoapClientQuel1seRiken8Base
 
 
 class ExstickgeCoapClientQuel1seRiken8(_ExstickgeCoapClientQuel1seRiken8Base):
-    _VERSION_SPEC: Tuple[Version, Version, Set[Version]] = Version("1.0.0"), Version("1.0.3"), set()
+    _VERSION_SPEC: Tuple[Version, Version, Set[Version]] = Version("1.0.0"), Version("1.1.0"), set()
 
     # Notes: no read is available for AD5328
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]] = {

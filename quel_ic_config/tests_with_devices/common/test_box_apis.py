@@ -6,6 +6,7 @@ import pytest
 from boxdump_quel1a_01 import a1, a1d, a2d
 
 from quel_ic_config.quel1_box import Quel1Box
+from quel_ic_config.quel1_box_with_raw_wss import Quel1BoxWithRawWss
 from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,9 @@ TEST_SETTINGS = (
     },
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.94",
-            "ipaddr_sss": "10.2.0.94",
-            "ipaddr_css": "10.5.0.94",
+            "ipaddr_wss": "10.1.0.132",
+            "ipaddr_sss": "10.2.0.132",
+            "ipaddr_css": "10.5.0.132",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
             "config_root": None,
             "config_options": (),
@@ -53,6 +54,28 @@ TEST_SETTINGS = (
             "config_options": (),
         },
     },
+    {
+        "box_config": {
+            "ipaddr_wss": "10.1.0.74",
+            "ipaddr_sss": "10.2.0.74",
+            "ipaddr_css": "10.5.0.74",
+            "boxtype": Quel1BoxType.fromstr("quel1-a"),
+            "config_root": None,
+            "config_options": (),
+        },
+        "with_raw_wss": True,
+    },
+    {
+        "box_config": {
+            "ipaddr_wss": "10.1.0.132",
+            "ipaddr_sss": "10.2.0.132",
+            "ipaddr_css": "10.5.0.132",
+            "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
+            "config_root": None,
+            "config_options": (),
+        },
+        "with_raw_wss": True,
+    },
 )
 
 
@@ -62,7 +85,10 @@ def box(request) -> Quel1Box:
 
     # TODO: write something to modify boxtype.
 
-    box = Quel1Box.create(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
+    if "with_raw_wss" in param0 and param0["with_raw_wss"]:
+        box = Quel1BoxWithRawWss.create(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
+    else:
+        box = Quel1Box.create(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
     box.reconnect()
     for mxfe_idx, status in box.link_status().items():
         if not status:

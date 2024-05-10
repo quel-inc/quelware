@@ -103,7 +103,7 @@ class CaptureUnit(IntEnum):
     @classmethod
     def all(cls):
         """全キャプチャユニットの ID をリストとして返す"""
-        return [item for item in CaptureUnit]
+        return [CaptureUnit(item) for item in e7awgsw.CaptureUnit]
 
     @classmethod
     def of(cls, val):
@@ -128,7 +128,7 @@ class CaptureModule(IntEnum):
     @classmethod
     def all(cls):
         """全キャプチャモジュールの ID をリストとして返す"""
-        return [item for item in CaptureModule]
+        return [CaptureModule(item) for item in e7awgsw.CaptureModule]
 
     @classmethod
     def of(cls, val):

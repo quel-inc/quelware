@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.78",
-            "ipaddr_sss": "10.2.0.78",
-            "ipaddr_css": "10.5.0.78",
+            "ipaddr_wss": "10.1.0.80",
+            "ipaddr_sss": "10.2.0.80",
+            "ipaddr_css": "10.5.0.80",
             "boxtype": Quel1BoxType.fromstr("quel1-nec"),
             "config_root": None,
             "config_options": (),

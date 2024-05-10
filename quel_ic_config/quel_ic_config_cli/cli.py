@@ -40,8 +40,22 @@ def quel1_linkup() -> None:
     parser.add_argument(
         "--use_204c",
         action="store_true",
-        default=False,
-        help="enable JESD204C link instead of the conventional 204B one",
+        help="enable JESD204C link calibration instead of the conventional 204B one (default)",
+    )
+    parser.add_argument(
+        "--use_204b",
+        action="store_true",
+        help="dare to use the conventional JESD204B link calibration instead of the 204C one",
+    )
+    parser.add_argument(
+        "--use_bgcal",
+        action="store_true",
+        help="enable background calibration of JESD204C link (default)",
+    )
+    parser.add_argument(
+        "--nouse_bgcal",
+        action="store_true",
+        help="disable background calibration of JESD204C link",
     )
     parser.add_argument(
         "--skip_init",
@@ -104,13 +118,19 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
         logger.error(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
         return -1
 
-    use_204c = args.use_204c
-    if args.boxtype in {Quel1BoxType.QuEL1SE_RIKEN8} and not use_204c:
-        logger.info(
-            "link calibration of jsed204c standard is mandatory for QuEL-1 SE in non-debugging mode "
-            "(--use_204c is set implicitly)"
-        )
-        use_204c = True
+    use_204b: bool = False
+    if args.use_204b:
+        if args.use_204c:
+            raise ValueError("it is not allowed to specify both --use_204b and --use_204c at the same time")
+        else:
+            use_204b = True
+
+    use_bgcal: bool = True
+    if args.nouse_bgcal:
+        if args.use_bgcal:
+            raise ValueError("it is not allowed to specify both --use_bgcal and --nouse_bgcal at the same time")
+        else:
+            use_bgcal = False
 
     hard_reset = args.boxtype in {Quel1BoxType.QuEL1SE_RIKEN8, Quel1BoxType.QuEL1SE_RIKEN8DBG}
     logger.info("mxfes will be reset during the initialization process of QuEL-1 SE by asserting hardware reset pin")
@@ -119,7 +139,8 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
     linkup_ok: Dict[int, bool] = box.relinkup(
         mxfes_to_linkup=mxfe_list,
         hard_reset=hard_reset,
-        use_204b=not use_204c,
+        use_204b=use_204b,
+        use_bg_cal=use_bgcal,
         skip_init=args.skip_init,
         background_noise_threshold=args.background_noise_threshold,
     )
@@ -233,8 +254,22 @@ def quel1_test_linkup() -> None:
     parser.add_argument(
         "--use_204c",
         action="store_true",
-        default=False,
-        help="enable JESD204C link instead of the conventional 204B one",
+        help="enable JESD204C link calibration instead of the conventional 204B one (default)",
+    )
+    parser.add_argument(
+        "--use_204b",
+        action="store_true",
+        help="dare to use the conventional JESD204B link calibration instead of the 204C one",
+    )
+    parser.add_argument(
+        "--use_bgcal",
+        action="store_true",
+        help="enable background calibration of JESD204C link (default)",
+    )
+    parser.add_argument(
+        "--nouse_bgcal",
+        action="store_true",
+        help="disable background calibration of JESD204C link",
     )
     parser.add_argument(
         "--skip_init",
@@ -300,6 +335,20 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
     if not isinstance(box, Quel1BoxIntrinsic):
         raise ValueError(f"boxtype {args.boxtype} is not supported currently")
 
+    use_204b: bool = False
+    if args.use_204b:
+        if args.use_204c:
+            raise ValueError("it is not allowed to specify both --use_204b and --use_204c at the same time")
+        else:
+            use_204b = True
+
+    use_bgcal: bool = True
+    if args.nouse_bgcal:
+        if args.use_bgcal:
+            raise ValueError("it is not allowed to specify both --use_bgcal and --nouse_bgcal at the same time")
+        else:
+            use_bgcal = False
+
     n_success: Dict[int, int] = {}
     n_failure: Dict[int, int] = {}
     for mxfe_idx in mxfe_list:
@@ -310,7 +359,8 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
         linkup_ok: Dict[int, bool] = box.relinkup(
             mxfes_to_linkup=mxfe_list,
             hard_reset=args.hard_reset,
-            use_204b=not args.use_204c,
+            use_204b=use_204b,
+            use_bg_cal=use_bgcal,
             skip_init=args.skip_init,
             background_noise_threshold=args.background_noise_threshold,
         )

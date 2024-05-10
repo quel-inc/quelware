@@ -19,9 +19,9 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.94",
-            "ipaddr_sss": "10.2.0.94",
-            "ipaddr_css": "10.5.0.94",
+            "ipaddr_wss": "10.1.0.132",
+            "ipaddr_sss": "10.2.0.132",
+            "ipaddr_css": "10.5.0.132",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
             "config_root": None,
             "config_options": [],
@@ -45,7 +45,7 @@ TEST_SETTINGS = (
         # "spa_name": "ms2090-1",
         # "spa_parameters": {},
         # "max_background_noise": -65.0,
-        "spectrum_image_path": "./artifacts/spectrum-085",
+        "spectrum_image_path": "./artifacts/spectrum-132",
         "relative_loss": 0,
         "linkup": False,
     },
@@ -80,7 +80,7 @@ def fixtures(request):
 
 
 def make_outdir(param):
-    mpl.use("Qt5Agg")  # TODO: reconsider where to execute.
+    mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
 
     dirname = param["spectrum_image_path"]
     if os.path.exists(dirname):
