@@ -81,7 +81,7 @@ assert cfg_obj.spi.addr_next.as_cpptype() == ad9081.SPI_ADDR_INC_AUTO
 x._set_serdes_settings(cfg_obj.serdes)
 assert x.device.serdes_info.des_settings.boost_mask == 0xFF
 assert x.device.serdes_info.des_settings.invert_mask == 0x00
-assert all(x.device.serdes_info.des_settings.ctle_filter == (2, 2, 2, 2, 2, 2, 2, 2))
+assert all(x.device.serdes_info.des_settings.ctle_filter == (4, 4, 4, 4, 4, 4, 4, 4))
 assert all(x.device.serdes_info.des_settings.lane_mapping0 == (0, 1, 2, 3, 4, 5, 6, 7))
 assert all(x.device.serdes_info.des_settings.lane_mapping1 == (0, 1, 2, 3, 4, 5, 6, 7))
 

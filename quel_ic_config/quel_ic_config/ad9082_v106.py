@@ -734,6 +734,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         param_d.ctle_filter.as_cpptype(self.device.serdes_info.des_settings.ctle_filter)
         param_d.lane_mappings[0].as_cpptype(self.device.serdes_info.des_settings.lane_mapping0)
         param_d.lane_mappings[1].as_cpptype(self.device.serdes_info.des_settings.lane_mapping1)
+        logger.info(f"ctle_filter = {self.device.serdes_info.des_settings.ctle_filter}")
 
     def _set_ser_settings(self, param_s: Ad9082SerConfig) -> None:
         self.device.serdes_info.ser_settings.invert_mask = param_s.invert.as_cpptype()
@@ -753,8 +754,8 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self,
         reset: bool = False,
         link_init: bool = False,
-        use_204b: bool = True,
-        use_bg_cal: bool = False,
+        use_204b: bool = False,
+        use_bg_cal: bool = True,
         wait_after_device_init: float = 0.1,
     ) -> None:
         if reset:
@@ -834,6 +835,8 @@ class Ad9082V106Mixin(AbstractIcMixin):
         # TODO(XXX): this should be moved to establish_link()
         if not use_204b:
             logger.info("calibrating JESD204C rx link")
+            if use_bg_cal:
+                logger.info("activating background calibration")
             rc = ad9081.jesd_rx_calibrate_204c(
                 self.device, 1, self.device.serdes_info.des_settings.boost_mask, 1 if use_bg_cal else 0
             )
@@ -919,6 +922,12 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
         for addr, val in vals.items():
             logger.info(f"*({addr:04x}) = {val:02x}")
+
+    def is_bgcal_enabled(self) -> bool:
+        return self.hal_reg_get(0x21C1) & 0x08 == 0x08
+
+    def get_crc_error_counts(self) -> List[int]:
+        return [self.hal_reg_get(0x0584 + lane_idx) for lane_idx in range(8)]
 
     # Notes: the calculation and set of ftw are separated for the integration of DAC and ADC in QuEL-1
     #        this class should not implement QuEL-1 specific features, but provide the flexibility for them.

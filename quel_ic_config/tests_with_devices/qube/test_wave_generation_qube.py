@@ -87,7 +87,7 @@ def fixtures(request):
 
 
 def make_outdir(param):
-    mpl.use("Qt5Agg")  # TODO: reconsider where to execute.
+    mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
 
     dirname = param["spectrum_image_path"]
     if os.path.exists(dirname):

@@ -2,13 +2,16 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
+from e7awgsw import WaveSequence
 
-from quel_ic_config.quel1_box import Quel1Box, Quel1BoxType
+from quel_ic_config.quel1_box import Quel1BoxType
+from quel_ic_config.quel1_box_with_raw_wss import Quel1BoxWithRawWss
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
 from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise
 
@@ -45,7 +48,7 @@ TEST_SETTINGS = (
         # "spa_name": "ms2090-1",
         # "spa_parameters": {},
         # "max_background_noise": -65.0,
-        "spectrum_image_path": "./artifacts/spectrum-132-port",
+        "spectrum_image_path": "./artifacts/spectrum-132-rawwss",
         "relative_loss": 0,
         "linkup": False,
     },
@@ -56,7 +59,7 @@ TEST_SETTINGS = (
 def fixtures(request):
     param0 = request.param
 
-    box = Quel1Box.create(**param0["box_config"])
+    box = Quel1BoxWithRawWss.create(**param0["box_config"])
     if request.param["linkup"]:
         linkstatus = box.relinkup(**param0["linkup_config"])
     else:
@@ -107,92 +110,28 @@ def decode_port_subport(port_subport: Union[int, Tuple[int, int]]) -> Tuple[int,
     return port, subport, portname
 
 
-def has_doubler(boxtype: Quel1BoxType, port_subport: Union[int, Tuple[int, int]]) -> bool:
-    if boxtype in {
-        Quel1BoxType.QuBE_OU_TypeA,
-        Quel1BoxType.QuBE_RIKEN_TypeA,
-    }:
-        return port_subport in {2, 11}
-    elif boxtype == Quel1BoxType.QuEL1_TypeA:
-        return port_subport in {3, 10}
-    else:
-        return False
+def make_pulses_wave_param(
+    num_delay_sample: int,
+    num_global_repeat: int,
+    num_wave_samples: Sequence[int],
+    num_blank_samples: Sequence[int],
+    num_repeats: Sequence[int],
+    amplitudes: Sequence[complex],
+) -> WaveSequence:
+    if num_delay_sample % 64 != 0:
+        raise ValueError(f"num_delay_sample (= {num_delay_sample}) is not multiple of 64")
+    wave = WaveSequence(num_wait_words=num_delay_sample // 4, num_repeats=num_global_repeat)
 
-
-# Notes: 5.8 -- 8.0GHz
-@pytest.mark.parametrize(
-    ("idx", "port_subport", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
-    [
-        (0, 1, 0, 8500, 2700, 0),
-        (1, 1, 0, 9500, 1500, 0),
-        (2, 1, 0, 8500, 2700, -200),
-        (3, 1, 0, 9500, 1500, 200),
-        (4, 2, 0, 9000, 3200, 0),
-        (5, 2, 0, 10000, 2000, 0),
-        (6, 2, 0, 9000, 3000, 200),
-        (7, 2, 0, 10000, 2200, -200),
-    ],
-)
-def test_all_single_awgs_with_mixer(
-    idx: int,
-    port_subport: Union[int, Tuple[int, int]],
-    channel: int,
-    lo_mhz: int,
-    cnco_mhz: int,
-    fnco_mhz: int,
-    fixtures,
-):
-    box, spa, outdir, port_availability, relative_loss = fixtures
-    assert isinstance(box, Quel1Box)
-
-    port, subport, portname = decode_port_subport(port_subport)
-
-    via_monitor = False
-    if port_subport in port_availability["unavailable"]:
-        pytest.skip(f"{portname} is unavailable.")
-    elif port in port_availability["via_monitor_out"]:
-        via_monitor = True
-
-    # TODO: fix
-    box.easy_start_cw(
-        port=port,
-        subport=subport,
-        channel=channel,
-        lo_freq=lo_mhz * 1e6,
-        cnco_freq=cnco_mhz * 1e6,
-        fnco_freq=fnco_mhz * 1e6,
-        fullscale_current=40527,
-        vatt=0xA00,
-        sideband="L",
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
-    )
-    expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
-    max_sprious_peek = -50.0
-    if has_doubler(box.css._boxtype, port_subport):
-        expected_freq *= 2
-        max_sprious_peek = -42.0
-
-    e0 = ExpectedSpectrumPeaks([(expected_freq, -20 - relative_loss)])
-    e0.validate_with_measurement_condition(spa.max_freq_error_get())
-
-    # notes: -60.0dBm fails due to spurious below 7GHz.
-    m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(spa, max_sprious_peek)
-    # notes: stop all the awgs of the line
-    box.easy_stop(
-        port=port, subport=subport, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor
-    )
-
-    j0, s0, w0 = e0.match(m0)
-
-    plt.cla()
-    plt.plot(t0[:, 0], t0[:, 1])
-    plt.savefig(outdir / "awg" / f"{idx:02d}_{portname}-ch{channel:d}-{int(expected_freq) // 1000000:d}MHz.png")
-
-    assert len(s0) == 0
-    assert len(w0) == 0
-    assert all(j0)
+    for idx in range(len(num_wave_samples)):
+        if num_wave_samples[idx] % 64 != 0:
+            raise ValueError(f"num_wave_samples[{idx}] (= {num_wave_samples[idx]}) is not multiple of 64")
+        if num_blank_samples[idx] % 4 != 0:
+            raise ValueError(f"num_blank_samples[{idx}] (= {num_blank_samples[idx]}) is not multiple of 4")
+        iq = np.zeros(num_wave_samples[idx], dtype=np.complex64)
+        iq[:] = (1 + 0j) * amplitudes[idx]
+        block_assq: List[Tuple[int, int]] = list(zip(iq.real.astype(int), iq.imag.astype(int)))
+        wave.add_chunk(iq_samples=block_assq, num_blank_words=num_blank_samples[idx] // 4, num_repeats=num_repeats[idx])
+    return wave
 
 
 # Notes: 2 -- 5.8GHz
@@ -222,7 +161,7 @@ def test_all_single_awgs_without_mixer(
     fixtures,
 ):
     box, spa, outdir, port_availability, relative_loss = fixtures
-    assert isinstance(box, Quel1Box)
+    assert isinstance(box, Quel1BoxWithRawWss)
 
     port, subport, portname = decode_port_subport(port_subport)
 
@@ -232,22 +171,26 @@ def test_all_single_awgs_without_mixer(
     elif port_subport in port_availability["via_monitor_out"]:
         via_monitor = True
 
-    box.easy_start_cw(
-        port=port,
-        subport=subport,
-        channel=channel,
-        cnco_freq=cnco_mhz * 1e6,
-        fnco_freq=fnco_mhz * 1e6,
-        fullscale_current=20000,
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
+    wave_param = make_pulses_wave_param(
+        num_delay_sample=0,
+        num_global_repeat=1,
+        num_wave_samples=(64,),
+        num_blank_samples=(0,),
+        num_repeats=(0xFFFFFFFF,),
+        amplitudes=(32767.0,),
     )
+
+    box.config_port(port=port, subport=subport, cnco_freq=cnco_mhz * 1e6, fullscale_current=20000)
+    box.config_channel(port=port, subport=subport, channel=channel, fnco_freq=fnco_mhz * 1e6, wave_param=wave_param)
+    if via_monitor:
+        group, _ = box._convert_output_port_decoded(port, subport)
+        box.deactivate_monitor_loop(group)
+    else:
+        box.config_rfswitch(port=port, rfswitch="pass")
+    box.start_emission(channels=((port_subport, channel),))
+
     expected_freq = (cnco_mhz + fnco_mhz) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     max_sprious_peek = -50.0
-    if has_doubler(box.css._boxtype, port_subport):
-        expected_freq *= 2
-        max_sprious_peek = -42.0
 
     # allowing harmonics for 2-5.8GHz port
     e0 = ExpectedSpectrumPeaks(

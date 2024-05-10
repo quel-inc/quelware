@@ -331,8 +331,8 @@ class Quel1BoxIntrinsic:
         *,
         mxfes_to_linkup: Union[Collection[int], None] = None,
         hard_reset: Union[bool, None] = None,
-        use_204b: Union[bool, None] = None,
-        use_bg_cal: bool = False,
+        use_204b: bool = False,
+        use_bg_cal: bool = True,
         skip_init: bool = False,
         background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
@@ -344,8 +344,6 @@ class Quel1BoxIntrinsic:
             mxfes_to_linkup = self._css.get_all_mxfes()
         if hard_reset is None:
             hard_reset = self._is_quel1se()
-        if use_204b is None:
-            use_204b = not self._is_quel1se()
         if ignore_crc_error_of_mxfe is None:
             ignore_crc_error_of_mxfe = self._options["ignore_crc_error_of_mxfe"]
         if ignore_access_failure_of_adrf6780 is None:
@@ -599,9 +597,9 @@ class Quel1BoxIntrinsic:
         if num_wave_sample % self.NUM_SAMPLE_IN_WAVE_BLOCK != 0:
             raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WAVE_BLOCK}")
         if num_wait_samples[0] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
+            raise ValueError(f"global wait samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
         if num_wait_samples[1] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
+            raise ValueError(f"wait samples between chunks must be multiple of {self.NUM_SAMPLE_IN_WORD}")
 
         awg = self._rmap.get_awg_of_channel(group, line, channel)
         self._wss.set_cw(
@@ -660,6 +658,9 @@ class Quel1BoxIntrinsic:
     def initialize_all_awgs(self) -> None:
         self.wss.initialize_all_awgs()
 
+    def initialize_all_capunits(self) -> None:
+        self.wss.initialize_all_capunits()
+
     def prepare_for_emission(self, channels: Collection[Tuple[int, int, int]]):
         """making preparation of signal generation of multiple channels at the same time.
 
@@ -715,15 +716,12 @@ class Quel1BoxIntrinsic:
         if runits is None:
             runits = {0}
 
-        if isinstance(triggering_channel, tuple):
-            if len(triggering_channel) == 3:
-                triggering_awg: Union[int, None] = self._rmap.get_awg_of_channel(*triggering_channel)
-            else:
-                raise ValueError(f"invalid specifier of triggering channel: {triggering_channel}")
-        elif triggering_channel is None:
-            triggering_awg = None
+        if triggering_channel is None:
+            triggering_awg: Union[int, None] = None
+        elif isinstance(triggering_channel, tuple) and len(triggering_channel) == 3:
+            triggering_awg = self._rmap.get_awg_of_channel(*triggering_channel)
         else:
-            raise TypeError(f"unexpectedly typed triggering channel: {triggering_channel}")
+            raise ValueError(f"invalid triggering channel: {triggering_channel}")
 
         if num_samples % 4 != 0:
             num_samples = ((num_samples + 3) // 4) * 4
@@ -733,9 +731,8 @@ class Quel1BoxIntrinsic:
                 f"the effective delay_samples will be {((delay_samples + 32) // 64) * 64} (!= {delay_samples})"
             )
         if num_samples > 0:
-            capmod = self._rmap.get_capture_module_of_rline(group, input_line)
             return self._wss.simple_capture_start(
-                capmod=capmod,
+                capmod=self._rmap.get_capture_module_of_rline(group, input_line),
                 capunits=runits,
                 num_words=num_samples // 4,
                 delay=delay_samples // 4,
@@ -744,6 +741,40 @@ class Quel1BoxIntrinsic:
             )
         else:
             raise ValueError(f"non-positive value for num_samples (= {num_samples})")
+
+    def capture_start(
+        self,
+        group: int,
+        rline: str,
+        runits: Collection[int],
+        *,
+        triggering_channel: Union[Tuple[int, int, int], None] = None,
+        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
+    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
+        """capturing the wave signal from a given receiver channel.
+
+        :param group: an index of a group which the channel belongs to.
+        :param rline: a group-local index of a line which the channel belongs to.
+        :param runits: line-local indices of the capture units.
+        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
+                                   it is specified by a tuple of group, line, and channel. the capture starts
+                                   immediately if None.
+        :param timeout: waiting time in second before capturing thread quits.
+        :return: captured wave data in NumPy array
+        """
+        if triggering_channel is None:
+            triggering_awg: Union[int, None] = None
+        elif isinstance(triggering_channel, tuple) and len(triggering_channel) == 3:
+            triggering_awg = self._rmap.get_awg_of_channel(*triggering_channel)
+        else:
+            raise ValueError(f"invalid triggering channel: {triggering_channel}")
+
+        return self._wss.capture_start(
+            capmod=self._rmap.get_capture_module_of_rline(group, rline),
+            capunits=runits,
+            triggering_awg=triggering_awg,
+            timeout=timeout,
+        )
 
     def _config_box_inner_line(
         self,
@@ -1063,7 +1094,7 @@ class Quel1BoxIntrinsic:
         if rfswitch is not None:
             self.config_rfswitch(group, rline, rfswitch=rfswitch)
 
-    def config_runit(self, group: int, rline: str, runit: int, *, fnco_freq: Union[float, None]) -> None:
+    def config_runit(self, group: int, rline: str, runit: int, *, fnco_freq: Union[float, None] = None) -> None:
         """configuring parameters of a given receiver channel.
 
         :param group: an index of a group which the channel belongs to.

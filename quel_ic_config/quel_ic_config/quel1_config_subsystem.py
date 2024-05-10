@@ -151,8 +151,8 @@ class QuelMeeBoardConfigSubsystem(
         hard_reset: bool = False,
         soft_reset: bool = False,
         mxfe_init: bool = False,
-        use_204b: bool = True,
-        use_bg_cal: bool = False,
+        use_204b: bool = False,
+        use_bg_cal: bool = True,
         ignore_crc_error: bool = False,
     ) -> bool:
         self._validate_mxfe(mxfe_idx)

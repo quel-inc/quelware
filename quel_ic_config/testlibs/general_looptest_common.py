@@ -339,7 +339,7 @@ class PulseCap:
     ) -> CaptureResults:
         if pg.box != self.box:
             raise ValueError("can not be triggered by an awg of the other box")
-        return self.box.wss.capture_start(
+        return self.box.wss.simple_multiple_capture_start(
             num_iters=num_iters,
             capmod=self.capmod,
             capunits=(self.runit,),
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     from quel_ic_config import Quel1BoxType, Quel1ConfigOption
 
     logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-    matplotlib.use("Qt5agg")
+    matplotlib.use("Gtk3Agg")
 
     COMMON_SETTINGS: Mapping[str, Any] = {
         "lo_freq": 11500e6,

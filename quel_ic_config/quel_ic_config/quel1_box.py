@@ -219,7 +219,7 @@ class Quel1Box:
         css: Quel1AnyBoxConfigSubsystem = cast(
             Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
         )
-        return Quel1Box(css=css, wss=wss, rmap=None, linkupper=None, **options)
+        return cls(css=css, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(
         self,
@@ -289,8 +289,8 @@ class Quel1Box:
         *,
         mxfes_to_linkup: Union[Collection[int], None] = None,
         hard_reset: Union[bool, None] = None,
-        use_204b: Union[bool, None] = None,
-        use_bg_cal: bool = False,
+        use_204b: bool = False,
+        use_bg_cal: bool = True,
         skip_init: bool = False,
         background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
@@ -608,9 +608,11 @@ class Quel1Box:
             group, line, channel, iq=iq, num_repeats=num_repeats, num_wait_samples=num_wait_samples
         )
 
-    # TODO: reconsider name of API
     def initialize_all_awgs(self):
         self._dev.initialize_all_awgs()
+
+    def initialize_all_capunits(self):
+        self._dev.initialize_all_capunits()
 
     def prepare_for_emission(self, channels: Collection[Tuple[Union[int, Tuple[int, int]], int]]):
         """making preparation of signal generation of multiple channels at the same time.
@@ -670,17 +672,9 @@ class Quel1Box:
             # Notes: failure of resolution means the mxfe in the group has multiple capture lines.
             pass
 
-        if triggering_channel is not None:
-            if isinstance(triggering_channel[0], int):
-                trg_port, trg_subport = triggering_channel[0], 0
-            elif isinstance(triggering_channel[0], tuple) and len(triggering_channel[0]) == 2:
-                trg_port, trg_subport = triggering_channel[0]
-            else:
-                raise ValueError(f"invalid triggering channel: {triggering_channel}")
-            trg_group, trg_line = self._convert_output_port_decoded(trg_port, trg_subport)
-            trg_ch3: Union[Tuple[int, int, int], None] = (trg_group, trg_line, triggering_channel[1])
-        else:
-            trg_ch3 = None
+        trg_ch3: Union[Tuple[int, int, int], None] = (
+            self._convert_output_channel(triggering_channel) if triggering_channel is not None else None
+        )
 
         return self._dev.simple_capture_start(
             cap_group,
@@ -688,6 +682,40 @@ class Quel1Box:
             runits=runits,
             num_samples=num_samples,
             delay_samples=delay_samples,
+            triggering_channel=trg_ch3,
+            timeout=timeout,
+        )
+
+    def capture_start(
+        self,
+        port: int,
+        runits: Collection[int],
+        *,
+        triggering_channel: Union[Tuple[Union[int, Tuple[int, int]], int], None] = None,
+        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
+    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
+        """capturing the wave signal from a given receiver channel.
+
+        :param port: an index of a port to capture.
+        :param runits: port-local indices of the capture units of the port.
+        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
+                                   it is specified by a tuple of port and channel. the capture starts
+                                   immediately if None.
+        :param timeout: waiting time in second before capturing thread quits.
+        :return: captured wave data in NumPy array
+        """
+
+        cap_group, cap_rline = self._convert_input_port(port)
+        if cap_rline not in self._dev.rmap.get_active_rlines_of_group(cap_group):
+            raise ValueError("the specified port-#{port:02d} has no active ADC")
+        trg_ch3: Union[Tuple[int, int, int], None] = (
+            self._convert_output_channel(triggering_channel) if triggering_channel is not None else None
+        )
+
+        return self._dev.capture_start(
+            cap_group,
+            cap_rline,
+            runits=runits,
             triggering_channel=trg_ch3,
             timeout=timeout,
         )
@@ -942,7 +970,7 @@ class Quel1Box:
         else:
             raise ValueError(f"port-#{port:02d} is not an output port, not applicable")
 
-    def config_runit(self, port: int, runit: int, *, fnco_freq: Union[float, None]) -> None:
+    def config_runit(self, port: int, runit: int, *, fnco_freq: Union[float, None] = None) -> None:
         """configuring parameters of a given receiver channel.
 
         :param port: an index of a port which the runit belongs to.

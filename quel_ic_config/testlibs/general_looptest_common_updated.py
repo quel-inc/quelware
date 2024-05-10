@@ -1,15 +1,19 @@
+import collections.abc
 import logging
 from concurrent.futures import Future
-from typing import Any, Dict, Final, List, Mapping, Sequence, Set, Tuple, Union
+from typing import Any, Collection, Dict, Final, List, Mapping, Sequence, Set, Tuple, Union, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+from e7awgsw import CaptureParam, WaveSequence
 
 from quel_clock_master import QuBEMasterClient, SequencerClient
 from quel_ic_config import CaptureReturnCode, Quel1Box
 
 logger = logging.getLogger(__name__)
+
+VportSettingType = Union[Mapping[str, Any], Mapping[int, Mapping[str, Any]]]
 
 
 class BoxPool:
@@ -65,6 +69,7 @@ class BoxPool:
         for name, (box, _) in self._boxes.items():
             box.easy_stop_all(control_port_rfswitch=True)
             box.initialize_all_awgs()
+            box.initialize_all_capunits()
 
     def resync(self):
         self._clock_master.reset()  # TODO: confirm whether it is harmless or not.
@@ -186,7 +191,25 @@ class BoxPool:
 
 
 class PulseGen:
-    NUM_SAMPLES_IN_WAVE_BLOCK: Final[int] = 64  # this should be taken from e7awgsw
+    @classmethod
+    def create(cls, settings: Mapping[str, Mapping[str, VportSettingType]], boxpool: BoxPool) -> Dict[str, "PulseGen"]:
+        settings_ = cast(Mapping[str, Mapping[str, Mapping[str, Any]]], settings)
+        pgs: Dict[str, PulseGen] = {}
+        for sender, setting in settings_.items():
+            pgs[sender] = PulseGen(name=sender, **setting["create"], boxpool=boxpool)
+
+            if "config" in setting:
+                pgs[sender].config(**setting["config"])
+
+            if "cw_parameter" in setting:
+                pgs[sender].load_cw(**setting["cw_parameter"])
+            elif "raw_parameter" in setting:
+                raw_parameter = setting["raw_parameter"]
+                if isinstance(raw_parameter, WaveSequence):
+                    pgs[sender].load_wave_parameter(raw_parameter)
+                else:
+                    raise TypeError("unexpected raw_parameter, it is expected to be an e7awgsw.WaveSequence object")
+        return pgs
 
     def __init__(
         self,
@@ -200,8 +223,6 @@ class PulseGen:
         # TODO: eliminate the necessity of boxpool by adding sqc to Quel1Box.
         #       status can be obtained by box.linkstatus()
         box, sqc = boxpool.get_box(boxname)
-        if not all(box.link_status().values()):
-            raise RuntimeError(f"sender '{name}' is not available due to link problem of '{boxname}'")
 
         self.name: str = name
         self.boxname: str = boxname
@@ -213,12 +234,12 @@ class PulseGen:
 
     def config(self, *, fnco_freq: Union[float, None] = None, **kwargs):
         self.box.config_port(port=self.port, subport=self.subport, **kwargs)
-        self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel, fnco_freq=fnco_freq)
+        if fnco_freq is not None:
+            self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel, fnco_freq=fnco_freq)
 
     def load_cw(
         self, amplitude: float, num_wave_sample: int, num_repeats: Tuple[int, int], num_wait_samples: Tuple[int, int]
     ) -> None:
-        # TODO: define default values
         self.box.load_cw_into_channel(
             port=self.port,
             subport=self.subport,
@@ -228,6 +249,20 @@ class PulseGen:
             num_repeats=num_repeats,
             num_wait_samples=num_wait_samples,
         )
+
+    def _set_param_awg(self, wave_param: WaveSequence):
+        group, line = self.box._convert_output_port_decoded(self.port, self.subport)
+        awgidx = self.box.rmap.get_awg_of_channel(group, line, self.channel)
+        self.box.wss.set_param_awg(awgidx, wave_param)
+
+    def load_wave_parameter(self, wave_param: WaveSequence):
+        """loading detailed parameters of wave to be generated. this API is tentative and its wave_param argument will
+        be replaced with more convenient one in the near future.
+        :param wave_param: a raw object (WaveSeuqence) describing the wave to be generated
+        :return: None
+        """
+        self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel)
+        self._set_param_awg(wave_param)
 
     def prepare_for_emission(self):
         self.box.prepare_for_emission({self.awg_spec})
@@ -255,6 +290,53 @@ class PulseGen:
 
 
 class PulseCap:
+    @classmethod
+    def create(cls, settings: Mapping[str, Mapping[str, VportSettingType]], boxpool: BoxPool) -> Dict[str, "PulseCap"]:
+        cps: Dict[str, PulseCap] = {}
+        for capturer, setting in settings.items():
+            cps[capturer] = PulseCap(name=capturer, **cast(Mapping[str, Any], setting["create"]), boxpool=boxpool)
+            # Notes: you can call the following methods to reconfigure the CP anytime you need.
+            if "config" in setting:
+                cps[capturer].config(**cast(Mapping[str, Any], setting["config"]))
+
+            if "simple_parameters" in setting:
+                simple_params = cast(Mapping[int, Mapping[str, Any]], setting["simple_parameters"])
+                for runit, simple_param in simple_params.items():
+                    cps[capturer].load_capture_parameter(runit, cls.make_simple_capture_param(**simple_param))
+            elif "raw_parameter" in setting:
+                raw_params = cast(Mapping[int, Any], setting["raw_parameters"])
+                for runit, raw_param in raw_params.items():
+                    if isinstance(raw_param, CaptureParam):
+                        cps[capturer].load_capture_parameter(runit, raw_param)
+                    else:
+                        raise TypeError("raw_parameter of each runit is expected to be an e7awgsw.CaptureParam object")
+        return cps
+
+    @staticmethod
+    def make_simple_capture_param(
+        num_delay_sample: int,
+        num_integration_section: int,
+        num_capture_samples: Sequence[int],
+        num_blank_samples: Sequence[int],
+    ):
+        capprm = CaptureParam()
+
+        if num_delay_sample % 4 != 0:
+            raise ValueError(f"num_delay_sample (= {num_delay_sample} is not multiple of 4.")
+        capprm.capture_delay = num_delay_sample // 4
+
+        capprm.num_integ_sections = num_integration_section
+        for idx in range(len(num_capture_samples)):
+            if num_capture_samples[idx] % 4 != 0:
+                raise ValueError(f"num_capture_samples[{idx}] (= {num_capture_samples[idx]}) is not multiple of 4")
+            if num_blank_samples[idx] % 4 != 0:
+                raise ValueError(f"num_blank_samples[{idx}] (= {num_blank_samples[idx]}) is not multiple of 4")
+            capprm.add_sum_section(
+                num_words=num_capture_samples[idx] // 4, num_post_blank_words=num_blank_samples[idx] // 4
+            )
+
+        return capprm
+
     def __init__(
         self,
         name: str,
@@ -262,7 +344,6 @@ class PulseCap:
         boxname: str,
         port: int,
         runits: Set[int],
-        background_noise_threshold: float,
         boxpool: BoxPool,
     ):
         box, _ = boxpool.get_box(boxname)
@@ -274,90 +355,98 @@ class PulseCap:
         self.box: Quel1Box = box
         self.port = port
         self.runits = runits
-        self.background_noise_threshold = background_noise_threshold
-        # self.capmod = self.box.rmap.get_capture_module_of_rline(self.group, self.rline)
+        self.capture_parameter: Dict[int, CaptureParam] = {}
 
-    def config(self, *, fnco_freq: Union[float, None] = None, **kwargs):
+    def config(self, *, fnco_freq: Union[Mapping[int, float], float, None] = None, **kwargs):
         # TODO: DSP setting will be added here somehow.
         self.box.config_port(port=self.port, **kwargs)
-        self.box.config_runit(port=self.port, runit=0, fnco_freq=fnco_freq)  # should convert runit -> rchannel
+        if isinstance(fnco_freq, collections.abc.Mapping):
+            for runit in self.runits:
+                self.box.config_runit(port=self.port, runit=runit, fnco_freq=fnco_freq[runit])
+        elif fnco_freq is not None:
+            for runit in self.runits:
+                self.box.config_runit(port=self.port, runit=runit, fnco_freq=fnco_freq)
+        else:
+            raise TypeError(f"malformed fnco_freq: {fnco_freq}")
 
     def capture_now(self, *, num_samples: int, delay_samples: int = 0):
         thunk = self.box.simple_capture_start(
             port=self.port, runits=self.runits, num_samples=num_samples, delay_samples=delay_samples
         )
         status, iqs = thunk.result()
+        self.reload_capture_parameter()
         return status, iqs
 
-    def check_noise(self, show_graph: bool = True):
-        status, iq = self.capture_now(num_samples=1024)
+    def measure_background_noise(self) -> Tuple[float, float, npt.NDArray[np.complex64]]:
+        thunk = self.box.simple_capture_start(port=self.port, runits={0}, num_samples=4096)
+        status, iq = thunk.result()
+        self.reload_capture_parameter({0})
         if status == CaptureReturnCode.SUCCESS:
             noise_avg, noise_max = np.average(abs(iq[0])), max(abs(iq[0]))
             logger.info(f"background noise: max = {noise_max:.1f}, avg = {noise_avg:.1f}")
-            judge = noise_max < self.background_noise_threshold
-            if show_graph:
-                plot_iqs({"test": iq[0]})
-            if not judge:
-                raise RuntimeError(
-                    "the capture port is too noisy, check the output ports connected to the capture port"
-                )
+            return float(noise_avg), float(noise_max), iq[0]
         else:
             raise RuntimeError(f"capture failure due to {status}")
 
-    def capture_at_single_trigger_of(self, *, pg: PulseGen, num_samples: int, delay_samples: int = 0) -> Future:
+    def _set_param_capunit(self, runit: int, cap_param: CaptureParam):
+        group, rline = self.box._convert_input_port(self.port)
+        capmod = self.box.rmap.get_capture_module_of_rline(group, rline)
+        self.box.wss.set_param_capunit(capmod=capmod, capunit=runit, capprm=cap_param)
+
+    def load_capture_parameter(self, runit: int, cap_param: CaptureParam) -> None:
+        """loading detailed parameters describing how to capture the wave data from the specified runit. this API is
+        tentative and its cap_param argument will be replaced with more convenient one in the near future.
+
+        :param runit: an index of runit
+        :param cap_param: a raw object (CaptureParam) describing the details of the signal capture to be conducted.
+        :return: None
+        """
+        if runit not in self.runits:
+            raise ValueError(f"an invalid runit: {runit}")
+        self.box.config_runit(port=self.port, runit=runit)
+        self._set_param_capunit(runit, cap_param)
+        self.capture_parameter[runit] = cap_param
+
+    def reload_capture_parameter(self, runits: Union[Collection[int], None] = None) -> None:
+        if runits is None:
+            runits = self.runits
+        for runit, capprm in self.capture_parameter.items():
+            if runit in runits:
+                self.box.config_runit(port=self.port, runit=runit)
+                self._set_param_capunit(runit, capprm)
+
+    def capture_at_single_trigger_of(self, *, pg: PulseGen) -> Future:
         if pg.box != self.box:
             raise ValueError("can not be triggered by an awg of the other box")
-        return self.box.simple_capture_start(
+        return self.box.capture_start(
             port=self.port,
             runits=self.runits,
-            num_samples=num_samples,
-            delay_samples=delay_samples,
             triggering_channel=pg.awg_spec,
         )
 
-    # TODO: activate it later again.
-    """
-    def capture_at_multiple_triggers_of(
-        self, *, pg: PulseGen, num_iters: int, num_samples: int, delay: int = 0
-    ) -> CaptureResults:
-        if pg.box != self.box:
-            raise ValueError("can not be triggered by an awg of the other box")
-        return self.box.wss.capture_start(
-            num_iters=num_iters,
-            capmod=self.capmod,
-            capunits=(self.runit,),
-            num_words=num_samples // 4,
-            delay=delay,
-            triggering_awg=pg.awg,
-        )
-    """
 
+def make_pulses_wave_param(
+    num_delay_sample: int,
+    num_global_repeat: int,
+    num_wave_samples: Sequence[int],
+    num_blank_samples: Sequence[int],
+    num_repeats: Sequence[int],
+    amplitudes: Sequence[complex],
+) -> WaveSequence:
+    if num_delay_sample % 64 != 0:
+        raise ValueError(f"num_delay_sample (= {num_delay_sample}) is not multiple of 64")
+    wave = WaveSequence(num_wait_words=num_delay_sample // 4, num_repeats=num_global_repeat)
 
-def create_pulsegen(
-    settings: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    boxpool: BoxPool,
-) -> Dict[str, PulseGen]:
-    pgs: Dict[str, PulseGen] = {}
-    senders = [s for s in settings if s.startswith("SENDER")]
-    for sender in senders:
-        pgs[sender] = PulseGen(name=sender, **settings[sender]["create"], boxpool=boxpool)
-        # Notes: you can call the following methods to reconfigure the PG anytime you need.
-        pgs[sender].config(**settings[sender]["config"])
-        pgs[sender].load_cw(**settings[sender]["cw"])
-    return pgs
-
-
-def create_pulsecap(
-    settings: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    boxpool: BoxPool,
-) -> Dict[str, PulseCap]:
-    cps: Dict[str, PulseCap] = {}
-    capturers = [s for s in settings if s.startswith("CAPTURER")]
-    for capturer in capturers:
-        cps[capturer] = PulseCap(name=capturer, **settings[capturer]["create"], boxpool=boxpool)
-        # Notes: you can call the following methods to reconfigure the CP anytime you need.
-        cps[capturer].config(**settings[capturer]["config"])
-    return cps
+    for idx in range(len(num_wave_samples)):
+        if num_wave_samples[idx] % 64 != 0:
+            raise ValueError(f"num_wave_samples[{idx}] (= {num_wave_samples[idx]}) is not multiple of 64")
+        if num_blank_samples[idx] % 4 != 0:
+            raise ValueError(f"num_blank_samples[{idx}] (= {num_blank_samples[idx]}) is not multiple of 4")
+        iq = np.zeros(num_wave_samples[idx], dtype=np.complex64)
+        iq[:] = (1 + 0j) * amplitudes[idx]
+        block_assq: List[Tuple[int, int]] = list(zip(iq.real.astype(int), iq.imag.astype(int)))
+        wave.add_chunk(iq_samples=block_assq, num_blank_words=num_blank_samples[idx] // 4, num_repeats=num_repeats[idx])
+    return wave
 
 
 def find_chunks(
@@ -396,157 +485,23 @@ def calc_angle(iq) -> Tuple[float, float, float]:
     return avg, sd, delta
 
 
-def plot_iqs(iq_dict) -> None:
+def plot_iqs(iq_dict, t_offset: int = 0) -> None:
     n_plot = len(iq_dict)
-    fig = plt.figure()
 
     m = 0
     for _, iq in iq_dict.items():
         m = max(m, np.max(abs(np.real(iq))))
         m = max(m, np.max(abs(np.imag(iq))))
 
-    idx = 0
-    for title, iq in iq_dict.items():
-        ax = fig.add_subplot(n_plot, 1, idx + 1)
-        ax.plot(np.real(iq))
-        ax.plot(np.imag(iq))
-        ax.text(0.05, 0.1, f"{title}", transform=ax.transAxes)
-        ax.set_ylim((-m * 1.1, m * 1.1))
-        idx += 1
-    fig.tight_layout()
+    fig, axs = plt.subplots(n_plot, sharex="col")
+    if n_plot == 1:
+        axs = [axs]
+    fig.set_size_inches(10.0, 2.0 * n_plot)
+    fig.subplots_adjust(bottom=max(0.025, 0.125 / n_plot), top=min(0.975, 1.0 - 0.05 / n_plot))
+    for idx, (title, iq) in enumerate(iq_dict.items()):
+        t = np.arange(0, len(iq)) - t_offset
+        axs[idx].plot(t, np.real(iq))
+        axs[idx].plot(t, np.imag(iq))
+        axs[idx].set_ylim((-m * 1.1, m * 1.1))
+        axs[idx].text(0.05, 0.1, title, transform=axs[idx].transAxes)
     plt.show()
-
-
-if __name__ == "__main__":
-    import matplotlib
-
-    from quel_ic_config import Quel1BoxType
-
-    logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-    matplotlib.use("Qt5agg")
-
-    def simple_trigger(cp1: PulseCap, pg1: PulseGen):
-        thunk = cp1.capture_at_single_trigger_of(pg=pg1, num_samples=1024, delay_samples=0)
-        pg1.emit_now()
-        s0, iq = thunk.result()
-        iq0 = iq[0]
-        assert s0 == CaptureReturnCode.SUCCESS
-        chunks = find_chunks(iq0)
-        return iq0, chunks
-
-    def single_schedule(cp: PulseCap, pg_trigger: PulseGen, pgs: Set[PulseGen], boxpool: BoxPool):
-        if pg_trigger not in pgs:
-            raise ValueError("trigerring pulse generator is not included in activated pulse generators")
-        thunk = cp.capture_at_single_trigger_of(pg=pg_trigger, num_samples=1024, delay_samples=0)
-        boxpool.emit_at(cp=cp, pgs=pgs, min_time_offset=125_000_000, time_counts=(0,))
-
-        s0, iqs = thunk.result()
-        iq0 = iqs[0]
-        assert s0 == CaptureReturnCode.SUCCESS
-        chunks = find_chunks(iq0)
-        return iq0, chunks
-
-    COMMON_SETTINGS: Mapping[str, Any] = {
-        "lo_freq": 11500e6,
-        "cnco_freq": 1500.0e6,
-        "fnco_freq": 0,
-        "sideband": "L",
-        "amplitude": 6000.0,
-    }
-
-    DEVICE_SETTINGS: Dict[str, Mapping[str, Any]] = {
-        "CLOCK_MASTER": {
-            "ipaddr": "10.3.0.13",
-            "reset": True,
-        },
-        "BOX0": {
-            "ipaddr_wss": "10.1.0.74",
-            "ipaddr_sss": "10.2.0.74",
-            "ipaddr_css": "10.5.0.74",
-            "boxtype": Quel1BoxType.QuEL1_TypeA,
-            "config_root": None,
-            "config_options": [],
-        },
-        "BOX1": {
-            "ipaddr_wss": "10.1.0.58",
-            "ipaddr_sss": "10.2.0.58",
-            "ipaddr_css": "10.5.0.58",
-            "boxtype": Quel1BoxType.QuEL1_TypeA,
-            "config_root": None,
-            "config_options": [],
-        },
-        "BOX2": {
-            "ipaddr_wss": "10.1.0.60",
-            "ipaddr_sss": "10.2.0.60",
-            "ipaddr_css": "10.5.0.60",
-            "boxtype": Quel1BoxType.QuEL1_TypeB,
-            "config_root": None,
-            "config_options": [],
-        },
-    }
-
-    VPORT_SETTINGS: Dict[str, Mapping[str, Mapping[str, Any]]] = {
-        "CAPTURER": {
-            "create": {
-                "boxname": "BOX0",
-                "port": 0,  # (0, "r")
-                "runits": {0},
-                "background_noise_threshold": 200.0,
-            },
-            "config": {
-                "lo_freq": COMMON_SETTINGS["lo_freq"],
-                "cnco_freq": COMMON_SETTINGS["cnco_freq"],
-                "fnco_freq": COMMON_SETTINGS["fnco_freq"],
-                "rfswitch": "open",
-            },
-        },
-        "SENDER0": {
-            "create": {
-                "boxname": "BOX0",
-                "port": 8,  # (1, 2)
-                "channel": 0,
-            },
-            "config": {
-                "lo_freq": COMMON_SETTINGS["lo_freq"],
-                "cnco_freq": COMMON_SETTINGS["cnco_freq"],
-                "fnco_freq": COMMON_SETTINGS["fnco_freq"],
-                "sideband": COMMON_SETTINGS["sideband"],
-                "vatt": 0xA00,
-            },
-            "cw": {
-                "amplitude": COMMON_SETTINGS["amplitude"],
-                "num_wave_sample": 64,
-                "num_repeats": (2, 1),
-                "num_wait_samples": (0, 80),
-            },
-        },
-    }
-
-    boxpool0 = BoxPool(DEVICE_SETTINGS)
-    boxpool0.init(resync=True)
-    pgs0 = create_pulsegen(VPORT_SETTINGS, boxpool0)
-    cps0 = create_pulsecap(VPORT_SETTINGS, boxpool0)
-    cp0 = cps0["CAPTURER"]
-
-    boxpool0.measure_timediff(cp0)
-
-    box0, sqc0 = boxpool0.get_box("BOX0")
-
-    # Notes: close loop before checking the noise
-    box0.config_rfswitch(port=0, rfswitch="loop")  # TODO: capturer should control its loop switch
-    box0.config_rfswitch(port=7, rfswitch="loop")
-    box0.activate_monitor_loop(0)
-    box0.activate_monitor_loop(1)
-    cp0.check_noise(show_graph=False)
-
-    # Notes: monitor should be
-    box0.config_rfswitch(port=0, rfswitch="open")
-    box0.config_rfswitch(port=7, rfswitch="open")
-    box0.deactivate_monitor_loop(0)
-    box0.deactivate_monitor_loop(1)
-
-    iqs0 = simple_trigger(cp0, pgs0["SENDER0"])
-    plot_iqs({"cap0": iqs0[0]})
-
-    iqs1 = single_schedule(cp0, pgs0["SENDER0"], {pgs0["SENDER0"]}, boxpool0)
-    plot_iqs({"cap0": iqs1[0]})

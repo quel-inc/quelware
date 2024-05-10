@@ -1,7 +1,16 @@
 # quel_ic_config を使ってみる
 [quelwareリポジトリ](https://github.com/quel-inc/quelware)を取得するところから、CLIコマンドやハイレベルAPIの基本的な動作を確認するまでを説明する。
+以下の手順の動作確認は、Ubuntu 20.04.6 LTS で行っているが、他のLinuxディストリビューションでも同様の手順で環境構築ができるはずだ。
 
 ## 環境構築
+### 依存パッケージのインストール
+サンプルスクリプトやテストコードにて、グラフの表示に matplotlib を用いている。
+Qt5Aggを使いたいところではあるが商用ライセンスを購入しないとGPLが適用されてしまうので、quelwareの配布物では Gtk3Agg を使用する。
+これにあたり、以下の手順でパッケージのインストールをしておく必要がある。
+```shell
+sudo apt install libgirepository1.0-dev gcc libcairo2-dev pkg-config python3-dev gir1.2-gtk-3.0
+```
+
 ### 仮想環境の作成
 任意の作業ディレクトリで以下の手順を実行すると、新しい仮想環境が利用可能な状態になる。
 ```shell
@@ -224,8 +233,11 @@ quel1_linkup  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
 リンクアップが失敗を繰り返す場合には、警告ログの内容と共に連絡を頂きたい。
 コマンドを`--verbose`オプション付きで実行すると、さらに詳細な情報が得られる。
 このログを頂ければ、対応検討の返答までの時間の短縮が期待できる。
-なお、`--use_204c` オプションを付けると症状の改善を期待できるので、是非、試していただきたい。
-このオプションは2023年度納品機（QuEL-1 SE）ではデフォルトでの適用になることが決まっている。
+
+なお、v0.8.9以降では全ての制御装置でJESD204C準拠のリンクキャリブレーションを行い、さらに、使用中も常時キャリブレーションが行われる（バックグラウンドキャリブレーション）を実施する設定となる。
+この設定がリンクアップの成功率を最大化し、かつ、リンクアップ後のCRCエラーの発生を抑えることができる。
+しかし、なんらかの理由で従来と同様にJESD204B準拠のリンクアップキャリブレーションを使いたい、あるいは、バックグラウンドキャリブレーションを止めたい場合には、
+それぞれ `--use_204b` と `--nouse_bgcal`をオプションとして指定すればよい。 
 
 #### ハードウェアトラブルの一時的回避
 ##### CRCエラー
@@ -238,9 +250,7 @@ quel1_linkup  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
   - FPGAから送られてきた波形データの破損をAD9082が検出したことを示す。`(linkstatus = 0xe0, error_flag = 0x11)` でリンクアップが失敗することでCRCエラーの発生が分かる。
   - `--ignore_crc_error_of_mxfe` にCRCエラーを無視したい MxFE (AD9082) のIDを与える。カンマで区切って複数のAD9082のIDを与えることもできる。
   - 上述のとおり、日に1回程度の低い頻度で発生している分には実験結果に分かるような影響はない。
-  　- QuEL-1 以降では、linkup中にCRCエラーが発生する機体を出荷停止にしているので、必要ないはずである。 
-  - 頻繁に発生して気になる場合には、quel1_linkup コマンドに `--use_204c`オプションを付けると発生を低減できる可能性が高い。
-    - QuEL-1 SE以降ではデフォルトで `--use_204c` が適用となる。QuEL-1以前の機体にはリンクアップの成功率が下がる個体があるかもしれないので、デフォルトにしていない。 
+  　- QuEL-1 以降では、linkup中にCRCエラーが発生する機体を出荷停止にしているので、必要ないはずである。  
 - ミキサの起動不良
   - QuBEの一部の機体において、電源投入時にミキサ(ADRF6780)の起動がうまくいかない事象が知られている。`unexpected chip revision of ADRF6780[n]`(n は0~7) で通信がうまくいっていないミキサのIDが分かる。   
   - `--ignore_access_failure_of_adrf6780` にエラーを無視したいミキサのID (上述のn)を与える。
@@ -426,12 +436,8 @@ abs(iq)
 
 ## 次のステップ
 波形発生の実用的APIについては、サンプルコードを読んでいただくのが理解の早道だと考える。
-使い勝手にやや難はあるが、参考になると思う。
 - [`general_loopback_test_update.py`](./testlibs/general_looptest_common_updated.py):  boxオブジェクトを使った信号発生と取得の例として分かりやすい。
-- [`simple_scheduled_loopback.py`](./scripts/simple_scheduled_loopback.py): boxオブジェクトを使って書き直すのが間に合っていないが、タイムトリガ実行のより実践的な例として有用。内部のカウンタを使って、一定間隔で5回、キャプチャを繰り返す。対象機体（10.1.0.74がハードコードされている）の2つのモニタアウトをコンバイナを介して、グループ0のRead-inに繋いだ状態で使う。 
-- [`twobox_scheduled_loopback.py`](./scripts/twobox_scheduled_loopback.py): `simple_scheduled_loopback.py`を複数の制御装置に拡張したもの。内部のカウンタを使って、2台の制御装置（10.1.0.74 と 10.1.0.58) を同期してキャプチャする。2台の制御装置の合計4つのモニタアウトをコンバイナを介して、1台目のグループ0のRead-inに繋いだ状態で使う。
-- [`skew_scan.py`](./scripts/skew_scan.py): `twobox_schedued_loopback.py`の内容を、開始タイミングを1クロックずつずらしながら17回行い、波形生成のタイミング関係に与える影響を確認するサンプル。
-- [`quel_measurement.py`](./quel_ic_config_cli/phase_measurement.py): モニタループバックを介した出力信号の長期間位相計測を行うため非公式コマンドである quel1_phase_log のソースコード。
+- [`quel1se_check_all_internal_loopback.py`](./scripts/quel1se_check_all_internal_loopbacks.py): 上記 `general_loopback_test_update.py`を使った最もシンプルなスクリプト。   
 
 なお、boxオブジェクトのAPIのより詳しい情報は、[移行ガイド](./MIGRATION_TO_0_8_X.md) に記載がある。
 また、[ソースコード](./quel_ic_config/quel1_box.py) の pydoc にも説明がある。

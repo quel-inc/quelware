@@ -24,6 +24,7 @@ from quel_ic_config.powerboard_pwm import PowerboardPwmConfigHelper, PowerboardP
 from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem, Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box import Quel1Box
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic
+from quel_ic_config.quel1_box_with_raw_wss import Quel1BoxWithRawWss
 from quel_ic_config.quel1_config_subsystem import (
     ExstickgeSockClientQuel1,
     QubeConfigSubsystem,
@@ -89,7 +90,7 @@ from quel_ic_config.thermistor import (
     Quel1seProtoThermistor,
 )
 
-__version__ = "0.8.8"
+__version__ = "0.8.9"
 
 __all__ = (
     "Ad5328",
@@ -172,6 +173,7 @@ __all__ = (
     "PowerboardPwmRegs",
     "PowerboardPwm",
     "Quel1Box",
+    "Quel1BoxWithRawWss",
     "Quel1BoxIntrinsic",
     "get_exstickge_server_info",
     "Quel1WaveSubsystem",

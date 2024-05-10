@@ -288,6 +288,20 @@ class Quel1WaveSubsystem:
         if not all({capmod in muc for capmod in capmods}):
             raise ValueError(f"invalid capture modules detected in ({','.join([str(m) for m in capmods])})")
 
+    def _validate_capunit_lgidxs(self, capmod: int, capunits: Collection[int]) -> None:
+        self._validate_capmod_hwidxs({capmod})
+        num_capunits = self.get_num_capunits_of_capmod(capmod)
+        if not all({0 <= capunit < num_capunits for capunit in capunits}):
+            raise ValueError(
+                f"invalid capture units ({','.join([str(u) for u in capunits])}) of capture module {capmod}"
+            )
+
+    def _get_capunit_hwidx(self, capunit: Tuple[int, int]) -> int:
+        muc = self.get_muc_structure()
+        m, u = capunit
+        hwidx = tuple(muc[m].keys())[u]  # Notes: ordered dict
+        return hwidx
+
     def _get_capunit_hwidxs(self, capunits: Collection[Tuple[int, int]]) -> Dict[int, Tuple[int, int]]:
         """converting capmod-local index of capunit to its global index.
 
@@ -305,26 +319,37 @@ class Quel1WaveSubsystem:
         if not self._integrity_between_firmware_and_library:
             raise RuntimeError(f"mismatched e7awgsw library with box@{self._wss_addr}")
 
-    def initialize_awgs(self, awgs: Collection[int]):
+    def initialize_awgs(self, awgs: Collection[int]) -> None:
         self.validate_installed_e7awgsw()
 
         self._validate_awg_hwidxs(awgs)
         self._awgctrl.initialize(*awgs)
         self._awgctrl.terminate_awgs(*awgs)
 
-    def initialize_all_awgs(self):
+    def initialize_all_awgs(self) -> None:
         self.validate_installed_e7awgsw()
 
         awgs = AWG.all()
-        self._validate_awg_hwidxs(awgs)
         self._awgctrl.initialize(*awgs)
         self._awgctrl.terminate_awgs(*awgs)
 
-    def initialize_capunits(self, capunits: Collection[Tuple[int, int]]):
+    def initialize_capunits(self, capunits: Collection[Tuple[int, int]]) -> None:
         self.validate_installed_e7awgsw()
 
         hwidxs = self._get_capunit_hwidxs(capunits)
         self._capctrl.initialize(*hwidxs)
+
+    def initialize_all_capunits(self) -> None:
+        self.validate_installed_e7awgsw()
+
+        capunits = CaptureUnit.all()
+        self._capctrl.initialize(*capunits)
+
+    def set_param_capunit(self, capmod: int, capunit: int, capprm: CaptureParam) -> None:
+        self.validate_installed_e7awgsw()
+
+        cuhwx = self._get_capunit_hwidx((capmod, capunit))
+        self._capctrl.set_capture_params(cuhwx, capprm)
 
     def simple_capture(
         self,
@@ -334,9 +359,7 @@ class Quel1WaveSubsystem:
         delay: int = 0,
         timeout: float = DEFAULT_SIMPLE_CAPTURE_TIMEOUT,
     ) -> Tuple[CaptureReturnCode, npt.NDArray[np.complex64]]:
-        self.validate_installed_e7awgsw()
-
-        # Notes: paramters are validated in self.capture_start().
+        # Notes: paramters will be validated in self.simple_capture_start().
         future = self.simple_capture_start(
             capmod=capmod,
             capunits=(0,),
@@ -345,8 +368,7 @@ class Quel1WaveSubsystem:
             triggering_awg=None,
             timeout=timeout,
         )
-
-        # Notes: this case, no timeout handling is required here since capture module was activated definitely.
+        # Notes: no timeout handling is required here since capture module was activated definitely.
         status, data = future.result()
         if status in {CaptureReturnCode.BROKEN_DATA, CaptureReturnCode.SUCCESS}:
             return status, data[0]
@@ -364,21 +386,64 @@ class Quel1WaveSubsystem:
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
         self.validate_installed_e7awgsw()
+        self._validate_capunit_lgidxs(capmod, capunits)
 
-        self._validate_capmod_hwidxs({capmod})
+        capprm = CaptureParam()
+        capprm.num_integ_sections = 1
+        capprm.add_sum_section(num_words=num_words, num_post_blank_words=1)
+        capprm.capture_delay = delay
+        for capunit in capunits:
+            self.set_param_capunit(capmod, capunit, capprm)
+
+        return self._capture_start_body(
+            capmod=capmod,
+            capunits=capunits,
+            triggering_awg=triggering_awg,
+            timeout=timeout,
+            num_expected_words={capunit: num_words for capunit in capunits},
+        )
+
+    def capture_start(
+        self,
+        *,
+        capmod: int,
+        capunits: Collection[int],
+        triggering_awg: Union[int, None] = None,
+        timeout: float = DEFAULT_CAPTURE_TIMEOUT,
+        num_expected_words: Union[Dict[int, int], None] = None,
+    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
+        self.validate_installed_e7awgsw()
+        self._validate_capunit_lgidxs(capmod, capunits)
+        return self._capture_start_body(
+            capmod=capmod,
+            capunits=capunits,
+            triggering_awg=triggering_awg,
+            timeout=timeout,
+            num_expected_words=num_expected_words,
+        )
+
+    def _capture_start_body(
+        self,
+        *,
+        capmod: int,
+        capunits: Collection[int],
+        triggering_awg: Union[int, None],
+        timeout: float,
+        num_expected_words: Union[Dict[int, int], None],
+    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
         cuhwxs: Dict[int, Tuple[int, int]] = self._get_capunit_hwidxs([(capmod, capunit) for capunit in capunits])
         if triggering_awg is not None:
             self._validate_awg_hwidxs({triggering_awg})
+        num_expected_words_xlated = (
+            {cuhwx: num_expected_words[culgx] for cuhwx, (_, culgx) in cuhwxs.items()}
+            if num_expected_words is not None
+            else None
+        )
+        self._setup_capture_units(capmod, cuhwxs, triggering_awg)
+        return self._executor.submit(self._simple_capture_thread_main, cuhwxs, num_expected_words_xlated, timeout)
 
-        cap_prm = CaptureParam()
-        cap_prm.num_integ_sections = 1
-        cap_prm.add_sum_section(num_words=num_words, num_post_blank_words=1)
-        cap_prm.capture_delay = delay
-
-        self._setup_capture_units(capmod, cuhwxs, cap_prm, triggering_awg)
-        return self._executor.submit(self._simple_capture_thread_main, cuhwxs, num_words, timeout)
-
-    def capture_start(
+    # TODO: consider to depricate this method or not.
+    def simple_multiple_capture_start(
         self,
         *,
         num_iters: int,
@@ -390,34 +455,35 @@ class Quel1WaveSubsystem:
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> CaptureResults:
         self.validate_installed_e7awgsw()
-
-        self._validate_capmod_hwidxs({capmod})
+        self._validate_capunit_lgidxs(capmod, capunits)
         cuhwxs: Dict[int, Tuple[int, int]] = self._get_capunit_hwidxs([(capmod, capunit) for capunit in capunits])
         if triggering_awg is not None:
             self._validate_awg_hwidxs({triggering_awg})
 
-        cap_prm = CaptureParam()
-        cap_prm.num_integ_sections = 1
-        cap_prm.add_sum_section(num_words=num_words, num_post_blank_words=1)
-        cap_prm.capture_delay = delay
+        capprm = CaptureParam()
+        capprm.num_integ_sections = 1
+        capprm.add_sum_section(num_words=num_words, num_post_blank_words=1)
+        capprm.capture_delay = delay
+        for capunit in capunits:
+            self.set_param_capunit(capmod, capunit, capprm)
 
-        self._setup_capture_units(capmod, cuhwxs, cap_prm, triggering_awg)
+        self._setup_capture_units(capmod, cuhwxs, triggering_awg)
         q: "SimpleQueue[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]" = SimpleQueue()
         return CaptureResults(
-            self._executor.submit(self._capture_thread_main, q, num_iters, cuhwxs, num_words, timeout), q, num_iters
+            self._executor.submit(
+                self._capture_thread_main, q, num_iters, cuhwxs, {cuhwx: num_words for cuhwx in cuhwxs}, timeout
+            ),
+            q,
+            num_iters,
         )
 
     def _setup_capture_units(
         self,
         capmod: int,
         cuhwxs: Dict[int, Tuple[int, int]],
-        cap_prm: CaptureParam,
         triggering_awg: Union[int, None] = None,
     ) -> None:
         with self._capctrl_lock:
-            self._capctrl.initialize(*cuhwxs)
-            for cuhwx in cuhwxs:
-                self._capctrl.set_capture_params(cuhwx, cap_prm)
             # TODO: it looks better to dump status of capture units for debug.
             if triggering_awg is None:
                 self._capctrl.start_capture_units(*cuhwxs)
@@ -502,15 +568,17 @@ class Quel1WaveSubsystem:
         return errflag
 
     def _retrieve_capture_data(
-        self, cuhwxs: Dict[int, Tuple[int, int]], num_words: int
+        self,
+        cuhwxs: Dict[int, Tuple[int, int]],
+        num_words: Union[Dict[int, int], None],
     ) -> Tuple[CaptureReturnCode, Dict[Tuple[int, int], npt.NDArray[np.complex64]]]:
         data: Dict[Tuple[int, int], npt.NDArray[np.complex64]] = {}
         status: CaptureReturnCode = CaptureReturnCode.SUCCESS
         with self._capctrl_lock:
             for cuhwx, capunit in cuhwxs.items():
                 n_sample_captured = self._capctrl.num_captured_samples(cuhwx)
-                n_sample_expected = num_words * 4
-                if n_sample_captured == n_sample_expected:
+                n_sample_expected = num_words[cuhwx] * 4 if num_words is not None else None
+                if (n_sample_expected is None) or (n_sample_captured == n_sample_expected):
                     logger.debug(f"the capture unit {self._wss_addr}:{capunit} captured {n_sample_captured} samples")
                 else:
                     # TODO: investigate the reason this happens
@@ -530,7 +598,7 @@ class Quel1WaveSubsystem:
     def _simple_capture_thread_main(
         self,
         cuhwxs: Dict[int, Tuple[int, int]],
-        num_expected_words: int,
+        num_expected_words: Union[Dict[int, int], None],
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]:
         ready: bool = self._wait_for_capture_data(cuhwxs, timeout)
@@ -547,7 +615,7 @@ class Quel1WaveSubsystem:
         q: "SimpleQueue[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]",
         num_iters: int,
         cuhwxs: Dict[int, Tuple[int, int]],
-        num_expected_words: int,
+        num_expected_words: Union[Dict[int, int], None],
         timeout: float = DEFAULT_CAPTURE_TIMEOUT,
     ) -> None:
         for _ in range(num_iters):
@@ -580,19 +648,11 @@ class Quel1WaveSubsystem:
         num_wave_blocks: int = 1,
         num_wait_words: Tuple[int, int] = (0, 0),
     ) -> None:
-        self.validate_installed_e7awgsw()
-        self._validate_awg_hwidxs({awg})
-        wave = WaveSequence(num_wait_words=num_wait_words[0], num_repeats=num_repeats[0])
-        iq = np.zeros(wave.NUM_SAMPLES_IN_WAVE_BLOCK * num_wave_blocks, dtype=np.complex64)
+        # Notes: parameter validation will be conducted in set_iq()
+        iq = np.zeros(WaveSequence.NUM_SAMPLES_IN_WAVE_BLOCK * num_wave_blocks, dtype=np.complex64)
         iq[:] = 1 + 0j
         iq[:] *= amplitude
-        block_assq: List[Tuple[int, int]] = list(zip(iq.real.astype(int), iq.imag.astype(int)))
-        wave.add_chunk(iq_samples=block_assq, num_blank_words=num_wait_words[1], num_repeats=num_repeats[1])
-
-        with self._awgctrl_lock:
-            self._awgctrl.terminate_awgs(awg)  # to override current task of the unit
-            # TODO: should wait for confirming the termination (?)
-            self._awgctrl.set_wave_sequence(awg, wave)
+        self.set_iq(awg, iq, num_repeats, num_wait_words)
 
     def set_iq(
         self,
@@ -606,11 +666,18 @@ class Quel1WaveSubsystem:
         wave = WaveSequence(num_wait_words=num_wait_words[0], num_repeats=num_repeats[0])
         block_assq: List[Tuple[int, int]] = list(zip(iq.real.astype(int), iq.imag.astype(int)))
         wave.add_chunk(iq_samples=block_assq, num_blank_words=num_wait_words[1], num_repeats=num_repeats[1])
+        self._set_param_awg_body(awg, wave)
 
+    def set_param_awg(self, awg: int, wavprm: WaveSequence):
+        self.validate_installed_e7awgsw()
+        self._validate_awg_hwidxs({awg})
+        self._set_param_awg_body(awg, wavprm)
+
+    def _set_param_awg_body(self, awg: int, wavprm: WaveSequence):
         with self._awgctrl_lock:
             self._awgctrl.terminate_awgs(awg)  # to override current task of the unit
             # TODO: should wait for confirming the termination (?)
-            self._awgctrl.set_wave_sequence(awg, wave)
+            self._awgctrl.set_wave_sequence(awg, wavprm)
 
     def clear_before_starting_emission(self, awgs: Collection[int]):
         self.validate_installed_e7awgsw()
