@@ -12,6 +12,8 @@ class QuelInstDevice(str, Enum):
     MS2720T_1 = "MS2720T-1"
     MS2090A_1 = "MS2090A-1"
     SYNTHHD = "SYNTH_HD"  # tentative
+    PE6108AVA_1 = "PE6108AVA-1"
+    PE4104AJ_1 = "PE4104AJ-1"
 
     def get_visa_name(self):
         if self in {self.E4405B, self.E4407B, self.MS2720T_1, self.MS2090A_1}:

@@ -5,12 +5,12 @@ from quel_inst_tool.e4407b import E4407b
 from quel_inst_tool.ms2xxxx import Ms2xxxx, Ms2xxxxTraceMode
 from quel_inst_tool.ms2090a import Ms2090a
 from quel_inst_tool.ms2720t import Ms2720t
-from quel_inst_tool.pe6108ava import Pe6108ava, PeSwitchState
+from quel_inst_tool.pexxxx import Pe4104aj, Pe6108ava, PeSwitchState, Pexxxx
 from quel_inst_tool.spectrum_analyzer import InstDevManager, SpectrumAnalyzer
 from quel_inst_tool.spectrum_peak import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 from quel_inst_tool.synthhd import SynthHDChannel, SynthHDMaster, SynthHDSweepParams
 
-__version__ = "0.2.6"
+__version__ = "0.2.9"
 
 __all__ = [
     "E4405b",
@@ -29,6 +29,8 @@ __all__ = [
     "E440xbWritableParams",
     "E440xbTraceMode",
     "E440xbClient",
+    "Pexxxx",
+    "Pe4104aj",
     "Pe6108ava",
     "PeSwitchState",
     "SynthHDMaster",

@@ -4,13 +4,25 @@ import shutil
 import socket
 import time
 from pathlib import Path
-from typing import Dict, Final, List, Tuple, Type
+from typing import Any, Dict, Final, List, Tuple, Type
 
 import matplotlib as mpl
 import pytest
 from device_availablity import QuelInstDevice, get_available_devices
 
-from quel_inst_tool import E4405b, E4407b, InstDevManager, Ms2xxxx, Ms2090a, Ms2720t, SpectrumAnalyzer, SynthHDMaster
+from quel_inst_tool import (
+    E4405b,
+    E4407b,
+    InstDevManager,
+    Ms2xxxx,
+    Ms2090a,
+    Ms2720t,
+    Pe4104aj,
+    Pe6108ava,
+    Pexxxx,
+    SpectrumAnalyzer,
+    SynthHDMaster,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +41,15 @@ DEVICES: Final[List[str]] = [
 
 OUTDIR: Final[Path] = Path("./artifacts/device/")
 
+PEXXXX_MAPPING: Final[Dict[QuelInstDevice, Dict[str, Any]]] = {
+    QuelInstDevice.PE6108AVA_1: {"ip_addr": "10.250.0.102", "type": Pe6108ava, "test_ch": 4},
+    QuelInstDevice.PE4104AJ_1: {"ip_addr": "10.250.0.101", "type": Pe4104aj, "test_ch": 4},
+}
+
+PEXXXX_DEVICES: Final[List[str]] = [
+    QuelInstDevice.PE6108AVA_1,
+    QuelInstDevice.PE4104AJ_1,
+]
 
 MAX_RETRY_VISA_LOOKUP: Final = 5
 
@@ -93,8 +114,20 @@ def signal_generator() -> SynthHDMaster:
 
 @pytest.fixture(scope="session")
 def outdir() -> Path:
-    mpl.use("Qt5Agg")
+    mpl.use("Gtk3Agg")
     if os.path.exists(OUTDIR):
         shutil.rmtree(OUTDIR)
         os.makedirs(OUTDIR)
     return Path(OUTDIR)
+
+
+@pytest.fixture(scope="session", params=PEXXXX_DEVICES)
+def pexxxx_ch_and_device(request) -> Tuple[int, Pexxxx]:
+    available = get_available_devices()
+    pexxxx_name = request.param
+    logger.info(f"try to acquire {pexxxx_name}")
+    if pexxxx_name not in available:
+        pytest.skip(f"{pexxxx_name} is not available")
+    return PEXXXX_MAPPING[pexxxx_name]["test_ch"], PEXXXX_MAPPING[pexxxx_name]["type"](
+        hostname=PEXXXX_MAPPING[pexxxx_name]["ip_addr"]
+    )

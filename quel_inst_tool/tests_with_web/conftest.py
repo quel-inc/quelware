@@ -27,7 +27,7 @@ def e440xb_name(request) -> str:
 
 @pytest.fixture(scope="session")
 def outdir() -> Path:
-    mpl.use("Qt5Agg")
+    mpl.use("Gtk3Agg")
     if os.path.exists(OUTDIR):
         shutil.rmtree(OUTDIR)
         os.makedirs(OUTDIR)

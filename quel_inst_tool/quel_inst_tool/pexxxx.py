@@ -2,6 +2,7 @@ import logging
 import socket
 import telnetlib
 import time
+from abc import abstractmethod
 from enum import Enum
 from typing import Final, List, Union
 
@@ -14,7 +15,7 @@ class PeSwitchState(str, Enum):
     PENDING = "pending"
 
 
-class Pe6108ava:
+class Pexxxx:
     _DEFAULT_USERNAME = "teladmin"
     _DEFAULT_PASSWORD = "telpwd"
     _DEFAULT_PORT = 23
@@ -52,6 +53,17 @@ class Pe6108ava:
         rep = self._read_and_parse(self._BR + self._PROMPT)
         return rep
 
+    def _is_login_prompt(self, input_strs: List[str]) -> bool:
+        if len(input_strs) == 0:
+            return False
+        elif hasattr(self, "_LOGIN_PROMPT"):
+            if repr(input_strs[-1]) == self._LOGIN_PROMPT:
+                return True
+            else:
+                return False
+        else:
+            raise AssertionError
+
     def open(self) -> bool:
         self._tn = telnetlib.Telnet(host=self._ipaddr, port=self._port, timeout=self._timeout)
         for _ in range(3):
@@ -66,17 +78,22 @@ class Pe6108ava:
             self._tn = None
             return False
 
+    @abstractmethod
+    def _write(self, input_str: str) -> None:
+        pass
+
     def _open(self) -> bool:
         if self._tn is None:
             raise AssertionError
         rep = self._read_and_parse("Login: ")
-        if len(rep) == 0 or rep[-1] != "Login: ":
+        if self._is_login_prompt(rep):
+            self._write(self._username)
+        else:
             return False
-        self._tn.write((self._username + self._BR).encode())
         rep = self._read_and_parse("Password: ")
         if len(rep) == 0 or rep[-1] != "Password: ":
             return False
-        self._tn.write(self._password.encode() + b"\r\n")
+        self._write(self._password)
         rep = self._read_until_prompt_and_parse()
         if len(rep) == 0 or rep[-1] != self._PROMPT:
             return False
@@ -88,25 +105,28 @@ class Pe6108ava:
         else:
             try:
                 return self._exec_cmd(cmd)
-            except BrokenPipeError:
+            except (RuntimeError, BrokenPipeError):
                 self.open()
-        return self._exec_cmd(cmd)
+        return [str.strip() for str in self._exec_cmd(cmd)]
 
     def _exec_cmd(self, cmd: str) -> List[str]:
         if self._tn is None:
             raise AssertionError
-        self._tn.write((cmd + self._BR).encode())
+        self._write(cmd)
         rep = self._read_until_prompt_and_parse()
         if len(rep) == 0:
             raise RuntimeError("no response")
+        elif "Session expired" in rep[-1]:
+            # for attn pe4014aj, session is not automatically closed. but print "Session expired"
+            raise RuntimeError
         elif rep[-1] != "> ":
             raise RuntimeError("truncated output, no prompt is detected")
         else:
-            return rep[:-1]
+            return [str.strip() for str in rep[:-1]]
 
+    @abstractmethod
     def _validate_switch_index(self, idx: int) -> None:
-        if not 1 <= idx <= 8:
-            raise ValueError("invalid index of switch: {idx}")
+        pass
 
     def check_switch(self, idx: int) -> PeSwitchState:
         self._validate_switch_index(idx)
@@ -115,7 +135,7 @@ class Pe6108ava:
         if len(reply) != 2 or reply[0] != cmd or reply[1] not in {"on", "off", "pending"}:
             msg = "/".join(reply)
             raise RuntimeError(f"failed to read status of switch, unexpected reply '{msg}' is received")
-        return PeSwitchState(reply[1])
+        return PeSwitchState(reply[1].strip())
 
     def is_turned_on(self, idx: int) -> bool:
         return self.check_switch(idx) == PeSwitchState.ON
@@ -134,10 +154,9 @@ class Pe6108ava:
 
         cmd = f"sw o{idx:02d} imme {status.value}"
         reply = self._exec_cmd(cmd)
-        if len(reply) != 2 or reply[1] != f" Outlet<{idx:02d}> command is setting ":
+        if len(reply) != 2 or reply[1] != f"Outlet<{idx:02d}> command is setting":
             msg = "/".join(reply)
             raise RuntimeError(f"failed to change the status of switch: unexpected reply '{msg}' is received")
-
         t0 = time.perf_counter()
         for _ in range(10):
             time.sleep(1)
@@ -167,3 +186,35 @@ class Pe6108ava:
         time.sleep(off_duration)
         self.turn_switch(idx, PeSwitchState.ON)
         return
+
+
+class Pe6108ava(Pexxxx):
+    _LOGIN_PROMPT: str = r"'Login: '"
+
+    def _validate_switch_index(self, idx: int) -> None:
+        if not 1 <= idx <= 8:
+            raise ValueError("invalid index of switch: {idx}")
+
+    def _write(self, input_str: str) -> None:
+        if self._tn is not None:
+            self._tn.write((input_str + self._BR).encode())
+        else:
+            raise AssertionError
+
+
+class Pe4104aj(Pexxxx):
+    _LOGIN_PROMPT: str = r"'\x1b[H\x1b[JLogin: '"
+
+    def _validate_switch_index(self, idx: int) -> None:
+        if not 1 <= idx <= 4:
+            raise ValueError("invalid index of switch: {idx}")
+
+    def _write(self, input_str: str) -> None:
+        # For attn pe4014aj, writing multiple character is failed and only first one charactor is written
+        if self._tn is not None:
+            for char in input_str:
+                self._tn.write(char.encode())
+                time.sleep(0.1)
+            self._tn.write(self._BR.encode())
+        else:
+            raise AssertionError

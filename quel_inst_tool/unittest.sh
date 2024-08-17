@@ -19,7 +19,7 @@ while getopts "dwla:s:h" flag; do
     s) available_webservers="${OPTARG}" ;;
     d) test_with_device=1 ;;
     w) test_with_web=1 ;;
-    l) log_level=INFO ;;
+    l) log_level=DEBUG ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
