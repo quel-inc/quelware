@@ -23,8 +23,8 @@ typedef struct addr_data {
 
 typedef struct nco_ftw {
   uint64_t ftw;
-  uint64_t delta_a;
-  uint64_t modulus_b;
+  uint64_t delta_b;
+  uint64_t modulus_a;
 } nco_ftw_t;
 
 typedef struct chip_temperatures {
@@ -358,35 +358,35 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
   py::class_<nco_ftw_t>(m, "NcoFtw")
       .def(py::init<>())
       .def_readwrite("ftw", &nco_ftw_t::ftw)
-      .def_readwrite("delta_a", &nco_ftw_t::delta_a)
-      .def_readwrite("modulus_b", &nco_ftw_t::modulus_b);
+      .def_readwrite("delta_b", &nco_ftw_t::delta_b)
+      .def_readwrite("modulus_a", &nco_ftw_t::modulus_a);
   m.def("hal_calc_tx_nco_ftw",
         [](adi_ad9081_device_t *device, uint64_t dac_freq, int64_t nco_shift,
            nco_ftw_t *nco_ftw) {
-          nco_ftw->delta_a = 0;
-          nco_ftw->modulus_b = 0;
+          nco_ftw->delta_b = 0;
+          nco_ftw->modulus_a = 1;
           return adi_ad9081_hal_calc_tx_nco_ftw(device, dac_freq, nco_shift,
                                                 &(nco_ftw->ftw));
         });
   m.def("hal_calc_rx_nco_ftw",
         [](adi_ad9081_device_t *device, uint64_t adc_freq, int64_t nco_shift,
            nco_ftw_t *nco_ftw) {
-          nco_ftw->delta_a = 0;
-          nco_ftw->modulus_b = 0;
+          nco_ftw->delta_b = 0;
+          nco_ftw->modulus_a = 1;
           return adi_ad9081_hal_calc_rx_nco_ftw(device, adc_freq, nco_shift,
                                                 &(nco_ftw->ftw));
         });
   m.def("hal_calc_nco_ftw", [](adi_ad9081_device_t *device, uint64_t freq,
                                int64_t nco_shift, nco_ftw_t *nco_ftw) {
     return adi_ad9081_hal_calc_nco_ftw(device, freq, nco_shift, &(nco_ftw->ftw),
-                                       &(nco_ftw->delta_a),
-                                       &(nco_ftw->modulus_b));
+                                       &(nco_ftw->modulus_a),
+                                       &(nco_ftw->delta_b));
   });
   m.def("hal_calc_nco_ftw_f", [](adi_ad9081_device_t *device, double freq,
                                  double nco_shift, nco_ftw_t *nco_ftw) {
     return adi_ad9081_hal_calc_nco_ftw_f(device, freq, nco_shift,
-                                         &(nco_ftw->ftw), &(nco_ftw->delta_a),
-                                         &(nco_ftw->modulus_b));
+                                         &(nco_ftw->ftw), &(nco_ftw->modulus_a),
+                                         &(nco_ftw->delta_b));
   });
 
   py::enum_<adi_ad9081_dac_select_e>(m, "DacSelect", py::arithmetic())
@@ -418,7 +418,7 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
   m.def("dac_duc_nco_ftw_set", [](adi_ad9081_device_t *device, uint8_t dacs,
                                   uint8_t channels, nco_ftw_t *nco_ftw) {
     return adi_ad9081_dac_duc_nco_ftw_set(device, dacs, channels, nco_ftw->ftw,
-                                          nco_ftw->delta_a, nco_ftw->modulus_b);
+                                          nco_ftw->modulus_a, nco_ftw->delta_b);
   });
   m.def("dac_select_set", &adi_ad9081_dac_select_set);
   m.def("dac_chan_select_set", &adi_ad9081_dac_chan_select_set);
@@ -599,25 +599,25 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
   m.def("adc_ddc_coarse_nco_ftw_set", [](adi_ad9081_device_t *device,
                                          uint8_t cddcs, nco_ftw_t *nco_ftw) {
     return adi_ad9081_adc_ddc_coarse_nco_ftw_set(
-        device, cddcs, nco_ftw->ftw, nco_ftw->delta_a, nco_ftw->modulus_b);
+        device, cddcs, nco_ftw->ftw, nco_ftw->modulus_a, nco_ftw->delta_b);
   });
   m.def("adc_ddc_coarse_nco_ftw_get",
         [](adi_ad9081_device_t *device, uint8_t cddc, nco_ftw_t *nco_ftw) {
           return adi_ad9081_adc_ddc_coarse_nco_ftw_get(
-              device, cddc, &(nco_ftw->ftw), &(nco_ftw->delta_a),
-              &(nco_ftw->modulus_b));
+              device, cddc, &(nco_ftw->ftw), &(nco_ftw->modulus_a),
+              &(nco_ftw->delta_b));
         });
   m.def("adc_ddc_fine_nco_mode_set", &adi_ad9081_adc_ddc_fine_nco_mode_set);
   m.def("adc_ddc_fine_nco_ftw_set", [](adi_ad9081_device_t *device,
                                        uint8_t fddcs, nco_ftw_t *nco_ftw) {
     return adi_ad9081_adc_ddc_fine_nco_ftw_set(
-        device, fddcs, nco_ftw->ftw, nco_ftw->delta_a, nco_ftw->modulus_b);
+        device, fddcs, nco_ftw->ftw, nco_ftw->modulus_a, nco_ftw->delta_b);
   });
   m.def("adc_ddc_fine_nco_ftw_get",
         [](adi_ad9081_device_t *device, uint8_t fddc, nco_ftw_t *nco_ftw) {
           return adi_ad9081_adc_ddc_fine_nco_ftw_get(
-              device, fddc, &(nco_ftw->ftw), &(nco_ftw->delta_a),
-              &(nco_ftw->modulus_b));
+              device, fddc, &(nco_ftw->ftw), &(nco_ftw->modulus_a),
+              &(nco_ftw->delta_b));
         });
   m.def("adc_ddc_coarse_select_set", &adi_ad9081_adc_ddc_coarse_select_set);
   m.def("adc_ddc_fine_select_set", &adi_ad9081_adc_ddc_fine_select_set);

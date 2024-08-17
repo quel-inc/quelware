@@ -174,32 +174,32 @@ if [ "${test_with_device}" == "C" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html --ignore=tests_with_devices/quel1/both_adcs tests_with_devices/quel1 tests_with_devices/common
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/simplemulti_classic
 elif [ "${test_with_device}" == "S" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html --ignore=tests_with_devices/quel1/simplemulti_classic tests_with_devices/quel1 tests_with_devices/common
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs
 elif [ "${test_with_device}" == "Sr" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html --ignore=tests_with_devices/quel1/simplemulti_classic tests_with_devices/quel1 --ignore=tests_with_devices/quel1/test_wave_generation_quel1.py tests_with_devices/common
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs --ignore=tests/with_devices/quel1/common/test_wave_generation_quel1.py
 elif [ "${test_with_device}" == "F" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html --ignore=tests_with_devices/quel1/simplemulti_classic tests_with_devices/quel1 tests_with_devices/common
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs
 elif [ "${test_with_device}" == "8" ]; then
-  quel1_linkstatus --ipaddr_wss 10.1.0.132 --boxtype quel1se-riken8
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests_with_devices/quel1se_riken8 tests_with_devices/common
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se_riken8
 elif [ "${test_with_device}" == "8r" ]; then
-  quel1_linkstatus --ipaddr_wss 10.1.0.132 --boxtype quel1se-riken8
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests_with_devices/quel1se_riken8 tests_with_devices/common --ignore=tests_with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8.py --ignore=tests_with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8_port.py
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se_riken8 --ignore=tests/with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8_port.py
 elif [ "${test_with_device}" == "N" ]; then
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests_with_devices/nec
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec
 elif [ "${test_with_device}" == "T" ]; then
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests_with_devices/tempctrl
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl
 else
-  PYTHONPATH=. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/without_devices
 fi

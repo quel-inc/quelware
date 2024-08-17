@@ -1,2 +1,2 @@
-include quel_ic_config/settings/*.json
-graft quel_ic_config/settings/*
+include adi_ad9081_v106/*.h
+include adi_ad9081_v106/LICENSES.pdf
