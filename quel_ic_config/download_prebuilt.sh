@@ -3,7 +3,7 @@
 set -eu
 
 uribase=https://github.com/quel-inc/quelware/releases/download
-version="$(grep __version__ quel_ic_config/__init__.py | awk '{print $3}' | sed 's/\"//g')"
+version="$(grep ^version pyproject.toml | awk '{print $3}' | sed 's/\"//g')"
 archivename=quelware_prebuilt.tgz
 
 echo "INFO: downloading ${uribase}/${version}/${archivename} ..."
