@@ -24,21 +24,22 @@ Ubuntu20.04にインストールする手順を示す。
 2つめのインストーラもルート権限での実行が必要だが、ユーザランドのファイルのインストールなのですんなり
 と進む。
 
-### Qt5
+### Gtk3
 次に、PC上にスペアナ画面を出すためのGUIで使用するライブラリをインストールする。
-PyQt5 は quel_inst_tool のパッケージのインストールのときに、依存ライブラリとして自動に追加されるが、pipのバージョンが
-古いとエラーが発生するので、確実に最新版にしておくこと。
+apt のパッケージをあらかじめインストールしておく必要があることに注意。
 ```shell
-sudo apt install python3-pyqt5
-pip install -U pip
-pip install build
+sudo apt install libgirepository1.0-dev gcc libcairo2-dev pkg-config python3-dev gir1.2-gtk-3.0
 ```
 とすればよい。
 
 ### 本体
-パッケージのビルドに `wheel`パッケージが必要なので、`pip install wheel`などとしておく。
+ビルドに使用する仮想環境にて `build`パッケージをインストールする。
+```shell
+pip install -U pip
+pip install build
+```
 
-ビルドは次のように行う。
+`build` パッケージを利用可能な仮想環境にて、次の手順でビルドする。
 ```shell
 rm -rf dist/
 python -m build

@@ -83,7 +83,7 @@ def main():
         fd0 = e440xb.trace_get()
 
     if args.outfile is None:
-        mpl.use("Qt5Agg")
+        mpl.use("Gtk3Agg")
         logger.info("push Q to update.")
         logger.info("push Ctrl+C to quit.")
         while True:
