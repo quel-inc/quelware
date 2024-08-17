@@ -340,7 +340,7 @@ if __name__ == "__main__":
     cp_mon1 = cps0["MON1"]
 
     boxpool0.measure_timediff(cp_mon1)
-    box0, sqc0 = boxpool0.get_box("BOX0")
+    box0 = boxpool0.get_box("BOX0")
 
     iq0, chunk0 = test_loopback(
         cp_read, pgs0["GEN00"], {pgs0[f"GEN{idx:02d}"] for idx in (0,)}, boxpool0, power_thr=2000

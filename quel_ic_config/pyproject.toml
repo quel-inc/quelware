@@ -1,6 +1,69 @@
+[project]
+name = "quel_ic_config"
+version = "0.8.10"
+dependencies = [
+    "packaging >= 23.2",
+    "numpy ~= 1.26.0",
+    "pydantic ~= 2.4.0",
+    "pyyaml ~= 6.0.1",
+    "aiocoap ~= 0.4.7",
+    "ping3 ~= 4.0.4",
+    "e7awgsw ~= 1.0.0",
+    "quel_clock_master >= 0.1.3",
+]
+
+[project.scripts]
+quel1_linkup = "quel_ic_config_cli.cli:quel1_linkup"
+quel1_linkstatus = "quel_ic_config_cli.cli:quel1_linkstatus"
+quel1_parallel_linkup = "quel_ic_config_cli.parallel_linkup:main"
+quel1_test_linkup = "quel_ic_config_cli.cli:quel1_test_linkup"
+quel1_dump_port_config = "quel_ic_config_cli.cli:quel1_dump_port_config"
+quel1_firmware_version = "quel_ic_config_cli.cli:quel1_firmware_version"
+quel1se_tempctrl_state = "quel_ic_config_cli.cli:quel1se_tempctrl_state"
+quel1se_tempctrl_reset = "quel_ic_config_cli.cli:quel1se_tempctrl_reset"
+quel1_phase_log = "quel_ic_config_cli.phase_measurement:cli_main"
+e7awg_dump = "quel_ic_config_cli.e7awg_dump:main"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "mypy",
+    "pyproject-flake8",
+    "types-PyYAML",
+    "pytest",
+    "pytest-cov",
+    "matplotlib",
+    "pycairo",
+    "PyGObject",
+    "pybind11",
+    "pybind11-stubgen",
+    "quel_inst_tool >= 0.2.6",
+    "quel_cmod_scripting >= 0.1.5",
+    "quel_staging_tool >= 0.0.8",
+    "quel_pyxsdb >= 0.2.0",
+]
+
 [build-system]
-requires = ["setuptools>=43.0.0", "pybind11"]
+requires = [
+    "setuptools>=43.0.0",
+    "pybind11"
+]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "quel_ic_config",
+    "quel_ic_config.settings",
+    "adi_ad9081_v106",
+    "quel_ic_config_cli",
+    "quel_ic_config_utils"
+]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"quel_ic_config.settings" = ["*.json", "quel-1/*.json", "quel-1se/*.json"]
+adi_ad9081_v106 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
 [tool.flake8]
 max-line-length = 120

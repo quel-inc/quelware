@@ -8,8 +8,10 @@ import numpy as np
 import numpy.typing as npt
 from e7awgsw import CaptureParam, WaveSequence
 
-from quel_clock_master import QuBEMasterClient, SequencerClient
-from quel_ic_config import CaptureReturnCode, Quel1Box
+from quel_clock_master import QuBEMasterClient
+from quel_ic_config import CaptureReturnCode
+from quel_ic_config import Quel1BoxWithRawWss as Quel1Box
+from quel_ic_config import Quel1PortType
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class BoxPool:
 
     def __init__(self, settings: Mapping[str, Mapping[str, Any]]):
         self._clock_master = QuBEMasterClient(settings["CLOCK_MASTER"]["ipaddr"])
-        self._boxes: Dict[str, Tuple[Quel1Box, SequencerClient]] = {}
+        self._boxes: Dict[str, Quel1Box] = {}
         self._linkstatus: Dict[str, bool] = {}
         self._parse_settings(settings)
         self._estimated_timediff: Dict[str, int] = {boxname: 0 for boxname in self._boxes}
@@ -33,9 +35,7 @@ class BoxPool:
     def _parse_settings(self, settings: Mapping[str, Mapping[str, Any]]):
         for k, v in settings.items():
             if k.startswith("BOX"):
-                box = Quel1Box.create(**v)
-                sqc = SequencerClient(v["ipaddr_sss"])
-                self._boxes[k] = (box, sqc)
+                self._boxes[k] = Quel1Box.create(**v)
                 self._linkstatus[k] = False
 
     def init(self, reconnect: bool = True, resync: bool = True):
@@ -47,7 +47,7 @@ class BoxPool:
             raise RuntimeError("failed to acquire time count from some clocks")
 
     def scan_link_status(self, reconnect=False):
-        for name, (box, sqc) in self._boxes.items():
+        for name, box in self._boxes.items():
             link_status: bool = True
             if reconnect:
                 if not all(box.reconnect().values()):
@@ -66,20 +66,20 @@ class BoxPool:
             self._linkstatus[name] = link_status
 
     def reset_awg(self):
-        for name, (box, _) in self._boxes.items():
+        for name, box in self._boxes.items():
             box.easy_stop_all(control_port_rfswitch=True)
             box.initialize_all_awgs()
             box.initialize_all_capunits()
 
     def resync(self):
         self._clock_master.reset()  # TODO: confirm whether it is harmless or not.
-        self._clock_master.kick_clock_synch([sqc.ipaddress for _, (_, sqc) in self._boxes.items()])
+        self._clock_master.kick_clock_synch([box.sss.ipaddress for _, box in self._boxes.items()])
 
     def check_clock(self) -> bool:
         valid_m, cntr_m = self._clock_master.read_clock()
         t = {}
-        for name, (_, sqc) in self._boxes.items():
-            t[name] = sqc.read_clock()
+        for name, box in self._boxes.items():
+            t[name] = box.read_current_and_latched_clock()
 
         flag = True
         if valid_m:
@@ -88,18 +88,17 @@ class BoxPool:
             flag = False
             logger.info("master: not found")
 
-        for name, (valid, cntr, cntr_last_sysref) in t.items():
-            if valid:
-                logger.info(f"{name:s}: {cntr:d} {cntr_last_sysref:d}")
-            else:
-                flag = False
-                logger.info(f"{name:s}: not found")
+        for name, (cntr, cntr_last_sysref) in t.items():
+            logger.info(f"{name:s}: {cntr:d} {cntr_last_sysref:d}")
         return flag
 
-    def get_box(self, name: str) -> Tuple[Quel1Box, SequencerClient]:
+    def get_boxes(self) -> Dict[str, Quel1Box]:
+        return dict(self._boxes)
+
+    def get_box(self, name: str) -> Quel1Box:
         if name in self._boxes:
-            box, sqc = self._boxes[name]
-            return box, sqc
+            box = self._boxes[name]
+            return box
         else:
             raise ValueError(f"invalid name of box: '{name}'")
 
@@ -109,6 +108,11 @@ class BoxPool:
         else:
             raise ValueError(f"invalid name of box: '{name}'")
 
+    def _mod_by_sysref(self, t: int) -> int:
+        h = self.SYSREF_PERIOD // 2
+        return (t + h) % self.SYSREF_PERIOD - h
+        # return t % self.SYSREF_PERIOD
+
     def emit_at(
         self,
         cp: "PulseCap",
@@ -116,71 +120,64 @@ class BoxPool:
         min_time_offset: int,
         time_counts=Sequence[int],
         displacement: int = 0,
-    ) -> Dict[str, List[int]]:
+    ) -> List[int]:
         if len(pgs) == 0:
             logger.warning("no pulse generator to activate")
 
         pg_by_box: Dict[str, Set["PulseGen"]] = {box: set() for box in self._boxes}
-        bitmap_by_box: Dict[str, int] = {box: 0 for box in self._boxes}
         for pg in pgs:
             pg_by_box[pg.boxname].add(pg)
-            # TODO: move the following logic to the right place
-            b = self._boxes[pg.boxname][0]
-            awg_idx = b.rmap.get_awg_of_channel(*(b._convert_output_channel(pg.awg_spec)))
-            bitmap_by_box[pg.boxname] |= 1 << awg_idx
 
         if cp.boxname not in pg_by_box:
             raise RuntimeError("impossible to trigger the capturer")
 
         # initialize awgs
-        targets: Dict[str, SequencerClient] = {}
         for boxname, pgs in pg_by_box.items():
-            box, sqc = self._boxes[boxname]
+            box = self._boxes[boxname]
             if len(pgs) == 0:
                 continue
-            targets[boxname] = sqc
-            box.prepare_for_emission({pg.awg_spec for pg in pgs})
-            # Notes: the following is not required actually, just for debug purpose.
-            valid_read, current_time, last_sysref_time = sqc.read_clock()
-            if valid_read:
-                logger.info(
-                    f"boxname: {boxname}, current time: {current_time}, "
-                    f"sysref offset: {last_sysref_time % self.SYSREF_PERIOD}"
-                )
-            else:
-                raise RuntimeError("failed to read current clock")
+            box.prepare_for_emission({(pg.port, pg.channel) for pg in pgs})
+            # Notes: showing the current and latched time counter (just for information).
+            current_time, last_sysref_time = box.read_current_and_latched_clock()
+            logger.info(
+                f"boxname: {boxname}, current time: {current_time}, "
+                f"sysref offset: {self._mod_by_sysref(last_sysref_time)}"
+            )
 
-        valid_read, current_time, last_sysref_time = targets[cp.boxname].read_clock()
+        current_time, last_sysref_time = self._boxes[cp.boxname].read_current_and_latched_clock()
         logger.info(
-            f"sysref offset: average: {self._cap_sysref_time_offset},  latest: {last_sysref_time % self.SYSREF_PERIOD}"
+            f"sysref offset: average: {self._cap_sysref_time_offset},  latest: {self._mod_by_sysref(last_sysref_time)}"
         )
-        if abs(last_sysref_time % self.SYSREF_PERIOD - self._cap_sysref_time_offset) > 4:
-            logger.warning("large fluctuation of sysref is detected on the FPGA")
+
+        # Notes: checking the fluctuation of sysref trigger (just for information).
+        fluctuation = self._mod_by_sysref(last_sysref_time - self._cap_sysref_time_offset)
+        if abs(fluctuation) > 4:
+            logger.warning(
+                f"large fluctuation (= {fluctuation}) of sysref is detected from the previous timing measurement"
+            )
+
         base_time = current_time + min_time_offset
         offset = (16 - (base_time - self._cap_sysref_time_offset) % 16) % 16
         base_time += offset
         base_time += displacement  # inducing clock displacement for performance evaluation (must be 0 usually).
         base_time += self.TIMING_OFFSET  # Notes: the safest timing to issue trigger, at the middle of two AWG block.
-        schedule: Dict[str, List[int]] = {boxname: [] for boxname in targets}
+        timestamps: List[int] = []
         for i, time_count in enumerate(time_counts):
-            for boxname, sqc in targets.items():
-                t = base_time + time_count + self._estimated_timediff[boxname]
-                valid_sched = sqc.add_sequencer(t, awg_bitmap=bitmap_by_box[boxname])
-                if not valid_sched:
-                    raise RuntimeError("failed to schedule AWG start")
-                schedule[boxname].append(t)
+            for boxname, pgs in pg_by_box.items():
+                ts = base_time + time_count + self._estimated_timediff[boxname]
+                self._boxes[boxname].reserve_emission({(pg.port, pg.channel) for pg in pgs}, ts)
+                logger.info(f"reserving emission of {boxname} at {ts}")
+            timestamps.append(base_time + time_count)
         logger.info("scheduling completed")
-        return schedule
+        return timestamps
 
     def measure_timediff(self, cp: "PulseCap", num_iters: int = DEFAULT_NUM_SYSREF_MEASUREMENTS) -> None:
         counter_at_sysref_clk: Dict[str, int] = {boxname: 0 for boxname in self._boxes}
 
         for i in range(num_iters):
-            for name, (_, sqc) in self._boxes.items():
-                m = sqc.read_clock()
-                if len(m) < 2:
-                    raise RuntimeError(f"firmware of {name} doesn't support this measurement")
-                counter_at_sysref_clk[name] += m[2] % self.SYSREF_PERIOD
+            for name, box in self._boxes.items():
+                _, last_sysref_time = box.read_current_and_latched_clock()
+                counter_at_sysref_clk[name] += self._mod_by_sysref(last_sysref_time)
 
         avg: Dict[str, int] = {boxname: round(cntr / num_iters) for boxname, cntr in counter_at_sysref_clk.items()}
         adj = avg[cp.boxname]
@@ -222,27 +219,22 @@ class PulseGen:
     ):
         # TODO: eliminate the necessity of boxpool by adding sqc to Quel1Box.
         #       status can be obtained by box.linkstatus()
-        box, sqc = boxpool.get_box(boxname)
-
         self.name: str = name
         self.boxname: str = boxname
-        self.box: Quel1Box = box
-        self.sqc: SequencerClient = sqc
-        self.port, self.subport = self.box.decode_port(port)
+        self.box: Quel1Box = boxpool.get_box(boxname)
+        self.port: Quel1PortType = port
         self.channel: int = channel  # TODO: better to check the validity
-        self.awg_spec: Tuple[Union[int, Tuple[int, int]], int] = (port, channel)
 
     def config(self, *, fnco_freq: Union[float, None] = None, **kwargs):
-        self.box.config_port(port=self.port, subport=self.subport, **kwargs)
+        self.box.config_port(port=self.port, **kwargs)
         if fnco_freq is not None:
-            self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel, fnco_freq=fnco_freq)
+            self.box.config_channel(port=self.port, channel=self.channel, fnco_freq=fnco_freq)
 
     def load_cw(
         self, amplitude: float, num_wave_sample: int, num_repeats: Tuple[int, int], num_wait_samples: Tuple[int, int]
     ) -> None:
         self.box.load_cw_into_channel(
             port=self.port,
-            subport=self.subport,
             channel=self.channel,
             amplitude=amplitude,
             num_wave_sample=num_wave_sample,
@@ -250,43 +242,27 @@ class PulseGen:
             num_wait_samples=num_wait_samples,
         )
 
-    def _set_param_awg(self, wave_param: WaveSequence):
-        group, line = self.box._convert_output_port_decoded(self.port, self.subport)
-        awgidx = self.box.rmap.get_awg_of_channel(group, line, self.channel)
-        self.box.wss.set_param_awg(awgidx, wave_param)
-
     def load_wave_parameter(self, wave_param: WaveSequence):
-        """loading detailed parameters of wave to be generated. this API is tentative and its wave_param argument will
-        be replaced with more convenient one in the near future.
-        :param wave_param: a raw object (WaveSeuqence) describing the wave to be generated
-        :return: None
-        """
-        self.box.config_channel(port=self.port, subport=self.subport, channel=self.channel)
-        self._set_param_awg(wave_param)
+        self.box.config_channel(port=self.port, channel=self.channel, wave_param=wave_param)
 
     def prepare_for_emission(self):
-        self.box.prepare_for_emission({self.awg_spec})
+        self.box.prepare_for_emission({(self.port, self.channel)})
 
     def emit_now(self) -> None:
-        self.box.start_emission({self.awg_spec})
+        self.box.start_emission({(self.port, self.channel)})
 
     def emit_at(self, min_time_offset: int, time_counts: Sequence[int]) -> None:
         self.prepare_for_emission()
-        valid_read, current_time, last_sysref_time = self.sqc.read_clock()
-        if valid_read:
-            logger.info(f"current time: {current_time},  last sysref time: {last_sysref_time}")
-        else:
-            raise RuntimeError("failed to read current clock")
+        current_time = self.box.read_current_clock()
+        logger.info(f"current time of box '{self.boxname}': {current_time}")
 
         base_time = current_time + min_time_offset  # TODO: implement constraints of the start timing
         for i, time_count in enumerate(time_counts):
-            valid_sched = self.sqc.add_sequencer(base_time + time_count)
-            if not valid_sched:
-                raise RuntimeError("failed to schedule AWG start")
+            self.box.reserve_emission({(self.port, self.channel)}, base_time + time_count)
         logger.info("scheduling completed")
 
     def stop_now(self) -> None:
-        self.box.stop_emission({self.awg_spec})
+        self.box.stop_emission({(self.port, self.channel)})
 
 
 class PulseCap:
@@ -346,13 +322,12 @@ class PulseCap:
         runits: Set[int],
         boxpool: BoxPool,
     ):
-        box, _ = boxpool.get_box(boxname)
         if not boxpool.get_linkstatus(boxname):
             raise RuntimeError(f"sender '{name}' is not available due to link problem of '{boxname}'")
 
         self.name: str = name
         self.boxname: str = boxname
-        self.box: Quel1Box = box
+        self.box: Quel1Box = boxpool.get_box(boxname)
         self.port = port
         self.runits = runits
         self.capture_parameter: Dict[int, CaptureParam] = {}
@@ -388,23 +363,10 @@ class PulseCap:
         else:
             raise RuntimeError(f"capture failure due to {status}")
 
-    def _set_param_capunit(self, runit: int, cap_param: CaptureParam):
-        group, rline = self.box._convert_input_port(self.port)
-        capmod = self.box.rmap.get_capture_module_of_rline(group, rline)
-        self.box.wss.set_param_capunit(capmod=capmod, capunit=runit, capprm=cap_param)
-
     def load_capture_parameter(self, runit: int, cap_param: CaptureParam) -> None:
-        """loading detailed parameters describing how to capture the wave data from the specified runit. this API is
-        tentative and its cap_param argument will be replaced with more convenient one in the near future.
-
-        :param runit: an index of runit
-        :param cap_param: a raw object (CaptureParam) describing the details of the signal capture to be conducted.
-        :return: None
-        """
         if runit not in self.runits:
             raise ValueError(f"an invalid runit: {runit}")
-        self.box.config_runit(port=self.port, runit=runit)
-        self._set_param_capunit(runit, cap_param)
+        self.box.config_runit(port=self.port, runit=runit, capture_param=cap_param)
         self.capture_parameter[runit] = cap_param
 
     def reload_capture_parameter(self, runits: Union[Collection[int], None] = None) -> None:
@@ -412,8 +374,7 @@ class PulseCap:
             runits = self.runits
         for runit, capprm in self.capture_parameter.items():
             if runit in runits:
-                self.box.config_runit(port=self.port, runit=runit)
-                self._set_param_capunit(runit, capprm)
+                self.box.config_runit(port=self.port, runit=runit, capture_param=capprm)
 
     def capture_at_single_trigger_of(self, *, pg: PulseGen) -> Future:
         if pg.box != self.box:
@@ -421,7 +382,7 @@ class PulseCap:
         return self.box.capture_start(
             port=self.port,
             runits=self.runits,
-            triggering_channel=pg.awg_spec,
+            triggering_channel=(pg.port, pg.channel),
         )
 
 
@@ -468,7 +429,9 @@ def find_chunks(
     logger.info(f"number_of_chunks: {n_chunks}")
     for i, chunk in enumerate(chunks):
         s, e = chunk
-        logger.info(f"  chunk {i}: {e - s} samples, ({s} -- {e})")
+        iq0 = np.average(iq[s:e])
+        angle = round(np.arctan2(iq0.real, iq0.imag) * 180.0 / np.pi, 1)
+        logger.info(f"  chunk {i}: {e - s} samples, ({s} -- {e}),  mean phase = {angle:.1f}")
     return chunks
 
 

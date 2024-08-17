@@ -1,0 +1,12 @@
+{
+  "mxfes": {
+    "0": {
+      "channel_interporation_rate": 3,
+      "main_interporation_rate": 8
+    },
+    "1": {
+      "channel_interporation_rate": 3,
+      "main_interporation_rate": 8
+    }
+  }
+}

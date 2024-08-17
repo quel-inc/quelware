@@ -349,8 +349,8 @@ if __name__ == "__main__":
 
     boxpool0 = BoxPool(DEVICE_SETTINGS)
     boxpool0.init(resync=args.resync)
-    box_a = boxpool0.get_box("BOX_A")[0]
-    box_b = boxpool0.get_box("BOX_A")[0] if same_box else boxpool0.get_box("BOX_B")[0]
+    box_a = boxpool0.get_box("BOX_A")
+    box_b = boxpool0.get_box("BOX_A") if same_box else boxpool0.get_box("BOX_B")
 
     if not validate_input_port(box_a, args.input_port):
         sys.exit(1)
