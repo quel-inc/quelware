@@ -64,6 +64,9 @@ class QuelXilinxFpgaProgrammerE7udpip(QuelXilinxFpgaProgrammer):
             raise RuntimeError("failed execution of updatemem")
         return outpath
 
+    def make_bin(self, bitpath: Path, binpath: Union[Path, None] = None) -> Path:
+        raise NotImplementedError()
+
 
 class ExstickgeProgrammer(QuelXilinxFpgaProgrammerE7udpip):
     _TEMPLATE = """\

@@ -19,7 +19,7 @@ if {[string equal $dev ""]} {
 }
 
 create_hw_cfgmem -hw_device $dev [lindex [get_cfgmem_parts {mt25ql128-spi-x1_x2_x4}] 0]
-set_property PROGRAM.ADDRESS_RANGE  {use_file} [ get_property PROGRAM.HW_CFGMEM $dev]
+set_property PROGRAM.ADDRESS_RANGE  {entire_device} [ get_property PROGRAM.HW_CFGMEM $dev]
 set_property PROGRAM.FILES [lindex $argv 0] [ get_property PROGRAM.HW_CFGMEM $dev]
 set_property PROGRAM.PRM_FILE {} [ get_property PROGRAM.HW_CFGMEM $dev]
 set_property PROGRAM.UNUSED_PIN_TERMINATION {pull-none} [ get_property PROGRAM.HW_CFGMEM $dev]

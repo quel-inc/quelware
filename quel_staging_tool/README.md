@@ -65,7 +65,7 @@ Vivado 2020.1 と一緒に用いる。
 Vivado/Vitis 2022.1 と一緒に用いる。
 
 #### クロック分配器用のファームウェア
-`quel_program_exstickge_clkdist` コマンドを使用する。
+`quel_program_exstickge_clkdisty` コマンドを使用する。
 Vivado/Vitis 2022.1 と一緒に用いる。
 
 ### リブート

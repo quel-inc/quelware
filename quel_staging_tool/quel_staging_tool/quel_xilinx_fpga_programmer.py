@@ -10,6 +10,8 @@ from typing import Dict, Set, Union
 
 import psutil
 
+from quel_staging_tool.run_vivado_batch import run_vivado_batch
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,26 +74,6 @@ class PrivateHwserver:
         return self._port
 
 
-def run_vivado_batch(script_dir: Path, script_file: str, tclargs: str) -> int:
-    with tempfile.TemporaryDirectory() as dname:
-        cmd = (
-            f"vivado -mode batch -nolog -nojournal -notrace -tempDir {dname} "
-            f"-source {script_dir / script_file} -tclargs {tclargs}"
-        )
-        logger.info(f"executing {cmd}")
-        retcode = subprocess.run(cmd.split(), capture_output=True)
-        for msg in retcode.stdout.decode().split("\n"):
-            if msg.startswith("INFO:"):
-                logger.debug(msg[5:].strip())  # Notes: shown only when --verbose option is provided in cli commands.
-            elif msg.startswith("XINFO:"):
-                logger.info(msg[6:].strip())
-            elif msg.startswith("ERROR:"):
-                logger.error(msg[6:].strip())
-        if retcode.returncode != 0:
-            raise RuntimeError(f"failed execution of {script_file}")
-        return retcode.returncode
-
-
 class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
     _BITPREFIX: str = "nonexistent_"
     _TCLCMD_POSTFIX: str = "_nonexistent.tcl"
@@ -132,6 +114,10 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
             return mcspath
         else:
             raise AssertionError("not reached")
+
+    @abstractmethod
+    def make_bin(self, bitpath: Path, binpath: Union[Path, None] = None) -> Path:
+        pass
 
     def make_mcs_with_macaddr(self, bitpath: Path, macaddrpath: Path, mcspath: Union[Path, None] = None) -> Path:
         self._validate_env()

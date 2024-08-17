@@ -3,8 +3,10 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Union
 
 from quel_staging_tool.quel_xilinx_fpga_programmer import QuelXilinxFpgaProgrammer
+from quel_staging_tool.run_vivado_batch import run_vivado_batch
 
 logger = logging.getLogger(__name__)
 
@@ -72,3 +74,13 @@ class QuelXilinxFpgaProgrammerZephyr(QuelXilinxFpgaProgrammer):
         if os.path.exists(outpath) and retcode.returncode != 0:
             raise RuntimeError("failed execution of updatemem")
         return outpath
+
+    def make_bin(self, bitpath: Path, binpath: Union[Path, None] = None) -> Path:
+        self._validate_env()
+        if binpath is None:
+            binpath = Path(os.path.splitext(bitpath)[0] + ".bin")
+        retval = run_vivado_batch(self._tcldir_path(), f"create_bin{self._TCLCMD_POSTFIX}", f"{bitpath} {binpath}")
+        if retval == 0:
+            return binpath
+        else:
+            raise AssertionError("not reached")
