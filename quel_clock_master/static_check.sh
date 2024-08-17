@@ -11,3 +11,5 @@ pflake8 quel_clock_master quel_clock_master_consoleapps tests tests_with_devices
 echo "[mypy]"
 mypy --check-untyped-defs quel_clock_master quel_clock_master_consoleapps tests tests_with_devices
 
+
+# TODO: examples are temporarily excluded. Don't forget add it again.
