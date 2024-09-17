@@ -2,16 +2,34 @@
 [quelwareリポジトリ](https://github.com/quel-inc/quelware)を取得するところから、CLIコマンドやハイレベルAPIの基本的な動作を確認するまでを説明する。
 以下の手順の動作確認は、Ubuntu 20.04.6 LTS で行っているが、他のLinuxディストリビューションでも同様の手順で環境構築ができるはずだ。
 
+## 0.10.x 系の変更点
+- 今後のファームウェアの抜本的なアップデートへの対応準備と安定性向上の目的で、e7awgsw を e7awghal で置き換えた。これに伴い、いくつかの制限事項が発生する。
+    - READ-IN と MONITOR-IN が同時に使えない古いファームウェアのサポートを停止。
+    - Feedback実験版のファームウェアのサポートを一時的に停止させて頂いた。要望があればサポートを再開するが、キュエル社としてはフィードバック機能を再設計したファームウェア開発後に対応再開としたいと考えている。
+        - それまでは、0.8.x系の quelware をご使用頂きたい。 
+- WaveSubsystem を再設計したことに伴い、波形生成及び波形取得に関するAPIを大幅に変更した。詳細は[こちら](./MIGRATION_TO_0_10_X.md)。
+    - WaveSubsystemのAPIはこれで固定。AD9082の500MHz情報帯域の出力チャネル（channel) をそのままユーザに見せるAPI、という位置づけ。
+    - 一方で、measurement tools のバーチャルポート相当の、量子ビットや読み出し共振器の共振周波数を中心とする比較的狭帯域の位相管理された出力ユニット（tunit) に基づくインターフェースを別途開発する予定。
+- 各装置の排他ロック機能が更新されている。従来は、e7awgswがファームウェアの一部について排他制御をしていたが、これを次のように改めた。
+    - 1台の制御装置全体に排他制御が掛かるようにした。ある装置に対応するboxオブジェクトが存在している間は、他ユーザがその装置のboxオブジェクトを作成できなくなる。
+    - QuEL-1以前の装置では、これまで通りロックファイルを用いた排他制御を行う。
+        - ロックファイルの置き場を、`/var/run/quelware` ディレクトリに変更した。このディレクトリのパーミッションは運用ポリシーに応じて調整して頂きたい。
+    - QuEL-1 SE以降については、ロックファイルを用いる代わりにデバイスそのものにロックを掛けることもできる。
+        - 各ICの設定は、他のユーザの任意のホストからの書き換えアクセスを遮断できる。
+        - AU50の設定は、quelware-0.10.x 以降を使用している場合に限り、他のユーザの任意のホストからの書き換えアクセスを遮断できる。
+        - デバイスロックは、ExStickGEのファームウェアをv1.3.0 以降での対応となる。
+            - ExStickGEのファームウエアのOTA アップデートするツールで、簡単にアップデートを実施できる。
+
 ## 環境構築
-### 依存パッケージのインストール
+### システムへの依存パッケージのインストール
 サンプルスクリプトやテストコードにて、グラフの表示に matplotlib を用いている。
 Qt5Aggを使いたいところではあるが商用ライセンスを購入しないとGPLが適用されてしまうので、quelwareの配布物では Gtk3Agg を使用する。
-これにあたり、以下の手順でパッケージのインストールをしておく必要がある。
+quelwareの開発に参加したり、サンプルスクリプトを使用する場合には、以下の手順でパッケージのインストールをしておく必要がある。
 ```shell
 sudo apt install libgirepository1.0-dev gcc libcairo2-dev pkg-config python3-dev gir1.2-gtk-3.0
 ```
 
-### 仮想環境の作成
+### Python仮想環境の作成
 任意の作業ディレクトリで以下の手順を実行すると、新しい仮想環境が利用可能な状態になる。
 ```shell
 python3.9 -m venv test_venv
@@ -39,60 +57,43 @@ sudo apt install wget
 ```
 
 ### インストール
-ダウンロードしたパッケージを展開すると、その場に `requirements_*.txt` ファイルを始めとするいくつかのファイルとディレクトリができる。
-制御装置のファームウェアの種類や使用目的によって、インストール時に参照する `requrements._*.txt` が異なる。
-ファームウェアの種類は以下の3つである。
+今後は、全ての制御装置ファームウェアに対応した単一のパッケージを配布するので、これまでのような装置のファームウェアの種類によって、パッケージ
+を選択する必要はない。
+とはいうものの、現状、quelware-0.10.x が対応しているファームウェアはSIMPLEMULTI_STANDARDの1種類だけである。
+古いSIMPLEMULTI_CLASSICのファームウェアはサポート中止であり、また、ベータ版配布のFEEDBACK_EARLYファームウェアは、一時的にサポートを停止している。
 
-| ファームウェアの種類の名前　       | 概略                                                                                                     | 
-|----------------------|--------------------------------------------------------------------------------------------------------|
-| SIMPLEMULTI_CLASSIC  | 20240125より前のsimplemulti版ファームウェア <br> QuBE 及び QuEL-1 の出荷時ファームウェア。<br> SIMPLEMULTI_STANDARDへのアップグレードを推奨。 |
-| SIMPLEMULTI_STANDARD | 20240125以降のsimplemulti版ファームウェア <br> QuEL-1 SE 及びNEC様向けモデルの標準ファームウェア                                    |
-| FEEDBACK             | フィードバック研究用の実験なファームウェア（特定ユーザ様専用）                                                                        |
+| ファームウェアの種類の名前　       | 概略                                                                     | 
+|----------------------|------------------------------------------------------------------------|
+| SIMPLEMULTI_CLASSIC  | 20240125より前のsimplemulti版ファームウェア <br> 本リリースで対応廃止となったのでファームウェアのアップデートが必要 |
+| SIMPLEMULTI_STANDARD | 20240125以降のsimplemulti版ファームウェア <br> QuEL-1 SE 及びNEC様向けモデルの標準ファームウェア    |
+| FEEDBACK_EARLY       | フィードバック研究用の実験なファームウェア（特定ユーザ様専用）<br> サポートを一時停止中。                       |
 
-なお、装置にインストールされているファームウェアの種類は次のコマンドで確認できる。
+実験室で使用中の制御装置のほとんど全てに、SIMPLEMULTI_STARNDARD版のファームウェアがインストールされているという認識だが、
+心配であれば、以下のコマンドで各装置のファームウェア情報を確認できる。
+
 ```text
-helpers/detect_firmware_type.sh 10.1.0.xxx
+quel1_firmware_version --boxtype xxxxx --ipaddr_wss 10.1.0.yyy
 ```
-現状では、ファームウェアの種類の異なる装置を1つの仮想環境から使用することができない。
-この制限は、近い将来に撤廃される予定である。
 
 #### `SIMPLEMULTI_CLASSIC`の場合
-この文書を執筆している時点で、ほぼ全ての QuBEおよびQuEL-1は、この状態に相当すると思う。
-
-次のコマンドでパッケージをインストールする。
-```shell
-pip install -r requirements_simplemulti_classic.txt
-```
-
-ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
-```text
-pip install -r requirements_simplemulti_classic.txt -r requirements_dev_addon.txt
-```
+ほとんど全ての制御装置のファームウェアがSIMPLEMULTI_STANDARDに更新された状況を鑑みて、本リリースで対応中止とした。
+もし、SIMPLEMULTI_CLASSICのファームウェアをインストールしている機体は、従来の0.8.x系のquelwareで使用するか、あるいは、ファームウェアのアップデートが必要である。
 
 #### `SIMPLEMULTI_STANDARD`の場合
 次のコマンドでパッケージをインストールする。
 ```shell
-pip install -r requirements_simplemulti_standard.txt
+pip install -r requirements.txt
 ```
 
-ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
+ファームウェアアップデートツールなどの開発用のツール群が必要な場合や、quel_ic_config本体のリビルドをしたい場合には、こちらをインストールするのが便利である。
 ```text
-pip install -r requirements_simplemulti_standard.txt -r requirements_dev_addon.txt
+pip install -r requirements_dev.txt
 ```
 
-#### Feedback版のファームウェアを利用する場合（オプション）
-feedback版のファームウェアはベータ版として配布しているが、時刻同期周辺が安定版のファームウェア(simplemulti版)と互換性がない。
-QuEL-1 の装置詳細を理解している研究目的のユーザ以外は使用するべきでない。
-
-次のコマンドでパッケージをインストールすればよい。
-```shell
-pip install -r requirements_feedback.txt
-```
-
-ファームウェアアップデートツールなどの開発用のツール群もインストールしたい場合には、次のようにする。
-```text
-pip install -r requirements_feedback_classic.txt -r requirements_dev_addon.txt
-```
+#### `FEEDBACK_EARLY`の場合
+FEEDBACK_EARLY版のファームウェアはベータ版として配布しているが、コマンドシーケンサ周辺がSIMPLEMULTI_STANDARDファームウェアと互換性がない。
+本バージョンではサポートを一時停止しており、次期ファームウェアリリース時に対応再開を予定している。
+現状のFEEDBACK_EARLYのファームウェアについては、当面の間、0.8.x を使用して頂きたい。
 
 ### quel_ic_config の再ビルド（オプション）
 ビルド済みパッケージを使用することを推奨するが、何からの理由でquel_ic_config の再ビルドをしたい場合には、次の手順で行える。
@@ -113,18 +114,18 @@ quel_ic_config のパッケージにはいくつかの便利なシェルコマ�
 識別子の一覧は以下のとおりである。
 各モデルの詳細は[README.md](../README.md)を参照いただきたい。
 
-| モデル名                 | 識別子              | 出荷番号（ブロック番号-個体番号)               |
-|----------------------|------------------|---------------------------------|
-| QuEL-1 最初期型          | `qube-riken-a`   | QuEL-1 #1-xx                    |
+| モデル名                 | 識別子              | 出荷番号（ブロック番号-個体番号)                 |
+|----------------------|------------------|-----------------------------------|
+| QuEL-1 最初期型          | `qube-riken-a`   | QuEL-1 #1-xx                      |
 | QuEL-1 標準型 タイプA機     | 　`quel1-a`　      | QuEL-1 #2-xx, #3-xx, #5-xx, #6-xx |
-| QuEL-1 標準型 タイプB機     | `quel1-b`        | 同上                              | 
-| QuEL-1 7GHzモデル       | `quel1-a`        | QuEL-1 #4-xx                    |
-| QuEL-1 NECモデル        | `quel1-nec`      | QuEL-1 #7-xx                    |
-| QuEL-1 SE Riken-8モデル | `quel1se-riken8` | QuEL-1 SE #1-xx, #2-xx          |
-| QuBE OU タイプA機        | `qube-ou-a`      | QuBE OU #1-xx, #2-xx, #3-xx     | 
-| QuBE OU タイプB機        | `qube-ou-b`      | 同上                              | 
-| QuBE Riken タイプA機     | `qube-riken-a`   | QuBE Riken #1-xx                | 
-| QuBE Riken タイプB機     | `qube-riken-b`   | 同上                              | 
+| QuEL-1 標準型 タイプB機     | `quel1-b`        | 同上                                | 
+| QuEL-1 7GHzモデル       | `quel1-a`        | QuEL-1 #4-xx                      |
+| QuEL-1 NECモデル        | `quel1-nec`      | QuEL-1 #7-xx                      |
+| QuEL-1 SE Riken-8モデル | `quel1se-riken8` | QuEL-1 SE #1-xx, #2-xx, #3-xx     |
+| QuBE OU タイプA機        | `qube-ou-a`      | QuBE OU #1-xx, #2-xx, #3-xx       | 
+| QuBE OU タイプB機        | `qube-ou-b`      | 同上                                | 
+| QuBE Riken タイプA機     | `qube-riken-a`   | QuBE Riken #1-xx                  | 
+| QuBE Riken タイプB機     | `qube-riken-b`   | 同上                                | 
 
 タイプAとタイプBの識別は、本体背面パネルに貼ってあるシールを確認していただきたい。
 タイプB機はブロック番号に続く個体番号が3の倍数である場合が多いが、例外（たとえば、QuBE OU #3-02はタイプB）もあるので注意が必要だ。
@@ -203,21 +204,6 @@ ad9082-#1 linked up successfully
 ```
 この状態で、さきほどの `quel1_linkstatus` コマンドを使用すると正常状態を示す出力が得られるはずだ。
 
-##### SIMPLEMULTI_CLASSICの場合
-このコマンドは、デフォルトではType-AとType-Bの両方の機体で差し障りのないように、モニタ系が使用可能な状態に初期化を行う。
-Type-Aの機体でリード系を使うように初期化をする場合には、次のようにする。
-```shell
-quel1_linkup  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a --config_options use_read_in_mxfe0,use_read_in_mxfe1
-```
-Type-Aのときにはリード系をデフォルトにすることも考えたのだが、敢えて愚直な作りにしている。
-
-##### SIMPLEMULTI_STANDARDの場合
-ファームウェアに SIMPLEMULTI_STANDARD版のものを使っている場合には、リードとモニタの両系を同時に使えるので、--config_options以下は不要になる。
-```shell
-quel1_linkup  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
-```
-とすればよい。
-
 #### リンクアップ結果の確認
 リンクアップの最中に次のような警告が何行か表示されることがあるが、最後に `linked up successfully` が出ていれば問題はない。
 ```text
@@ -237,7 +223,69 @@ quel1_linkup  --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
 なお、v0.8.9以降では全ての制御装置でJESD204C準拠のリンクキャリブレーションを行い、さらに、使用中も常時キャリブレーションが行われる（バックグラウンドキャリブレーション）を実施する設定となる。
 この設定がリンクアップの成功率を最大化し、かつ、リンクアップ後のCRCエラーの発生を抑えることができる。
 しかし、なんらかの理由で従来と同様にJESD204B準拠のリンクアップキャリブレーションを使いたい、あるいは、バックグラウンドキャリブレーションを止めたい場合には、
-それぞれ `--use_204b` と `--nouse_bgcal`をオプションとして指定すればよい。 
+それぞれ `--use_204b` と `--nouse_bgcal`をオプションとして指定すればよい。
+
+#### 制御装置のループバック経路を使った動作確認
+##### quel1_check_all_internal_loopbacks.py
+QuEL-1 Type-A/B および QuBE RIKEN Type-A/B の信号入出力の健全性を内部ループバック経路を使用して確認するためのツールである。
+対象の装置のIPアドレス(`--ipaddr_wss`)と装置モデル名(`--boxtype`)、クロックマスタのIPアドレス(`--ipaddr_clk`)を指定して使用する。
+クロックマスタの指定が必要なのは、波形発生を時刻カウンタをトリガにして行っているからである。
+なので、対象装置のシーケンサの動作確認も同時に行うことになる。
+
+###### 制限事項
+SIMPLEMULTI_STANDARD のファームウェア以外のファームウェアには対応していない。
+というのは、Read-inとMonitor-in の同時使用能力とSIMPLEMULTIのタイムトリガ波形生成の機能との両方が必要だからである。
+
+###### 使用例
+たとえば、動作確認対象の装置が QuEL-1 Type-A で IPアドレスが`10.1.0.58`、クロックマスタのIPアドレスが`10.3.0.13`の場合、
+次のようなコマンドで全ての入出力ポートの動作確認をできる。
+```shell
+quel1_check_all_internal_loopbacks --ipaddr_clk 10.3.0.13 --ipaddr_wss 10.1.0.58 --boxtype quel1-a
+```
+
+QuEL-1 Type-A は4つの入力ポートを持つので、各入力ポートごとに装置内ループバック経路がある出力ポート群の信号を取得し、そのベースバンド信号の波形を表示する。
+
+![quel1a-loopbacks](./images/quel1_loopbacks.png)
+
+一番上のグラフは、ポート0（read-in) でのキャプチャデータである。
+このポートに内部ループバックできるのは、ポート1(read-out)だけである。
+
+横軸はキャプチャ開始からのサンプル数、縦軸はADCの読み値である。
+サンプリングレートは500Mspsなので、1サンプルが2nsの時間に対応する。
+グラフはそれぞれ、ベースバンド信号の実部(青)と虚部(オレンジ)である。
+
+グラフの表示と共に、コンソールログに詳細な情報が出力されている。
+```text
+2024-09-17 12:15:49,147 [INFO] quel_ic_config_utils.simple_multibox_framework: number_of_chunks: 1
+2024-09-17 12:15:49,147 [INFO] quel_ic_config_utils.simple_multibox_framework:   chunk 0: 63 samples, (470 -- 533),  mean phase = -136.6
+```
+ここから読み取れるのは、キャプチャ開始後470サンプル目から、長さが63サンプルの矩形波が受信できたことである。
+実際には、ポート1から64サンプルの矩形波を出力しているが、パルスの検出閾値如何で2サンプル程度は前後するので、正しくキャプチャできていると言える。
+信号発生開始と同時にキャプチャも開始しているが、ADC及びFPGAでの信号処理の遅延などで、波形が得られるまで間がある。
+この遅延量はMxFEのリンクアップ毎にバラツキがあるが、再リンクアップするまでは一定に保たれる。
+ここで `q`を押すと、次のキャプチャに進む。
+
+2つめのグラフは、ポート5（monitor-in)のキャプチャデータである。
+ポート1, ポート2, ポート3, ポート4 の出力をループバックする内部経路があるが、ポート1については既に確認できているので省いている。
+したがって、3つのポートから、それぞれ時間差で64サンプルのパルスを出力している。
+ポート2の波形はキャプチャ開始と同時に、ポート3の波形は512サンプル遅れ、ポート4の波形は1024サンプル遅れで出力している。
+なお、ポート3のSMA端からの出力は2逓倍した信号になるが、ループバックされるのは逓倍前の信号なので観測できている。
+
+以下に示すコンソールログからも、実際の出力波形と整合的な結果が得られていることが分かる。
+```text
+2024-09-17 12:15:49,280 [INFO] quel_ic_config_utils.simple_multibox_framework: number_of_chunks: 3
+2024-09-17 12:15:49,280 [INFO] quel_ic_config_utils.simple_multibox_framework:   chunk 0: 64 samples, (469 -- 533),  mean phase = 86.5
+2024-09-17 12:15:49,280 [INFO] quel_ic_config_utils.simple_multibox_framework:   chunk 1: 129 samples, (980 -- 1109),  mean phase = -39.6
+2024-09-17 12:15:49,280 [INFO] quel_ic_config_utils.simple_multibox_framework:   chunk 2: 65 samples, (1493 -- 1558),  mean phase = -57.7
+```
+
+この後、ポート7(read-in)、ポート12（monitor-in)　と続くが同様のデータが得られる。
+
+###### quel1se_check_all_internal_loopbacks.py
+上記のスクリプトの QuEL-1 SE RIKEN-8 版である。
+使い方は基本同じだが、`--boxtype`を与える必要はない。
+QuEL-1 SE RIKEN-8 はそれまでのQuEL-1 と異なり、モニタ系の入力にLNAを持たないので、モニタ系でキャプチャした信号の振幅がリード系の 1/10 程度になる。
+
 
 #### ハードウェアトラブルの一時的回避
 ##### CRCエラー
@@ -326,17 +374,8 @@ quel1_dump_port_config --ipaddr_wss 10.1.0.xxx --boxtype quel1-a
 
 ただし、取得する方法がない出力ポートのVATTの値だけは表示されないので注意が必要である（このコマンドの実装に用いているAPIは、おなじ実行コンテキストで設定されたVATT値をキャッシュして返すが、コマンド自身がVATTの値を設定することはないので、何も値が得られない）。
 
-## APIを使ってみる
-次のコマンドで、装置の簡単な動作確認をインタラクティブに実施できる。
-あくまでお試し用なので複雑なことをするのには向いていない。
-リポジトリの`quel_ic_config`ディレクトリに移動後、次のコマンドをすることで制御装置を抽象化したオブジェクト`box`が利用可能な状態になった pythonのインタラクティブシェルが得られる。
-
-```shell
-python -i scripts/getting_started_example.py --ipaddr_wss 10.1.0.xxx --boxtype quel1-a 
-```
-
-たとえば、`box.dump_box()` とすることで、上述の `quel1_dump_port_config` コマンドの出力同様の結果を含んだデータ構造を得られる。
-以下に APIの一覧を項目ごとに列挙する。
+## APIをちらっと見る
+以下に 主要APIを項目ごとに列挙する。
 詳しい使い方は、`help(box.dump_box)` のように `help`関数で見られたい。
 
 - 全体設定
@@ -347,6 +386,14 @@ python -i scripts/getting_started_example.py --ipaddr_wss 10.1.0.xxx --boxtype q
   - **dump_port**: 各ポートの設定状態をデータ構造として得る。
   - **config_port**: 指定のポートのパラメタを設定する。
 
+- チャネル設定
+  - **dump_channel**: 指定の出力ポートの出力チャネルの設定状態をデータ構造として得る。
+  - **config_channel**: 指定の出力ポートの出力チャネルのパラメタを設定する。
+
+- runit設定
+  - **dump_runit**: 指定の入力ポートの runit の設定状態をデータ構造として得る。
+  - **config_runit**: 指定の入力ポートの runit のパラメタを設定する。
+
 - RFスイッチ
   - **dump_rfswitches**: 全てのポートのRFスイッチの状態を取得する。
   - **config_rfswitches**: 全てのポートのRFスイッチの状態を設定する。
@@ -355,90 +402,73 @@ python -i scripts/getting_started_example.py --ipaddr_wss 10.1.0.xxx --boxtype q
   - **activate_monitor_loop**: モニタ系のRFスイッチをループバック状態にする。
   - **deactivate_monitor_loop**: モニタ系のRFスイッチのループバックを解除する。
 
-- 信号入出力簡易API
-  - **easy_start_cw**: 指定の出力ポートから信号を出力する最も簡単な方法。お試し用のAPIであり、実用には向かない。
-  - **easy_stop**: 指定の出力ポートの全ての信号発生を停止する。お試し用APIであるが、実用にもなる。
-  - **easy_stop_all**: 全ての出力ポートの全ての信号発生を停止する。お試し用APIであるが、実用にもなる。
-  - **easy_capture**: 指定の入力ポートの信号をキャプチャする最も簡単な方法。お試し用のAPIであり、実用には向かない。
-
-- 信号出力API（本文書では説明しない）
-  - **initialize_all_awgs**: 全てのAWGを初期化する。
+- 信号出力API（本文書では説明しない。詳しくは[こちら](./MIGRATION_TO_0_10_X.md)を参照。）
+  - **initialize_all_awgunits**: 全てのAWGを初期化する。
   - **initialize_all_capunits**: 全てのキャプチャユニットを初期化する。
-  - **load_iq_into_channel**: AWGに任意の波形データを設定する。
-  - **load_cw_into_channel**: AWGに連続派の波形データを設定する。load_iq_into_channel を連続波だけに特化したAPIである。
-  - **start_emission**: ひとつ、あるいは、複数のAWGを指定して、波形発生を開始する。
-  - **stop_emission**: ひとつ、あるいは、複数のAWGを指定して、波形発生を停止する。
-  - **simple_capture_start**: ひとつのポートのひとつ、あるいは、複数のrunitを指定して、一回の波形キャプチャの開始トリガの設定、あるいは、即時の開始をする。キャプチャ波形の Futureオブジェクトを返す。
-  - **capture_start**: Boxでは未実装。要望があれば実装優先度を高める。ひとつのポートのひとつ、あるいは、複数のrunitを指定して、複数回の波形キャプチャの開始トリガの設定をする。取得したキャプチャ波形を順次取り出せる Futureオブジェクトをラップした Iteratorオブジェクトを返す。
+  - **get_current_timecounter**: 現在の時刻カウンタを取得する。
+  - **register_wavedata**: 指定の出力チャネルに波形データを名前を付けて登録する。波形チャンクを作成するのに使用する。
+  - **start_wavegen**: 制御装置内の複数の出力チャネルを同時に起動する。即時または指定時刻カウンタでの起動が可能。
+  - **start_capture_now**: 制御装置内の複数の runit を同時に即時起動する。
+  - **start_capture_by_awg_trigger**: 制御装置内の複数の出力チャネルと複数の runit を指定時刻に一斉起動する。
 
-まずは、 Read-outポートから信号発生し、RFスイッチを閉じた状態にして内部ループバックの経路を有効化して、Read-inから信号を読んでみる。
-
-FY2022納品のType-A機(`quel1-a`)では次の手順で確認できる。
-このモデルでは、0番ポートがRead-in、1番ポートがRead-out である。
-```python
-box.config_port(port = 1, lo_freq = 11.5e9, cnco_freq = 1.5e9, sideband = "L", vatt = 0xa00)
-box.config_port(port = 0, cnco_freq = 1.5e9, rfswitch="loop")
-box.easy_start_cw(port = 1, channel = 0, control_port_rfswitch=False)
-iq = box.easy_capture(port = 0, num_samples=256)
-box.easy_stop_all()
+### コード例
+QuEL-1 SE RIKEN8 モデルの制御装置で、全ての出力ポートから短い方形パルスを出力し、ループバック経路を介して、全ての入力ポートでキャプチャするサンプルを紹介する。
+現在は、quel1se-riken8 用のスクリプトしか用意していないが、近いうちに他の機種用のスクリプトも用意する。
+quel1se-riken8 が手元にあれば、次のコマンドをIPアドレスを指定して実行して頂きたい。
+```bash
+python scripts/simple_timed_loopback_example_quel1se_riken8.py --ipaddr_wss 10.1.0.xx
 ```
-とすると、iq にループバック受信した直流のベースバンド信号を取得できるはずだ。
-`quel1-a`以外のモデルでは、ポート番号を次のように読み替えていただきたい。
+すると、次の様な画面が見られるはずだ。
 
-| モデル識別子           | Read-inポート | Read-outポート | 備考                  |
-|------------------|------------|-------------|---------------------|
-| `quel1-a`        | 0          | 1           |                     |
-| `quel1-b`        | N.A.       | N.A.        | 実施不能                |
-| `quel1-nec`      | 2          | 0           | RFスイッチがないので一部の設定が不要 |
-| `quel1se-riken8` | 0          | 1           |                     |
-| `qube-ou-a`      | 1          | 0           | RFスイッチがないので一部の設定が不要 |
-| `qube-ou-b`      | N.A.       | N.A.        | 実施不能                |
-| `qube-riken-a`   | 1          | 0           |                     |
-| `qube-riken-b`   | N.A.       | N.A.        | 実施不能                |
+![quel1se-riken8-loopbacks](images/quel1se-riken8_loopbacks.png)
 
-結果を確認する前に少しだけコードを解説しておく。
-まず、注意が必要なのは、1番ポートと0番ポートのRFスイッチは連動していることだ。
-上記の例では、2行目で 0番ポートのスイッチを操作している。
-その代わりに、1行目で次のようにしても同じ結果となる。
-```python
-box.config_port(port = 1, lo_freq = 11.5e9, cnco_freq = 1.5e9, sideband = "L", vatt = 0xa00, rfswitch="block")
+3つのグラフとも、縦軸が信号振幅、横軸がサンプル数である。
+一番上のグラフが、ポート0の読み出し信号入力のキャプチャである。
+ここには、ポート1の読み出し信号出力から出力した、長さ64サンプルの矩形パルスがループバック経路を介してキャプチャできている。
+二番目のグラフは、ポート4のモニタ入力のキャプチャであり、ポート1のFogi信号出力、ポート2のポンプ出力、ポート3の制御信号出力から、それぞれ時間差
+で出力した、長さ64サンプルの矩形パルスが得られている。
+三番目のグラフは、ポート10のモニタ入力のキャプチャであり、ポート6, 7, 8, 9 の各制御信号出力から、時間差で出力した長さ64サンプルの矩形パルスが得られている。
+
+このスクリプトは、先述の`quel1se_check_all_loopbacks`コマンドと同様の機能を実現するが、コードサンプル向けに平易な書き方をしている。
+このコードから、各ポートの設定、波形パラメタの作成方法、キャプチャパラメタの作成方法、波形生成とキャプチャの同時開始、といった、
+実際の量子実験用のコード開発を行うための基本的な流れを掴み取ることができると思うので、読解することをお勧めする。
+
+### インタラクティブに実行してみる
+上述のコードは、コマンド引数処理のコードを除去してjupyterサーバ上で実行することも可能である。
+各部を改変するなどして、各APIの動作を理解する助けとして頂きたい。
+
+また、jupyterサーバ以外にも、インタプリタのインタラクティブシェルを使って、各部の動作確認をするためのサンプルを用意している。
+```shell
+python -i scripts/getting_started_example.py --boxtype quel1se-riken8 --ipaddr_wss 10.1.0.xxx
 ```
-なお、`rfswitch=`の値が `loop`でなく`block`なのは、入力ポートと出力ポートの違いを反映している。
+とすると、指定装置を抽象化したオブジェクトが`box`変数に入った状態で、インタプリタが起動する。
+たとえば、`box.dump_box()` とすることで、上述の `quel1_dump_port_config` コマンドの出力同様の結果を含んだデータ構造を得られる。
 
-もうひとつ注意が必要なのは、3行目の `control_port_rfswitch=False` で、これは easy_start_cw がRFスイッチを自動で開けてしまうのを止めるための処置である。
-これを忘れると、せっかく2行目で閉じたループが開いてしまう。
-easy_start_cw() のデフォルト動作としてRFスイッチを開けるようになっているのは、もともとスペアナで信号を測定するケースでの使用を想定しているのが理由である。
+発展的な例として、先ほどのサンプルスクリプトの各部を切り出し、繋ぎ合わせて、CW信号を出すサンプルを書いてみよう。
+ポート3にスペクトラムアナライザをつなぐと、4.0GHzのピークが見られるはずだ。
 
 ```python
-abs(iq)
-```
-とすると、数千程度のほぼ一定の値が256個得られると思う。
-もし、100以下程度の小さい値しか得られてない場合には、無信号状態を受信しているのだと思う。
-手順を間違っていると思うので、確認してみて欲しい。
-たとえば、`box.dump_rfswitches()` でスイッチの状態を確認できる。
-```python
-{0: 'open', 2: 'pass', 3: 'pass', 4: 'pass', 5: 'loop', 7: 'open', 9: 'pass', 10: 'pass', 11: 'pass', 12: 'loop'}
-```
-この出力例では、ポート0が "open" であることから、内部ループバック経路の形成に失敗していることが読み取れる。
-なお、ポート1が返り値に含まれていないのは、ポート0とポート1のRFスイッチが連動しているので、重複した設定値を省いているからである。
-同様に、ポート7とポート8もRFスイッチが連動しているので、入力側のポート7だけを返している。
-なお、信号発生・取得について想定外の事象が発生したら、RFスイッチが想定どおりの状態になっていることを最初に確認するべきである。
-複数のスイッチが連動していたり、また、ユーザコードにおいても、どのタイミングで誰がRFスイッチを開け締めするか、設計上の迷いどころになりがちなので。
+# 周波数0 のベースバンド波形を登録。
+cw_iq = np.zeros(64, dtype=np.complex64)
+cw_iq[:] = 32767.0 + 0.0j
+box.register_wavedata(port=3, channel=0, "cw32767", cw_iq)
 
-最後に、QuEL社の開発機で実行した場合の具体的な測定値を示す。
-```python
->> import numpy as np
->> np.mean(abs(iq))
-2012.3402
->> np.sqrt(np.var(abs(iq)))
-29.554134
+# 上記波形を、最大の繰り返し回数出力するように設定する。事実上、待っていても波形生成は終わらない。
+ap = AwgParam(num_repeat=0xFFFF_FFFF)
+ap.chunks.append(WaveChunk(name_of_wavedata="cw32767", num_blank_word=0, num_repeat=0xFFFF_FFFF))
+
+# 各パラメタをポート3のチャネル0に設定
+box.config_port(port = 3, cnco_freq = 4.0e9, fullscale_current=40000, rfswitch="pass")
+box.config_channel(3, 0, fnco_freq=0, awg_param=ap)
+
+# 波形生成を即時開始
+task = box.start_wavegen({(3, 0)})
+
+# 波形生成を中止する場合は以下のようにする。
+task.cancel()
+task.result()  # 波形生成をキャンセルしたので、CancelledError の例外が出るのが正常。
 ```
-同じ機体で、2行目の`rfswtich="loop"`を `rfswitth="open"`などとして、ループバック経路の準備に失敗していると、平均166、標準偏差44程度になった。
 
 ## 次のステップ
-波形発生の実用的APIについては、サンプルコードを読んでいただくのが理解の早道だと考える。
-- [`general_loopback_test_update.py`](../testlibs/general_looptest_common_updated.py):  boxオブジェクトを使った信号発生と取得の例として分かりやすい。
-- [`quel1se_check_all_internal_loopback.py`](../scripts/quel1se_check_all_internal_loopbacks.py): 上記 `general_loopback_test_update.py`を使った最もシンプルなスクリプト。   
-
-なお、boxオブジェクトのAPIのより詳しい情報は、[移行ガイド](MIGRATION_TO_0_8_X.md) に記載がある。
-また、[ソースコード](../src/quel_ic_config/quel1_box.py) の pydoc にも説明がある。
+[scriptディレクトリ](../scripts) にある他のスクリプトも実験コードを書く参考になると思う。
+これらのスクリプトの内容について、 [こちら](./HOW_TO_USE_EXAMPLES.md)に詳しい説明があるので参照されたい。

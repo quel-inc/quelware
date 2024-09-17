@@ -2,71 +2,23 @@ import logging
 
 import pytest
 
-from quel_ic_config.quel1_box import Quel1BoxType, Quel1ConfigOption
 from quel_ic_config.quel1_config_subsystem import QubeConfigSubsystem
-from quel_ic_config_utils.init_helper_for_prebox import init_box_with_linkup
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-TEST_SETTINGS = (
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.74",
-            "ipaddr_sss": "10.2.0.74",
-            "ipaddr_css": "10.5.0.74",
-            "boxtype": Quel1BoxType.fromstr("quel1-a"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
-        },
-    },
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.60",
-            "ipaddr_sss": "10.2.0.60",
-            "ipaddr_css": "10.5.0.60",
-            "boxtype": Quel1BoxType.fromstr("quel1-b"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
-        },
-    },
-)
+def test_all_temperatures(fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
 
-
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
-def fixtures(request) -> QubeConfigSubsystem:
-    param0 = request.param
-
-    # TODO: write something to modify boxtype.
-
-    linkstat, css, _, _, _ = init_box_with_linkup(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
-    if isinstance(css, QubeConfigSubsystem):
-        for mxfe in css.get_all_groups():
-            if not linkstat[mxfe]:
-                raise RuntimeError(f"test is not ready for group-{mxfe}")
-        return css
-    else:
-        raise AssertionError
-
-
-def test_all_temperatures(fixtures):
-    css = fixtures
     for group in range(2):
         temp_max, temp_min = css.get_ad9082_temperatures(group)
-
+        logger.info(f"temperature min = {temp_min}, max = {temp_max}")
         assert 10 < temp_min < 120
         assert 10 < temp_max < 120
         assert temp_min <= temp_max
@@ -85,8 +37,14 @@ def _is_near_enough(x, y):
         (1, False),
     ],
 )
-def test_nco_set_get(mxfe, fractional_mode, fixtures):
-    css = fixtures
+def test_nco_set_get(mxfe, fractional_mode, fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
+
     ad9082 = css.ad9082[mxfe]
 
     dac_cnco_ftws = [ad9082.calc_dac_cnco_ftw(int(100e6 * i), fractional_mode=fractional_mode) for i in range(4)]
@@ -157,8 +115,14 @@ def test_nco_set_get(mxfe, fractional_mode, fixtures):
         (1, 90000),
     ],
 )
-def test_fsc_get(mxfe, fsc, fixtures):
-    css = fixtures
+def test_fsc_get(mxfe, fsc, fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
+
     ad9082 = css.ad9082[mxfe]
 
     if not (7000 <= fsc <= 40000) and fsc not in {40520, 40527}:
@@ -184,13 +148,21 @@ def test_fsc_get(mxfe, fsc, fixtures):
         (1,),
     ],
 )
-def test_get_interpolation_rate(mxfe, fixtures):
-    css = fixtures
+def test_get_interpolation_rate(mxfe, fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
+
     ad9082 = css.ad9082[mxfe]
 
     if mxfe == 0:
-        assert ad9082.get_main_interpolation_rate() == 8
-        assert ad9082.get_channel_interpolation_rate() == 3
+        # assert ad9082.get_main_interpolation_rate() == 8
+        # assert ad9082.get_channel_interpolation_rate() == 3
+        assert ad9082.get_main_interpolation_rate() == 6
+        assert ad9082.get_channel_interpolation_rate() == 4
     elif mxfe == 1:
         assert ad9082.get_main_interpolation_rate() == 6
         assert ad9082.get_channel_interpolation_rate() == 4

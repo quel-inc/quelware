@@ -24,7 +24,7 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def box(request) -> Quel1Box:
     param0 = request.param
 

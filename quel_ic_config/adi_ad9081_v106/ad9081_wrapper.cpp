@@ -296,6 +296,32 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
              self.hal_info.msb = msb;
              self.hal_info.addr_inc = addr_inc;
            })
+      .def("clk_conf_set",
+           [](adi_ad9081_device_t *device, uint64_t dac_clk_hz,
+              uint64_t adc_clk_hz, uint64_t ref_clk_hz) {
+             /* Notes: copied from adi_ad9081_device_clk_config_set() */
+             uint8_t pll_en = ref_clk_hz >= AD9081_DAC_CLK_FREQ_HZ_MIN ? 0 : 1;
+             AD9081_NULL_POINTER_RETURN(device);
+             AD9081_LOG_FUNC();
+             if (pll_en > 0) {
+               AD9081_INVALID_PARAM_WARN(ref_clk_hz >
+                                         AD9081_REF_CLK_FREQ_HZ_MAX);
+               AD9081_INVALID_PARAM_WARN(ref_clk_hz <
+                                         AD9081_REF_CLK_FREQ_HZ_MIN);
+             }
+             AD9081_INVALID_PARAM_WARN(adc_clk_hz > AD9081_ADC_CLK_FREQ_HZ_MAX);
+             AD9081_INVALID_PARAM_WARN(adc_clk_hz < AD9081_ADC_CLK_FREQ_HZ_MIN);
+             AD9081_INVALID_PARAM_WARN(dac_clk_hz > AD9081_DAC_CLK_FREQ_HZ_MAX);
+             AD9081_INVALID_PARAM_WARN(dac_clk_hz < AD9081_DAC_CLK_FREQ_HZ_MIN);
+             AD9081_INVALID_PARAM_RETURN(adc_clk_hz == 0);
+
+             /* save clock settings */
+             device->dev_info.dev_freq_hz = ref_clk_hz;
+             device->dev_info.dac_freq_hz = dac_clk_hz;
+             device->dev_info.adc_freq_hz = adc_clk_hz;
+
+             return API_CMS_ERROR_OK;
+           })
       .def("callback_set",
            [](adi_ad9081_device_t &self, py::function regread_cb,
               py::function regwrite_cb, py::function delayus_cb,

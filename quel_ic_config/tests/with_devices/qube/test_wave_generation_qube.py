@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Dict
 
@@ -11,6 +12,8 @@ import pytest
 from quel_ic_config.quel1_box import Quel1BoxIntrinsic
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
+from testlibs.gen_cw import boxi_gen_cw
+from testlibs.register_cw import register_cw_to_all_lines
 from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise
 
 logger = logging.getLogger(__name__)
@@ -61,14 +64,16 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
-    box = Quel1BoxIntrinsic.create(**param0["box_config"])
-    linkstatus = box.relinkup(**param0["linkup_config"])
+    boxi = Quel1BoxIntrinsic.create(**param0["box_config"])
+    linkstatus = boxi.relinkup(**param0["linkup_config"])
     assert linkstatus[0]
     assert linkstatus[1]
+
+    register_cw_to_all_lines(boxi)
 
     if request.param["spa_type"] == "MS2XXXX":
         spa: SpectrumAnalyzer = init_ms2xxxx(request.param["spa_name"], **request.param["spa_parameters"])
@@ -77,13 +82,13 @@ def fixtures(request):
         assert False
     max_noise = measure_floor_noise(spa)
     assert max_noise < request.param["noise"]["max_background_noise"]
-    yield box, spa, make_outdir(request.param), request.param["port_availability"], request.param[
+    yield boxi, spa, make_outdir(request.param), request.param["port_availability"], request.param[
         "relative_loss"
     ], request.param["noise"]
 
-    box.easy_stop_all()
-    box.activate_monitor_loop(0)
-    box.activate_monitor_loop(1)
+    boxi.initialize_all_awgunits()
+    boxi.activate_monitor_loop(0)
+    boxi.activate_monitor_loop(1)
 
 
 def make_outdir(param):
@@ -103,7 +108,7 @@ def make_outdir(param):
 
 
 @pytest.mark.parametrize(
-    ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
+    ("idx", "group", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
         (0, 0, 0, 0, 12000, 2000, 0),
         (1, 0, 0, 0, 12000, 2500, 0),
@@ -149,7 +154,7 @@ def make_outdir(param):
 )
 def test_all_single_awgs(
     idx: int,
-    mxfe: int,
+    group: int,
     line: int,
     channel: int,
     lo_mhz: int,
@@ -157,32 +162,32 @@ def test_all_single_awgs(
     fnco_mhz: int,
     fixtures,
 ):
-    box, spa, outdir, port_availability, relative_loss, noise = fixtures
-    assert isinstance(box, Quel1BoxIntrinsic)
+    boxi, spa, outdir, port_availability, relative_loss, noise = fixtures
+    assert isinstance(boxi, Quel1BoxIntrinsic)
 
     via_monitor = False
-    if (mxfe, line) in port_availability["unavailable"]:
-        pytest.skip(f"({mxfe}, {line}) is unavailable.")
-    elif (mxfe, line) in port_availability["via_monitor_out"]:
+    if (group, line) in port_availability["unavailable"]:
+        pytest.skip(f"({group}, {line}) is unavailable.")
+    elif (group, line) in port_availability["via_monitor_out"]:
         via_monitor = True
 
     # TODO: fix
-    box.easy_start_cw(
-        mxfe,
+    task = boxi_gen_cw(
+        boxi,
+        group,
         line,
         channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz * 1e6,
         fnco_freq=fnco_mhz * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband="L",
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
+        via_monitor=via_monitor,
     )
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     max_sprious_peek = noise["max_sprious_peek"]
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and boxi.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -195,14 +200,16 @@ def test_all_single_awgs(
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(spa, max_sprious_peek)
     # notes: stop all the awgs of the line
-    box.easy_stop(mxfe, line, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
     j0, s0, w0 = e0.match(m0)
 
     plt.cla()
     plt.plot(t0[:, 0], t0[:, 1])
     plt.savefig(
-        outdir / "awg" / f"{idx:02d}_mxfe{mxfe:d}-line{line:d}-ch{channel:d}-{int(expected_freq) // 1000000:d}MHz.png"
+        outdir / "awg" / f"{idx:02d}_mxfe{group:d}-line{line:d}-ch{channel:d}-{int(expected_freq) // 1000000:d}MHz.png"
     )
 
     assert len(s0) == 0
@@ -211,7 +218,7 @@ def test_all_single_awgs(
 
 
 @pytest.mark.parametrize(
-    ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
+    ("idx", "group", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
         (0, 0, 0, 0, 12000, 2500, 0),
         (1, 0, 1, 0, 12000, 2500, 100),
@@ -225,7 +232,7 @@ def test_all_single_awgs(
 )
 def test_vatt(
     idx: int,
-    mxfe: int,
+    group: int,
     line: int,
     channel: int,
     lo_mhz: int,
@@ -233,16 +240,16 @@ def test_vatt(
     fnco_mhz: int,
     fixtures,
 ):
-    box, e4405b, outdir, port_availability, relative_loss, noise = fixtures
-    assert isinstance(box, Quel1BoxIntrinsic)
+    boxi, e4405b, outdir, port_availability, relative_loss, noise = fixtures
+    assert isinstance(boxi, Quel1BoxIntrinsic)
     via_monitor = False
-    if (mxfe, line) in port_availability["unavailable"]:
-        pytest.skip(f"({mxfe}, {line}) is unavailable.")
-    elif (mxfe, line) in port_availability["via_monitor_out"]:
+    if (group, line) in port_availability["unavailable"]:
+        pytest.skip(f"({group}, {line}) is unavailable.")
+    elif (group, line) in port_availability["via_monitor_out"]:
         via_monitor = True
 
     pwr: Dict[int, float] = {}
-    is_pump = line == 1 and box.css._boxtype in {
+    is_pump = line == 1 and boxi.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -258,18 +265,18 @@ def test_vatt(
         The expected output voltages are 0.72V, 1.03V, 1.34V, 1.65V, 1.96V, and 2.27V, respectively.
         Their corresponding gains at 10GHz are approximately -10dB, -7dB, -2dB, 3dB, 7dB, and 12dB, respectively.
         """
-        box.easy_start_cw(
-            mxfe,
+        task = boxi_gen_cw(
+            boxi,
+            group,
             line,
             channel,
             lo_freq=lo_mhz * 1e6,
             cnco_freq=cnco_mhz * 1e6,
             fnco_freq=fnco_mhz * 1e6,
+            fullscale_current=40527,
             sideband="L",
             vatt=vatt,
-            amplitude=32767.0,
-            control_port_rfswitch=not via_monitor,
-            control_monitor_rfswitch=via_monitor,
+            via_monitor=via_monitor,
         )
 
         expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6
@@ -283,11 +290,13 @@ def test_vatt(
 
         # notes: -60.0dBm fails due to spurious below 7GHz.
         m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(e4405b, max_sprious_peek)
-        box.easy_stop(mxfe, line, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+        task.cancel()
+        with pytest.raises(CancelledError):
+            task.result()
 
         plt.cla()
         plt.plot(t0[:, 0], t0[:, 1])
-        plt.savefig(outdir / "vatt" / f"{idx:02d}-mxfe{mxfe:d}-line{line:d}-ch{channel:d}-vatt{vatt:04x}.png")
+        plt.savefig(outdir / "vatt" / f"{idx:02d}-mxfe{group:d}-line{line:d}-ch{channel:d}-vatt{vatt:04x}.png")
 
         d0 = e0.extract_matched(m0)
         assert len(d0) == 1
@@ -295,7 +304,7 @@ def test_vatt(
         d00 = d0.pop()
         pwr[vatt] = d00.power
 
-    logger.info(f"vatt vs power@{(mxfe, line)}: {pwr}")
+    logger.info(f"vatt vs power@{(group, line)}: {pwr}")
     pwrl = list(pwr.values())
     for i in range(1, len(pwrl)):
         if is_pump:
@@ -305,7 +314,7 @@ def test_vatt(
 
 
 @pytest.mark.parametrize(
-    ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz", "sideband"),
+    ("idx", "group", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz", "sideband"),
     [
         (0, 0, 0, 0, 8000, 1900, 0, "U"),
         (1, 0, 0, 0, 12000, 2000, 0, "L"),
@@ -327,7 +336,7 @@ def test_vatt(
 )
 def test_sideband(
     idx: int,
-    mxfe: int,
+    group: int,
     line: int,
     channel: int,
     lo_mhz: int,
@@ -336,25 +345,25 @@ def test_sideband(
     sideband: str,
     fixtures,
 ):
-    box, e4405b, outdir, port_availability, relative_loss, noise = fixtures
+    boxi, e4405b, outdir, port_availability, relative_loss, noise = fixtures
     via_monitor = False
-    if (mxfe, line) in port_availability["unavailable"]:
-        pytest.skip(f"({mxfe}, {line}) is unavailable.")
-    elif (mxfe, line) in port_availability["via_monitor_out"]:
+    if (group, line) in port_availability["unavailable"]:
+        pytest.skip(f"({group}, {line}) is unavailable.")
+    elif (group, line) in port_availability["via_monitor_out"]:
         via_monitor = True
 
-    box.easy_start_cw(
-        mxfe,
+    task = boxi_gen_cw(
+        boxi,
+        group,
         line,
         channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz * 1e6,
         fnco_freq=fnco_mhz * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband=sideband,
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
+        via_monitor=via_monitor,
     )
 
     if sideband == "L":
@@ -363,7 +372,7 @@ def test_sideband(
         expected_freq = (lo_mhz + (cnco_mhz + fnco_mhz)) * 1e6
     else:
         raise AssertionError
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and boxi.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -377,11 +386,13 @@ def test_sideband(
 
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(e4405b, max_sprious_peek)
-    box.easy_stop(mxfe, line, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
     plt.cla()
     plt.plot(t0[:, 0], t0[:, 1])
-    plt.savefig(outdir / "sideband" / f"{idx:02d}-mxfe{mxfe:d}-line{line:d}-ch{channel:d}-sideband{sideband}.png")
+    plt.savefig(outdir / "sideband" / f"{idx:02d}-mxfe{group:d}-line{line:d}-ch{channel:d}-sideband{sideband}.png")
 
     j0, s0, w0 = e0.match(m0)
 

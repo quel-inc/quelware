@@ -1,15 +1,21 @@
 [project]
 name = "quel_ic_config"
-version = "0.8.10"
+version = "0.10.1b1"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
     "pydantic ~= 2.4.0",
     "pyyaml ~= 6.0.1",
     "aiocoap ~= 0.4.7",
+    "python-ulid ~= 2.7.0",
+    "filelock ~= 3.16.0",
     "ping3 ~= 4.0.4",
-    "e7awgsw ~= 1.0.0",
+    "e7awghal == 0.1.0",
     "quel_clock_master >= 0.1.3",
+    "pybind11-stubgen ~= 2.5.1",
+    "matplotlib",
+    "pycairo",
+    "PyGObject",
 ]
 
 [project.scripts]
@@ -21,8 +27,8 @@ quel1_dump_port_config = "quel_ic_config_cli.cli:quel1_dump_port_config"
 quel1_firmware_version = "quel_ic_config_cli.cli:quel1_firmware_version"
 quel1se_tempctrl_state = "quel_ic_config_cli.cli:quel1se_tempctrl_state"
 quel1se_tempctrl_reset = "quel_ic_config_cli.cli:quel1se_tempctrl_reset"
-quel1_phase_log = "quel_ic_config_cli.phase_measurement:cli_main"
-e7awg_dump = "quel_ic_config_cli.e7awg_dump:main"
+quel1se_check_all_internal_loopbacks = "quel_ic_config_cli.quel1se_check_all_internal_loopbacks:main"
+quel1_check_all_internal_loopbacks = "quel_ic_config_cli.quel1_check_all_internal_loopbacks:main"
 
 [project.optional-dependencies]
 dev = [
@@ -33,11 +39,7 @@ dev = [
     "types-PyYAML",
     "pytest",
     "pytest-cov",
-    "matplotlib",
-    "pycairo",
-    "PyGObject",
     "pybind11",
-    "pybind11-stubgen",
     "quel_inst_tool >= 0.2.6",
     "quel_cmod_scripting >= 0.1.5",
     "quel_staging_tool >= 0.0.8",
@@ -56,6 +58,7 @@ packages = [
     "quel_ic_config",
     "quel_ic_config.settings",
     "adi_ad9081_v106",
+    "adi_ad9082_v161",
     "quel_ic_config_cli",
     "quel_ic_config_utils"
 ]
@@ -64,10 +67,11 @@ package-dir = {"" = "src"}
 [tool.setuptools.package-data]
 "quel_ic_config.settings" = ["*.json", "quel-1/*.json", "quel-1se/*.json"]
 adi_ad9081_v106 = ["*.pyi", "py.typed", "LICENSES.pdf"]
+adi_ad9082_v161 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
 [tool.flake8]
 max-line-length = 120
-ignore = "E203,W503"
+ignore = "E203,E704,W503"
 
 [tool.black]
 line-length = 120
@@ -81,5 +85,5 @@ line_length = 120
 python_version = 3.9
 
 [[tool.mypy.overrides]]
-module = "matplotlib.*,aiocoap.*,ping3,e7awgsw.*"
+module = "matplotlib.*,aiocoap.*,ping3,ulid"
 ignore_missing_imports = true

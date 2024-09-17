@@ -5,15 +5,8 @@ from typing import Any, Dict, Final, Mapping, Set
 
 import matplotlib
 
-from quel_ic_config import QUEL1_BOXTYPE_ALIAS, CaptureReturnCode, Quel1Box, Quel1BoxType
-from testlibs.general_looptest_common_updated import (
-    BoxPool,
-    PulseCap,
-    PulseGen,
-    VportSettingType,
-    find_chunks,
-    plot_iqs,
-)
+from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1Box, Quel1BoxType
+from quel_ic_config_utils import BoxPool, VportSettingType, plot_iqs, single_schedule
 
 logger = logging.getLogger()
 
@@ -58,9 +51,9 @@ def validate_input_port(box: Quel1Box, port_idx: int) -> bool:
     try:
         judge = box.is_input_port(port_idx)
         if not judge:
-            logger.error(f"port:{port_idx} of box:{box.wss._wss_addr} is not an input port")
+            logger.error(f"port:{port_idx} of box:{box.wss.ipaddr_wss} is not an input port")
     except ValueError:
-        logger.error(f"an invalid index of port:{port_idx} of box:{box.wss._wss_addr}")
+        logger.error(f"an invalid index of port:{port_idx} of box:{box.wss.ipaddr_wss}")
 
     return judge
 
@@ -71,24 +64,11 @@ def validate_output_port(box: Quel1Box, port_idx: int) -> bool:
     try:
         judge = box.is_output_port(port_idx)
         if not judge:
-            logger.error(f"port:{port_idx} of box:{box.wss._wss_addr} is not an input port")
+            logger.error(f"port:{port_idx} of box:{box.wss.ipaddr_wss} is not an input port")
     except ValueError:
-        logger.error(f"an invalid index of port:{port_idx} of box:{box.wss._wss_addr}")
+        logger.error(f"an invalid index of port:{port_idx} of box:{box.wss.ipaddr_wss}")
 
     return judge
-
-
-def single_schedule(cp: PulseCap, pg_trigger: PulseGen, pgs: Set[PulseGen], boxpool: BoxPool, power_thr: float):
-    if pg_trigger not in pgs:
-        raise ValueError("trigerring pulse generator is not included in activated pulse generators")
-    thunk = cp.capture_at_single_trigger_of(pg=pg_trigger)
-    boxpool.emit_at(cp=cp, pgs=pgs, min_time_offset=125_000_000, time_counts=(0,))
-
-    s0, iqs = thunk.result()
-    iq0 = iqs[0]
-    assert s0 == CaptureReturnCode.SUCCESS
-    chunks = find_chunks(iq0, power_thr=power_thr)
-    return iq0, chunks
 
 
 if __name__ == "__main__":
@@ -98,7 +78,7 @@ if __name__ == "__main__":
     for lgrname, lgr in logging.root.manager.loggerDict.items():
         if lgrname in {"root"}:
             pass
-        elif lgrname.startswith("testlibs."):
+        elif lgrname.startswith("quel_ic_config_utils.simple_multibox_framework"):
             pass
         else:
             if isinstance(lgr, logging.Logger):
@@ -116,7 +96,9 @@ if __name__ == "__main__":
         required=True,
         help="IP address of clock master",
     )
-    parser.add_argument("--resync", action="store_true", help="resynchronizing boxes before start monitoring")
+    parser.add_argument("--noresync", action="store_true", help="prohibit resync'ing at the initialization")
+
+    parser.add_argument("--noreconfig", action="store_true", help="prohibit reconfiguring at the initialization")
 
     parser.add_argument(
         "--ipaddr_wss_a",
@@ -248,10 +230,11 @@ if __name__ == "__main__":
         num_expected_pulses = 1
         logger.warning("the output port is identical to the trigger port, only single pulse is generated")
 
-    DEVICE_SETTINGS: Dict[str, Mapping[str, Any]] = {
-        "CLOCK_MASTER": {
-            "ipaddr": str(args.ipaddr_clk),
-        },
+    CLOCKMASTER_SETTINGS: Dict[str, Any] = {
+        "ipaddr": str(args.ipaddr_clk),
+    }
+
+    BOX_SETTINGS: Dict[str, Mapping[str, Any]] = {
         "BOX_A": {
             "ipaddr_wss": str(args.ipaddr_wss_a),
             "ipaddr_sss": str(args.ipaddr_sss_a),
@@ -264,7 +247,7 @@ if __name__ == "__main__":
     }
 
     if not same_box:
-        DEVICE_SETTINGS["BOX_B"] = {
+        BOX_SETTINGS["BOX_B"] = {
             "ipaddr_wss": str(args.ipaddr_wss_b),
             "ipaddr_sss": str(args.ipaddr_sss_b),
             "ipaddr_css": str(args.ipaddr_css_b),
@@ -294,6 +277,9 @@ if __name__ == "__main__":
                     "num_capture_samples": [args.capture_duration],
                     "num_blank_samples": [4],
                 },
+            },
+            "check": {
+                "pulse_detection_threshold": args.pulse_detection_threshold,
             },
         },
     }
@@ -347,8 +333,9 @@ if __name__ == "__main__":
             },
         }
 
-    boxpool0 = BoxPool(DEVICE_SETTINGS)
-    boxpool0.init(resync=args.resync)
+    boxpool0 = BoxPool(CLOCKMASTER_SETTINGS, BOX_SETTINGS, CAP_VPORT_SETTINGS, GEN_VPORT_SETTINGS)
+    boxpool0.initialize(resync=not args.noresync, config_css=not args.noreconfig)
+
     box_a = boxpool0.get_box("BOX_A")
     box_b = boxpool0.get_box("BOX_A") if same_box else boxpool0.get_box("BOX_B")
 
@@ -359,22 +346,16 @@ if __name__ == "__main__":
     if not validate_output_port(box_b, args.output_port):
         sys.exit(1)
 
-    pgs0 = PulseGen.create(GEN_VPORT_SETTINGS, boxpool0)
-    tr_0 = pgs0["TRIG_A"]
-
-    cps0 = PulseCap.create(CAP_VPORT_SETTINGS, boxpool0)
-    cp_0 = cps0["CAP_A"]
-
-    boxpool0.measure_timediff(cp_0)
-
-    noise_max, noise_avg, _ = cp_0.measure_background_noise()
-    if noise_max > args.pulse_detection_threshold * 0.75:
+    bgmax = boxpool0.check_background_noise({"CAP_A"})
+    if bgmax["CAP_A"] > args.pulse_detection_threshold * 0.75:
         logger.warning(
-            f"the input port-#{cp_0.port:02d} of the box {cp_0.box.wss._wss_addr} is too noise for the given power "
-            "threshold of pulse detection, you may see sprious pulses in the results"
+            "the capture 'CAP_A' is too noisy for the given power threshold of pulse detection "
+            f"(= {args.pulse_detection_threshold:.1f}), you may see spurious pulses in the results"
         )
-
-    iqs0, chunks0 = single_schedule(cp_0, tr_0, set(pgs0.values()), boxpool0, power_thr=args.pulse_detection_threshold)
+    boxpool0.measure_timediff("CAP_A")
+    _, iqs0, chunks0 = single_schedule(
+        "CAP_A", set(GEN_VPORT_SETTINGS.keys()), boxpool0, args.pulse_detection_threshold
+    )
     if len(chunks0) != num_expected_pulses:
         logger.error(
             f"the number of expected pulses is {num_expected_pulses} but actually is {len(chunks0)}, something wrong"

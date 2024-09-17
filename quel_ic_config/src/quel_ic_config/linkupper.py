@@ -8,10 +8,11 @@ from typing import Dict, Final, List, Set, Tuple, Union
 
 import numpy as np
 
-from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
-from quel_ic_config.quel1_anytype import Quel1AnyConfigSubsystem
+from e7awghal import CapParam, CapSection, E7awgCaptureDataError
+from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1seTempctrlState
-from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, Quel1WaveSubsystem
+from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class LinkupStatus(Enum):
 class LinkupStatistic:
     link_status: int
     error_status: int
-    adc_idx: int
+    fddc_idx: int
     timeout: bool
     failure: bool
     samples: int
@@ -63,38 +64,41 @@ class LinkupStatistic:
 
 class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
+    _SLEEP_BTWN_LINKUP_TRIALS: Final[float] = 0.25
     _DEFAULT_BACKGROUND_NOISE_THRESHOLD: Final[float] = 256.0
     _STAT_HISTORY_MAX_LEN: Final[int] = 1000
 
-    def __init__(
-        self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem, rmap: Union[Quel1E7ResourceMapper, None] = None
-    ):
+    def __init__(self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem, rmap: AbstractQuel1E7ResourceMapper):
         self._css = css
         self._wss = wss
-        if rmap is None:
-            rmap = Quel1E7ResourceMapper(css, wss)
-        self._rmap = rmap
+        self._rmap: AbstractQuel1E7ResourceMapper = rmap
         self._statistics: Dict[int, List[LinkupStatistic]] = {}
         self._target_capmods: Dict[int, Set[int]] = {}
 
-    def _validate_mxfe(self, mxfe_idx: int):
-        self._css._validate_mxfe(mxfe_idx)
+    def _validate_mxfe(self, mxfe_idx: int) -> bool:
+        return mxfe_idx in self._css.get_all_mxfes()
 
-    def _lookup_capmods_of_mxfe(self, mxfe_idx: int) -> Set[int]:
-        rlines = self._rmap.get_active_rlines_of_mxfe(mxfe_idx)
-        return {self._rmap.get_capture_module_of_rline(mxfe_idx, rline) for _, rline in rlines}
+    def _get_fddcs_of_mxfe(self, mxfe_idx: int) -> Set[int]:
+        fddcs: Set[int] = set()
+        for g in self._css.get_all_groups():
+            for rl in self._css.get_all_rlines_of_group(g):
+                for rch in range(self._css.get_num_rchannels_of_rline(g, rl)):
+                    m, d = self._css.get_fddc_idx(g, rl, rch)
+                    if m == mxfe_idx:
+                        fddcs.add(d)
+        return fddcs
 
     def _add_linkup_statistics(
         self,
         mxfe_idx: int,
-        adc_idx: int,
+        fddc_idx: int,
         timeout: bool,
         failure: bool,
         samples: int,
         valid_capture: bool,
         max_noise_peak: float,
     ):
-        link_status, error_status = self._css.ad9082[mxfe_idx].get_link_status()
+        link_status, error_status = self._css.get_link_status(mxfe_idx)
         if mxfe_idx not in self._statistics:
             self._statistics[mxfe_idx] = []
 
@@ -102,7 +106,7 @@ class LinkupFpgaMxfe:
             LinkupStatistic(
                 link_status=link_status,
                 error_status=error_status,
-                adc_idx=adc_idx,
+                fddc_idx=fddc_idx,
                 timeout=timeout,
                 failure=failure,
                 samples=samples,
@@ -129,10 +133,10 @@ class LinkupFpgaMxfe:
 
     def init_wss_resources(self, mxfe_idx: int) -> None:
         self._validate_mxfe(mxfe_idx)
-        self._wss.initialize_awgs(self._rmap.get_awgs_of_group(mxfe_idx))
+        self._wss.initialize_awgunits(self._rmap.get_awgs_of_mxfe(mxfe_idx))
         capunits: Set[Tuple[int, int]] = set()
-        for capmod in self._lookup_capmods_of_mxfe(mxfe_idx):
-            capunits.add((capmod, 0))
+        for fddc_idx in self._get_fddcs_of_mxfe(mxfe_idx):
+            capunits.add((self._rmap.get_capmod_from_fddc(mxfe_idx, fddc_idx), 0))
         self._wss.initialize_capunits(capunits)
 
     def linkup_and_check(
@@ -156,9 +160,8 @@ class LinkupFpgaMxfe:
         judge_system: bool = False
         for i in range(self._LINKUP_MAX_RETRY):
             if i != 0:
-                sleep_duration = 0.25
-                logger.info(f"waiting {sleep_duration} seconds before retrying linkup")
-                time.sleep(sleep_duration)
+                logger.info(f"waiting {self._SLEEP_BTWN_LINKUP_TRIALS} seconds before retrying linkup")
+                time.sleep(self._SLEEP_BTWN_LINKUP_TRIALS)
 
             if not self._css.configure_mxfe(
                 mxfe_idx,
@@ -171,7 +174,7 @@ class LinkupFpgaMxfe:
             ):
                 self._add_linkup_statistics(
                     mxfe_idx,
-                    adc_idx=-1,
+                    fddc_idx=-1,
                     timeout=False,
                     failure=False,
                     samples=-1,
@@ -181,20 +184,19 @@ class LinkupFpgaMxfe:
                 continue
 
             self.init_wss_resources(mxfe_idx)
-            self._rmap.validate_configuration_integrity(mxfe_idx, ignore_extraordinary_converter_select)
 
             # Notes: it is fine to check all the available adcs of the target mxfe.
-            judge_adcs: bool = True
-            for _, adc_idx in self._rmap.get_active_adc_of_mxfe(mxfe_idx):
-                judge_adcs &= self.check_adc(mxfe_idx, adc_idx, background_noise_threshold, save_dirpath)
+            judge_fddcs: bool = True
+            for fddc_idx in self._get_fddcs_of_mxfe(mxfe_idx):
+                judge_fddcs &= self.check_fddc(mxfe_idx, fddc_idx, background_noise_threshold, save_dirpath)
 
-            if judge_adcs:
-                logger.info(f"successful system-level link-up of {self._css._css_addr}:mxfe-#{mxfe_idx}")
+            if judge_fddcs:
+                logger.info(f"successful system-level link-up of {self._css.ipaddr_css}:mxfe-#{mxfe_idx}")
                 judge_system = True
                 break
             else:
                 # Notes: info is enough
-                logger.info(f"failed system-level link-up of {self._css._css_addr}:mxfe-#{mxfe_idx}")
+                logger.info(f"failed system-level link-up of {self._css.ipaddr_css}:mxfe-#{mxfe_idx}")
 
         if judge_system:
             if self._css.tempctrl_auto_start_at_linkup:
@@ -202,88 +204,86 @@ class LinkupFpgaMxfe:
 
         return judge_system
 
-    def check_adc(
+    def check_fddc(
         self,
         mxfe_idx: int,
-        adc_idx: int,
+        fddc_idx: int,
         background_noise_threshold: Union[float, None] = None,
         save_dirpath: Union[Path, None] = None,
     ) -> bool:
         if background_noise_threshold is None:
             background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD
-        capmod = self._rmap.get_capture_module_of_adc(mxfe_idx, adc_idx)
-        status, cap_data = self._wss.simple_capture(capmod, num_words=16384)
-        if status == CaptureReturnCode.SUCCESS:
-            if save_dirpath is not None:
-                os.makedirs(save_dirpath, exist_ok=True)
-                np.save(str(save_dirpath / f"capture_{mxfe_idx}_{int(time.time())}.npy"), cap_data)
+        capmod = self._rmap.get_capmod_from_fddc(mxfe_idx, fddc_idx)
+        capunit = (capmod, 0)
+        param = CapParam(num_repeat=1)
+        param.sections.append(CapSection(name="s0", num_capture_word=16384, num_blank_word=1))
+        self._wss.config_capunit(capunit, param)
+        task = self._wss.start_capunits_now({capunit})
+        try:
+            reader = task.result()[capunit]
+        except TimeoutError as e:
+            logger.warning(e)
+            self._add_linkup_statistics(
+                mxfe_idx,
+                fddc_idx=fddc_idx,
+                timeout=True,
+                failure=False,
+                samples=-1,
+                valid_capture=False,
+                max_noise_peak=-1,
+            )
+            return False
+        except E7awgCaptureDataError as e:
+            logger.warning(e)
+            self._add_linkup_statistics(
+                mxfe_idx,
+                fddc_idx=fddc_idx,
+                timeout=False,
+                failure=False,
+                samples=self._wss._get_capunit(capunit).get_num_captured_sample(),  # TODO: improve the design.
+                valid_capture=False,
+                max_noise_peak=-1,
+            )
+            return False
 
-            max_backgroud_amplitude = max(abs(cap_data))
-            if max_backgroud_amplitude < background_noise_threshold:
-                logger.info(
-                    f"successful establishment of capture link of adc{adc_idx} of mxfe-#{mxfe_idx}, "
-                    f"max amplitude of the capture data is {max_backgroud_amplitude:.1f}"
-                )
-                self._add_linkup_statistics(
-                    mxfe_idx,
-                    adc_idx=adc_idx,
-                    timeout=False,
-                    failure=False,
-                    samples=cap_data.shape[0],
-                    valid_capture=True,
-                    max_noise_peak=max_backgroud_amplitude,
-                )
-                return True
-            else:
-                # need to link up again to make the captured data fine
-                logger.warning(
-                    f"failed establishment of capture link of adc{adc_idx} of mxfe-#{mxfe_idx}, "
-                    "max amplitude of the capture data of is "
-                    f"{max_backgroud_amplitude:.1f} (>= {background_noise_threshold:.1f})"
-                )
-                self._add_linkup_statistics(
-                    mxfe_idx,
-                    adc_idx=adc_idx,
-                    timeout=False,
-                    failure=False,
-                    samples=cap_data.shape[0],
-                    valid_capture=True,
-                    max_noise_peak=max_backgroud_amplitude,
-                )
+        cap_data = reader.as_wave_dict()["s0"][0]
+        if save_dirpath is not None:
+            os.makedirs(save_dirpath, exist_ok=True)
+            np.save(str(save_dirpath / f"backgroud_{mxfe_idx}_{fddc_idx}_{int(time.time())}.npy"), cap_data)
+
+        max_backgroud_amplitude = max(abs(cap_data))
+        if max_backgroud_amplitude < background_noise_threshold:
+            logger.info(
+                f"successful establishment of capture link of fddc-#{fddc_idx} of mxfe-#{mxfe_idx}, "
+                f"max amplitude of the capture data is {max_backgroud_amplitude:.1f}"
+            )
+            self._add_linkup_statistics(
+                mxfe_idx=mxfe_idx,
+                fddc_idx=fddc_idx,
+                timeout=False,
+                failure=False,
+                samples=cap_data.shape[0],
+                valid_capture=True,
+                max_noise_peak=max_backgroud_amplitude,
+            )
+            return True
         else:
-            if status == CaptureReturnCode.CAPTURE_TIMEOUT:
-                self._add_linkup_statistics(
-                    mxfe_idx,
-                    adc_idx=adc_idx,
-                    timeout=True,
-                    failure=False,
-                    samples=-1,
-                    valid_capture=False,
-                    max_noise_peak=-1,
-                )
-            elif status == CaptureReturnCode.CAPTURE_ERROR:
-                self._add_linkup_statistics(
-                    mxfe_idx,
-                    adc_idx=adc_idx,
-                    timeout=False,
-                    failure=True,
-                    samples=-1,
-                    valid_capture=False,
-                    max_noise_peak=-1,
-                )
-            elif status == CaptureReturnCode.BROKEN_DATA:
-                self._add_linkup_statistics(
-                    mxfe_idx,
-                    adc_idx=adc_idx,
-                    timeout=False,
-                    failure=False,
-                    samples=cap_data.shape[0],
-                    valid_capture=False,
-                    max_noise_peak=-1,
-                )
-            else:
-                raise AssertionError
-        return False
+            # need to link up again to make the captured data fine
+            logger.warning(
+                f"failed establishment of capture link of fddc-#{fddc_idx} of mxfe-#{mxfe_idx}, "
+                "max amplitude of the capture data of is "
+                f"{max_backgroud_amplitude:.1f} (>= {background_noise_threshold:.1f})"
+            )
+            self._add_linkup_statistics(
+                mxfe_idx=mxfe_idx,
+                fddc_idx=fddc_idx,
+                timeout=False,
+                failure=False,
+                samples=cap_data.shape[0],
+                valid_capture=True,
+                max_noise_peak=max_backgroud_amplitude,
+            )
+            return False
 
     def start_temperature_control(self, restart: bool) -> None:
         tc_state = self._css.get_tempctrl_state()

@@ -1,0 +1,122 @@
+{
+  "1": {
+    "channels": {
+      "0": {
+        "fnco_freq": 0.0
+      }
+    },
+    "cnco_freq": 1500000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 8500000000,
+    "sideband": "U",
+    "rfswitch": "pass"
+  },
+  "2": {
+    "channels": {
+      "0": {
+        "fnco_freq": -50000000.0
+      },
+      "1": {
+        "fnco_freq": 0.0
+      },
+      "2": {
+        "fnco_freq": 50000000.0
+      }
+    },
+    "cnco_freq": 1500000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 11000000000,
+    "sideband": "L",
+    "rfswitch": "pass"
+  },
+  "3": {
+    "channels": {
+      "0": {
+        "fnco_freq": 0.0
+      }
+    },
+    "cnco_freq": 1400000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 8500000000,
+    "sideband": "U",
+    "rfswitch": "pass"
+  },
+  "4": {
+    "channels": {
+      "0": {
+        "fnco_freq": -100000000.0
+      },
+      "1": {
+        "fnco_freq": 0.0
+      },
+      "2": {
+        "fnco_freq": 100000000.0
+      }
+    },
+    "cnco_freq": 1700000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 11000000000,
+    "sideband": "L",
+    "rfswitch": "pass"
+  },
+  "8": {
+    "channels": {
+      "0": {
+        "fnco_freq": -150000000.0
+      }
+    },
+    "cnco_freq": 1300000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 8500000000,
+    "sideband": "U",
+    "rfswitch": "pass"
+  },
+  "9": {
+    "channels": {
+      "0": {
+        "fnco_freq": 0.0
+      },
+      "1": {
+        "fnco_freq": 0.0
+      },
+      "2": {
+        "fnco_freq": 150000000.0
+      }
+    },
+    "cnco_freq": 2000000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 11000000000,
+    "sideband": "L",
+    "rfswitch": "pass"
+  },
+  "10": {
+    "channels": {
+      "0": {
+        "fnco_freq": -200000000.0
+      }
+    },
+    "cnco_freq": 1200000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 8500000000,
+    "sideband": "U",
+    "rfswitch": "pass"
+  },
+  "11": {
+    "channels": {
+      "0": {
+        "fnco_freq": 0.0
+      },
+      "1": {
+        "fnco_freq": 0.0
+      },
+      "2": {
+        "fnco_freq": 200000000.0
+      }
+    },
+    "cnco_freq": 2200000000.0,
+    "fullscale_current": 40527,
+    "lo_freq": 11000000000,
+    "sideband": "L",
+    "rfswitch": "pass"
+  }
+}

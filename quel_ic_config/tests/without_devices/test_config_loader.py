@@ -199,7 +199,8 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     ],
 )
 def test_config_loader(boxtype: Quel1BoxType, features: Set[Quel1Feature], config_options: Set[Quel1ConfigOption]):
-    qco = QubeConfigSubsystem("241.3.5.6", boxtype, features, Path("src/quel_ic_config/settings"), config_options)
+    qco = QubeConfigSubsystem("241.3.5.6", boxtype, Path("src/quel_ic_config/settings"), config_options)
+    qco.initialize(features)
 
     target = copy.copy(qco._param)
     del target["meta"]

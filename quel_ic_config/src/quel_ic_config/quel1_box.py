@@ -2,31 +2,61 @@ import collections.abc
 import copy
 import json
 import logging
-from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, Collection, Dict, Final, Set, Tuple, Union, cast
+from typing import Any, Collection, Dict, Final, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 
-from quel_clock_master import SequencerClient
-from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
+from e7awghal import AwgParam, CapIqDataReader, CapParam
+from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem
-from quel_ic_config.quel1_box_intrinsic import (
-    Quel1BoxIntrinsic,
-    _complete_ipaddrs,
-    _create_css_object,
-    _create_wss_object,
-    _is_box_available_for,
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic, create_css_wss_rmap
+from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption
+from quel_ic_config.quel1_wave_subsystem import (
+    AbstractCancellableTaskWrapper,
+    AbstractStartAwgunitsTask,
+    Quel1WaveSubsystem,
+    StartCapunitsByTriggerTask,
+    StartCapunitsNowTask,
 )
-from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption, Quel1Feature
-from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, Quel1WaveSubsystem
+from quel_ic_config.quel1se_device_lock import guarded_by_device_lock
 
 logger = logging.getLogger(__name__)
 
 
 Quel1PortType = Union[int, Tuple[int, int]]
+
+
+class BoxStartCapunitsNowTask(
+    AbstractCancellableTaskWrapper[
+        dict[tuple[int, int], CapIqDataReader], dict[tuple[Quel1PortType, int], CapIqDataReader]
+    ]
+):
+    def __init__(self, task: StartCapunitsNowTask, mapping: dict[tuple[int, int], tuple[Quel1PortType, int]]):
+        super().__init__(task)
+        self._mapping = mapping
+
+    def _conveter(
+        self, orig: dict[tuple[int, int], CapIqDataReader]
+    ) -> dict[tuple[Quel1PortType, int], CapIqDataReader]:
+        return {self._mapping[capunit]: reader for capunit, reader in orig.items()}
+
+
+class BoxStartCapunitsByTriggerTask(
+    AbstractCancellableTaskWrapper[
+        dict[tuple[int, int], CapIqDataReader], dict[tuple[Quel1PortType, int], CapIqDataReader]
+    ]
+):
+    def __init__(self, task: StartCapunitsByTriggerTask, mapping: dict[tuple[int, int], tuple[Quel1PortType, int]]):
+        super().__init__(task)
+        self._mapping = mapping
+
+    def _conveter(
+        self, orig: dict[tuple[int, int], CapIqDataReader]
+    ) -> dict[tuple[Quel1PortType, int], CapIqDataReader]:
+        return {self._mapping[capunit]: reader for capunit, reader in orig.items()}
 
 
 class Quel1Box:
@@ -223,6 +253,25 @@ class Quel1Box:
         12: {8, 10, 9, 11},
     }
 
+    _PORT2LINE_QuEL1SE_FUJITSU11_TypeB: Dict[Quel1PortType, Tuple[int, Union[int, str]]] = {
+        1: (0, 0),
+        2: (0, 2),
+        3: (0, 1),
+        4: (0, 3),
+        5: (0, "m"),
+        # 6: group-0 monitor-out
+        8: (1, 0),
+        9: (1, 2),
+        10: (1, 1),
+        11: (1, 3),
+        12: (1, "m"),
+        # 13: group-1 monitor-out
+    }
+
+    _LOOPBACK_QuEL1SE_FUJITSU11_TypeB: Dict[Quel1PortType, Set[Quel1PortType]] = {
+        5: {1, 3, 2, 4},
+        12: {8, 10, 9, 11},
+    }
     _PORT2LINE: Final[Dict[Quel1BoxType, Dict[Quel1PortType, Tuple[int, Union[int, str]]]]] = {
         Quel1BoxType.QuBE_OU_TypeA: _PORT2LINE_QuBE_OU_TypeA,
         Quel1BoxType.QuBE_OU_TypeB: _PORT2LINE_QuBE_OU_TypeB,
@@ -234,6 +283,7 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8DBG: _PORT2LINE_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_RIKEN8: _PORT2LINE_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _PORT2LINE_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _PORT2LINE_QuEL1SE_FUJITSU11_TypeB,
     }
 
     _LOOPBACK: Final[Dict[Quel1BoxType, Dict[Quel1PortType, Set[Quel1PortType]]]] = {
@@ -247,6 +297,7 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8DBG: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_RIKEN8: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _LOOPBACK_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _LOOPBACK_QuEL1SE_FUJITSU11_TypeB,
     }
 
     __slots__ = (
@@ -255,19 +306,16 @@ class Quel1Box:
     )
 
     @classmethod
-    def is_applicable_to(cls, boxtype: Quel1BoxType) -> bool:
-        return Quel1BoxIntrinsic.is_applicable_to(boxtype)
-
-    @classmethod
     def create(
         cls,
         *,
         ipaddr_wss: str,
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
-        boxtype: Union[Quel1BoxType, str],
+        boxtype: Quel1BoxType,
         config_root: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1Box":
         """create QuEL box objects
@@ -277,6 +325,7 @@ class Quel1Box:
         :param boxtype: type of the target box
         :param config_root: root path of config setting files to read (optional)
         :param config_options: a collection of config options (optional)
+        :param skip_init: skip calling box.initialization(), just for debugging.
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_access_failure_of_adrf6780: a list of ADRF6780 whose communication faiulre via SPI bus is
                                                   dismissed (optional)
@@ -285,54 +334,46 @@ class Quel1Box:
                                                               dismissed (optional)
         :return: SimpleBox objects
         """
-        ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
-        if isinstance(boxtype, str):
-            boxtype = Quel1BoxType.fromstr(boxtype)
-        if not _is_box_available_for(boxtype):
-            raise ValueError(f"unsupported boxtype: {boxtype}")
-        if config_options is None:
-            config_options = set()
-
-        features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
-        sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyBoxConfigSubsystem = cast(
-            Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+        css, wss, rmap = create_css_wss_rmap(
+            ipaddr_wss=ipaddr_wss,
+            ipaddr_sss=ipaddr_sss,
+            ipaddr_css=ipaddr_css,
+            boxtype=boxtype,
+            config_root=config_root,
+            config_options=config_options,
         )
-        return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
+        box = Quel1Box(css=css, wss=wss, rmap=rmap, linkupper=None, **options)
+        if not skip_init:
+            box.initialize()
+        return box
 
     def __init__(
         self,
         *,
-        css: Quel1AnyBoxConfigSubsystem,
-        sss: SequencerClient,
+        css: Quel1AnyConfigSubsystem,
         wss: Quel1WaveSubsystem,
-        rmap: Union[Quel1E7ResourceMapper, None] = None,
+        rmap: AbstractQuel1E7ResourceMapper,
         linkupper: Union[LinkupFpgaMxfe, None] = None,
         **options: Collection[int],
     ):
-        self._dev = Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=rmap, linkupper=linkupper, **options)
-        self._boxtype = css._boxtype
+        self._dev = Quel1BoxIntrinsic(css=css, wss=wss, rmap=rmap, linkupper=linkupper, **options)
+        self._boxtype = css.boxtype
         if self._boxtype not in self._PORT2LINE:
             raise ValueError(f"unsupported boxtype; {self._boxtype}")
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}:{self._dev._wss._wss_addr}:{self.boxtype}>"
+        return f"<{self.__class__.__name__}:{self._dev._wss.ipaddr_wss}:{self.boxtype}>"
 
     @property
-    def css(self) -> Quel1AnyBoxConfigSubsystem:
+    def css(self) -> Quel1AnyConfigSubsystem:
         return self._dev.css
-
-    @property
-    def sss(self) -> SequencerClient:
-        return self._dev.sss
 
     @property
     def wss(self) -> Quel1WaveSubsystem:
         return self._dev.wss
 
     @property
-    def rmap(self) -> Quel1E7ResourceMapper:
+    def rmap(self) -> AbstractQuel1E7ResourceMapper:
         return self._dev.rmap
 
     @property
@@ -348,6 +389,10 @@ class Quel1Box:
         return self._dev.boxtype
 
     @property
+    def has_lock(self) -> bool:
+        return self._dev.has_lock
+
+    @property
     def allow_dual_modulus_nco(self) -> bool:
         return self.css.allow_dual_modulus_nco
 
@@ -355,6 +400,11 @@ class Quel1Box:
     def allow_dual_modulus_nco(self, v) -> None:
         self.css.allow_dual_modulus_nco = v
 
+    @guarded_by_device_lock
+    def initialize(self):
+        self._dev.initialize()
+
+    @guarded_by_device_lock
     def reconnect(
         self,
         *,
@@ -408,134 +458,69 @@ class Quel1Box:
             restart_tempctrl=restart_tempctrl,
         )
 
-    def terminate(self):
-        self._dev.terminate()
-
     def link_status(self, ignore_crc_error_of_mxfe: Union[Collection[int], None] = None) -> Dict[int, bool]:
         return self._dev.link_status(ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe)
 
-    def _portname(self, port: Quel1PortType, subport: Union[int, None] = None) -> str:
+    def _portname(self, port: Quel1PortType) -> str:
         if isinstance(port, int):
-            return f"#{port:02d}" if subport is None or subport == 0 else f"#{port:02d}-{subport:d}"
+            return f"#{port:02d}"
         elif self._is_port_subport(port):
-            assert subport is None
             p, sp = cast(Tuple[int, int], port)
             return f"#{p:02d}-{sp:d}"
         else:
             return str(port)
 
-    def _is_port_subport(self, port_subport: Quel1PortType) -> bool:
-        return (
-            isinstance(port_subport, tuple)
-            and len(port_subport) == 2
-            and isinstance(port_subport[0], int)
-            and isinstance(port_subport[1], int)
-        )
+    def _is_port_subport(self, port: Quel1PortType) -> bool:
+        return isinstance(port, tuple) and len(port) == 2 and isinstance(port[0], int) and isinstance(port[1], int)
 
-    def _decode_port(self, port_subport: Quel1PortType) -> Tuple[int, int]:
-        if isinstance(port_subport, int):
-            p: int = port_subport
+    def _decode_port(self, port: Quel1PortType) -> Tuple[int, int]:
+        if isinstance(port, int):
+            p: int = port
             sp: int = 0
-        elif self._is_port_subport(port_subport):
-            p, sp = port_subport[0], port_subport[1]
+        elif self._is_port_subport(port):
+            p, sp = port[0], port[1]
         else:
-            raise ValueError(f"malformed port: '{port_subport}'")
+            raise ValueError(f"malformed port: '{port}'")
 
-        portname = self._portname(p, sp)
+        portname = self._portname(port)
         if sp == 0:
             if p not in self._PORT2LINE[self._boxtype]:
                 raise ValueError(f"invalid port of {self.boxtype}: {portname}")
         else:
-            if port_subport not in self._PORT2LINE[self._boxtype]:
+            if port not in self._PORT2LINE[self._boxtype]:
                 raise ValueError(f"invalid port of {self.boxtype}: {portname}")
         return p, sp
 
-    def _convert_any_port_flex(
-        self, port_subport: Quel1PortType, subport: Union[int, None]
-    ) -> Tuple[int, Union[int, str]]:
-        if isinstance(port_subport, int):
-            return self._convert_any_port_decoded(port_subport, subport or 0)
-        elif self._is_port_subport(port_subport):
-            if subport is None:
-                return self._convert_any_port(port_subport)
-            else:
-                raise ValueError("duplicated subport specifiers")
-        else:
-            raise ValueError(f"malformed port: '{port_subport}'")
+    def _convert_any_port(self, port: Quel1PortType) -> Tuple[int, Union[int, str]]:
+        p, sp = self._decode_port(port)
+        if sp == 0:
+            port = p
+        if port not in self._PORT2LINE[self._boxtype]:
+            raise ValueError(f"invalid port of {self.boxtype}: {self._portname(port)}")
+        return self._PORT2LINE[self._boxtype][port]
 
-    def _convert_any_port(self, port_subport: Quel1PortType) -> Tuple[int, Union[int, str]]:
-        p, sp = self._decode_port(port_subport)
-        return self._convert_any_port_decoded(p, sp)
-
-    def _convert_any_port_decoded(self, port: int, subport: int = 0) -> Tuple[int, Union[int, str]]:
-        if subport == 0:
-            if port not in self._PORT2LINE[self._boxtype]:
-                raise ValueError(f"invalid port of {self.boxtype}: {self._portname(port)}")
-            group, line = self._PORT2LINE[self._boxtype][port]
-        else:
-            if (port, subport) not in self._PORT2LINE[self._boxtype]:
-                raise ValueError(f"invalid port of {self.boxtype}: {self._portname(port, subport)}")
-            group, line = self._PORT2LINE[self._boxtype][port, subport]
-        return group, line
-
-    def _convert_output_port_flex(self, port_subport: Quel1PortType, subport: Union[int, None]) -> Tuple[int, int]:
-        if isinstance(port_subport, int):
-            return self._convert_output_port_decoded(port_subport, subport or 0)
-        elif self._is_port_subport(port_subport):
-            if subport is None:
-                return self._convert_output_port(port_subport)
-            else:
-                raise ValueError("duplicated subport specifiers")
-        else:
-            raise ValueError(f"malformed port: '{port_subport}'")
-
-    def _convert_output_port(self, port_subport: Quel1PortType) -> Tuple[int, int]:
-        p, sp = self._decode_port(port_subport)
-        return self._convert_output_port_decoded(p, sp)
-
-    def _convert_output_port_decoded(self, port: int, subport: int = 0) -> Tuple[int, int]:
-        group, line = self._convert_any_port_decoded(port, subport)
+    def _convert_output_port(self, port: Quel1PortType) -> Tuple[int, int]:
+        group, line = self._convert_any_port(port)
         if not self._dev.is_output_line(group, line):
-            raise ValueError(f"port-{self._portname(port, subport)} is not an output port")
+            raise ValueError(f"port-{self._portname(port)} is not an output port")
         return group, cast(int, line)
 
-    def _convert_input_port_flex(
-        self, port_subport: Quel1PortType, subport: Union[int, None] = None
-    ) -> Tuple[int, str]:
-        if isinstance(port_subport, int):
-            return self._convert_input_port_decoded(port_subport, subport or 0)
-        elif self._is_port_subport(port_subport):
-            if subport is None:
-                return self._convert_input_port(port_subport)
-            else:
-                raise ValueError("duplicated subport specifiers")
-        else:
-            raise ValueError(f"malformed port: '{port_subport}'")
-
-    def _convert_input_port(self, port_subport: Quel1PortType) -> Tuple[int, str]:
-        p, sp = self._decode_port(port_subport)
-        return self._convert_input_port_decoded(p, sp)
-
-    def _convert_input_port_decoded(self, port: int, subport: int) -> Tuple[int, str]:
-        group, line = self._convert_any_port_decoded(port, subport)
+    def _convert_input_port(self, port: Quel1PortType) -> Tuple[int, str]:
+        group, line = self._convert_any_port(port)
         if not self._dev.is_input_line(group, line):
-            raise ValueError(f"port-{self._portname(port, subport)} is not an input port")
+            raise ValueError(f"port-{self._portname(port)} is not an input port")
         return group, cast(str, line)
 
     def _convert_output_channel(self, channel: Tuple[Quel1PortType, int]) -> Tuple[int, int, int]:
         if not (isinstance(channel, tuple) and len(channel) == 2):
             raise ValueError(f"malformed channel: '{channel}'")
 
-        port_subport, ch1 = channel
-        p, sp = self._decode_port(port_subport)
-        return self._convert_output_channel_decoded(p, subport=sp, channel=ch1)
-
-    def _convert_output_channel_decoded(self, port: int, channel: int, *, subport: int = 0) -> Tuple[int, int, int]:
-        group, line = self._convert_output_port_decoded(port, subport)
-        if channel < self.css.get_num_channels_of_line(group, line):
-            ch3 = (group, line, channel)
+        port, ch1 = channel
+        group, line = self._convert_output_port(port)
+        if ch1 < self.css.get_num_channels_of_line(group, line):
+            ch3 = (group, line, ch1)
         else:
-            raise ValueError(f"invalid channel-#{channel} of port-{self._portname(port, subport)}")
+            raise ValueError(f"invalid channel-#{ch1} of port-{self._portname(port)}")
         return ch3
 
     def _convert_output_channels(self, channels: Collection[Tuple[Quel1PortType, int]]) -> Set[Tuple[int, int, int]]:
@@ -546,394 +531,31 @@ class Quel1Box:
             ch3s.add(self._convert_output_channel(channel))
         return ch3s
 
-    def _get_all_subports_of_port(self, port: int) -> Set[int]:
-        subports: Set[int] = set()
+    # Notes: implement it for just in case.
+    def get_ports_sharing_physical_port(self, port: Quel1PortType) -> Set[Quel1PortType]:
+        subports: Set[Quel1PortType] = set()
         if port not in self._PORT2LINE[self._boxtype]:
             raise ValueError(f"invalid port of {self.boxtype}: {self._portname(port)}")
+        p, _ = self._decode_port(port)
 
-        for port_subport in self._PORT2LINE[self._boxtype]:
-            if isinstance(port_subport, int) and port_subport == port:
-                subports.add(0)
-            elif (
-                isinstance(port_subport, tuple)
-                and len(port_subport) == 2
-                and port_subport[0] == port
-                and isinstance(port_subport[1], int)
-            ):
-                subports.add(port_subport[1])
+        for port1 in self._PORT2LINE[self._boxtype]:
+            p1, _ = self._decode_port(port1)
+            if p1 == p:
+                subports.add(port1)
 
         return subports
 
-    def easy_start_cw(
-        self,
-        port: Quel1PortType,
-        channel: int = 0,
-        *,
-        subport: Union[int, None] = None,
-        lo_freq: Union[float, None] = None,
-        cnco_freq: Union[float, None] = None,
-        fnco_freq: Union[float, None] = None,
-        vatt: Union[int, None] = None,
-        sideband: Union[str, None] = None,
-        fullscale_current: Union[int, None] = None,
-        amplitude: float = Quel1BoxIntrinsic.DEFAULT_AMPLITUDE,
-        duration: float = Quel1BoxIntrinsic.VERY_LONG_DURATION,
-        control_port_rfswitch: bool = True,
-        control_monitor_rfswitch: bool = False,
-    ) -> None:
-        """an easy-to-use API to generate continuous wave from a given port.
-
-        :param port: an index of the target port.
-        :param channel: a (sub)port-local index of the channel of the (sub)port. (default: 0)
-        :param lo_freq: the frequency of the corresponding local oscillator in Hz. it must be multiple of 100_000_000.
-        :param cnco_freq: the frequency of the corresponding CNCO in Hz.
-        :param fnco_freq: the frequency of the corresponding FNCO in Hz.
-        :param vatt: the control voltage of the corresponding VATT in unit of 3.3V / 4096.
-        :param sideband: the active sideband of the corresponding mixer, "U" for upper and "L" for lower.
-        :param fullscale_current: full-scale current of output DAC of AD9082 in uA.
-        :param amplitude: the amplitude of the sinusoidal wave to be passed to DAC.
-        :param duration: the duration of wave generation in second.
-        :param control_port_rfswitch: allowing the port corresponding to the line to emit the RF signal if True.
-        :param control_monitor_rfswitch: allowing the monitor-out port to emit the RF signal if True.
-        :return: None
-        """
-
-        group, line = self._convert_output_port_flex(port, subport)
-        self._dev.easy_start_cw(
-            group,
-            line,
-            channel,
-            lo_freq=lo_freq,
-            cnco_freq=cnco_freq,
-            fnco_freq=fnco_freq,
-            vatt=vatt,
-            sideband=sideband,
-            fullscale_current=fullscale_current,
-            amplitude=amplitude,
-            duration=duration,
-            control_port_rfswitch=control_port_rfswitch,
-            control_monitor_rfswitch=control_monitor_rfswitch,
-        )
-
-    def easy_stop(
-        self,
-        port: Quel1PortType,
-        channel: Union[int, None] = None,
-        *,
-        subport: Union[int, None] = None,
-        control_port_rfswitch: bool = True,
-        control_monitor_rfswitch: bool = False,
-    ) -> None:
-        """stopping the wave generation on a given port.
-
-        :param port: an index of the target port.
-        :param channel: a port-local index of the channel. all the channels of the port are subject to stop if None.
-        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
-        :param control_monitor_rfswitch: blocking the emission of the RF signal from the monitor-out port if True.
-        :return: None
-        """
-        if isinstance(port, int):
-            p: int = port
-            if subport is None:
-                subports: Set[int] = self._get_all_subports_of_port(port)
-            else:
-                subports = {subport}
-        elif self._is_port_subport(port):
-            if subport is None:
-                p, sp = self._decode_port(port)
-                subports = {sp}
-            else:
-                raise ValueError("duplicated subport specifiers")
-        else:
-            raise ValueError(f"malformed port : {port}")
-
-        for sp in subports:
-            if channel is None:
-                group, line = self._convert_output_port_decoded(p, subport=sp)
-            else:
-                group, line, channel = self._convert_output_channel_decoded(p, subport=sp, channel=channel)
-            self._dev.easy_stop(
-                group,
-                line,
-                channel=channel,
-                control_port_rfswitch=control_port_rfswitch,
-                control_monitor_rfswitch=control_monitor_rfswitch,
-            )
-
-    def easy_stop_all(self, control_port_rfswitch: bool = True) -> None:
-        """stopping the signal generation on all the channels of the box.
-
-        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
-        :return: None
-        """
-        self._dev.easy_stop_all(control_port_rfswitch=control_port_rfswitch)
-
-    def easy_capture(
-        self,
-        port: Quel1PortType,
-        runit: int = 0,
-        *,
-        lo_freq: Union[float, None] = None,
-        cnco_freq: Union[float, None] = None,
-        fnco_freq: Union[float, None] = None,
-        activate_internal_loop: Union[None, bool] = None,
-        num_samples: int = Quel1BoxIntrinsic.DEFAULT_NUM_CAPTURE_SAMPLE,
-    ) -> npt.NDArray[np.complex64]:
-        """capturing the wave signal from a given receiver channel.
-
-        :param port: an index of a port which the channel belongs to.
-        :param runit: a port-local index of the capture unit.
-        :param lo_freq: the frequency of the corresponding local oscillator in Hz. it must be multiple of 100_000_000.
-        :param cnco_freq: the frequency of the corresponding CNCO in Hz.
-        :param fnco_freq: the frequency of the corresponding FNCO in Hz.
-        :param activate_internal_loop: activate the corresponding loop-back path if True.
-        :param num_samples: number of samples to capture.
-        :return: captured wave data in NumPy array
-        """
-
-        group, rline = self._convert_input_port_flex(port)
-        try:
-            rrline: str = self._dev.rmap.resolve_rline(group, None)
-            if rrline != rline:
-                logger.warning(
-                    f"the specified port-{self._portname(port)} may not be connected to "
-                    "any ADC under the current configuration"
-                )
-        except ValueError:
-            pass
-
-        return self._dev.easy_capture(
-            group,
-            rline,
-            runit,
-            lo_freq=lo_freq,
-            cnco_freq=cnco_freq,
-            fnco_freq=fnco_freq,
-            activate_internal_loop=activate_internal_loop,
-            num_samples=num_samples,
-        )
-
-    def load_cw_into_channel(
-        self,
-        port: Quel1PortType,
-        channel: int,
-        *,
-        subport: Union[int, None] = None,
-        amplitude: float = Quel1BoxIntrinsic.DEFAULT_AMPLITUDE,
-        num_wave_sample: int = Quel1BoxIntrinsic.DEFAULT_NUM_WAVE_SAMPLE,
-        num_repeats: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_REPEATS,
-        num_wait_samples: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_NUM_WAIT_SAMPLES,
-    ) -> None:
-        """loading continuous wave data into a channel.
-
-        :param port: an index of the target port.
-        :param channel: a port-local index of the channel.
-        :param amplitude: amplitude of the continuous wave, 0 -- 32767.
-        :param num_wave_sample: number of samples in wave data to generate.
-        :param num_repeats: number of repetitions of a unit wave data whose length is num_wave_sample.
-                            given as a tuple of two integers that specifies the number of repetition as multiple of
-                            the two.
-        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
-                               length of wait at the start of the whole wave sequence and the length of wait between
-                               each repeated motifs, respectively.
-        :return: None
-        """
-        group, line = self._convert_output_port_flex(port, subport)
-        self._dev.load_cw_into_channel(
-            group,
-            line,
-            channel,
-            amplitude=amplitude,
-            num_wave_sample=num_wave_sample,
-            num_repeats=num_repeats,
-            num_wait_samples=num_wait_samples,
-        )
-
-    def load_iq_into_channel(
-        self,
-        port: Quel1PortType,
-        channel: int,
-        *,
-        subport: Union[int, None] = None,
-        iq: npt.NDArray[np.complex64],
-        num_repeats: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_REPEATS,
-        num_wait_samples: Tuple[int, int] = Quel1BoxIntrinsic.DEFAULT_NUM_WAIT_SAMPLES,
-    ) -> None:
-        """loading arbitrary wave data into a channel.
-
-        :param port: an index of the target port.
-        :param channel: a port-local index of the channel.
-        :param iq: complex data of the signal to generate in 500Msps. I and Q coefficients of each sample must be
-                   within the range of -32768 -- 32767. its length must be a multiple of 64.
-        :param num_repeat: the number of repetitions of the given wave data given as a tuple of two integers,
-                           a product of the two is the number of repetitions.
-        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
-                               length of wait at the start of the whole wave sequence and the length of wait between
-                               each repeated motifs, respectively.
-        :return: None
-        """
-        group, line = self._convert_output_port_flex(port, subport)
-        self._dev.load_iq_into_channel(
-            group, line, channel, iq=iq, num_repeats=num_repeats, num_wait_samples=num_wait_samples
-        )
-
-    def initialize_all_awgs(self):
-        self._dev.initialize_all_awgs()
-
-    def initialize_all_capunits(self):
-        self._dev.initialize_all_capunits()
-
-    def prepare_for_emission(self, channels: Collection[Tuple[Quel1PortType, int]]):
-        """making preparation of signal generation of multiple channels at the same time.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a port and
-                         a channel.
-        """
-        self._dev.prepare_for_emission(self._convert_output_channels(channels))
-
-    def start_emission(self, channels: Collection[Tuple[Quel1PortType, int]]) -> None:
-        """starting signal generation of multiple channels at the same time.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a port and
-                         a channel.
-        """
-        self._dev.start_emission(self._convert_output_channels(channels))
-
-    def read_current_clock(self) -> int:
-        return self._dev.read_current_clock()
-
-    def read_current_and_latched_clock(self) -> Tuple[int, int]:
-        return self._dev.read_current_and_latched_clock()
-
-    def reserve_emission(
-        self,
-        channels: Collection[Tuple[Quel1PortType, int]],
-        time_count: int,
-        margin: float = Quel1BoxIntrinsic.DEFAULT_SCHEDULE_DEADLINE,
-        window: float = Quel1BoxIntrinsic.DEFAULT_SCHEDULE_WINDOW,
-        skip_validation: bool = True,
-    ) -> None:
-        """scheduling to start signal generation of multiple channels at the specified timing.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a port and
-                         a channel.
-        :param time_count: time to start emission in terms of the time count of the synchronization subsystem.
-        :param margin: reservations with less than time `margin` in second will not be accepted.
-                       default value is 0.25 seconds.
-        :param window: reservations out of the time `window` in second from now is rejected.
-                       default value is 300 seconds.
-        :param skip_validation: skip the validation of time count if True. default is False.
-        """
-        self._dev.reserve_emission(
-            self._convert_output_channels(channels),
-            time_count,
-            margin=margin,
-            window=window,
-            skip_validation=skip_validation,
-        )
-
-    def stop_emission(self, channels: Collection[Tuple[Quel1PortType, int]]) -> None:
-        """stopping signal generation on a given channel.
-
-        :param channels: a collection of channels to be deactivated. each channel is specified as a tuple of a port and
-                         a channel.
-        """
-        self._dev.stop_emission(self._convert_output_channels(channels))
-
-    def simple_capture_start(
-        self,
-        port: Quel1PortType,
-        runits: Union[Collection[int], None] = None,
-        *,
-        num_samples: int = Quel1BoxIntrinsic.DEFAULT_NUM_CAPTURE_SAMPLE,
-        delay_samples: int = 0,
-        triggering_channel: Union[Tuple[Union[int, Tuple[int, int]], int], None] = None,
-        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
-    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
-        """capturing the wave signal from a given receiver channel.
-
-        :param port: an index of a port to capture.
-        :param runits: port-local indices of the capture units of the port.
-        :param num_samples: number of samples to capture, recommended to be multiple of 4.
-        :param delay_samples: delay in sampling clocks before starting capture.
-        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
-                                   it is specified by a tuple of port and channel. the capture starts
-                                   immediately if None.
-        :param timeout: waiting time in second before capturing thread quits.
-        :return: captured wave data in NumPy array
-        """
-
-        cap_group, cap_rline = self._convert_input_port_flex(port)
-        try:
-            rrline: str = self._dev.rmap.resolve_rline(cap_group, None)
-            if rrline != cap_rline:
-                logger.warning(
-                    f"the specified port-{self._portname(port)} may not be connected to "
-                    "any ADC under the current configuration"
-                )
-        except ValueError:
-            # Notes: failure of resolution means the mxfe in the group has multiple capture lines.
-            pass
-
-        trg_ch3: Union[Tuple[int, int, int], None] = (
-            self._convert_output_channel(triggering_channel) if triggering_channel is not None else None
-        )
-
-        return self._dev.simple_capture_start(
-            cap_group,
-            cap_rline,
-            runits=runits,
-            num_samples=num_samples,
-            delay_samples=delay_samples,
-            triggering_channel=trg_ch3,
-            timeout=timeout,
-        )
-
-    def capture_start(
-        self,
-        port: Quel1PortType,
-        runits: Collection[int],
-        *,
-        triggering_channel: Union[Tuple[Quel1PortType, int], None] = None,
-        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
-    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
-        """capturing the wave signal from a given receiver channel.
-
-        :param port: an index of a port to capture.
-        :param runits: port-local indices of the capture units of the port.
-        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
-                                   it is specified by a tuple of port and channel. the capture starts
-                                   immediately if None.
-        :param timeout: waiting time in second before capturing thread quits.
-        :return: captured wave data in NumPy array
-        """
-
-        cap_group, cap_rline = self._convert_input_port_flex(port)
-        if cap_rline not in self._dev.rmap.get_active_rlines_of_group(cap_group):
-            raise ValueError(f"the specified port-{self._portname(port)} has no active ADC")
-        trg_ch3: Union[Tuple[int, int, int], None] = (
-            self._convert_output_channel(triggering_channel) if triggering_channel is not None else None
-        )
-
-        return self._dev.capture_start(
-            cap_group,
-            cap_rline,
-            runits=runits,
-            triggering_channel=trg_ch3,
-            timeout=timeout,
-        )
-
     def _config_ports(self, box_conf: Dict[Quel1PortType, Dict[str, Any]]) -> None:
         # Notes: configure output ports before input ones to keep "cnco_locked_with" intuitive in config_box().
-        for port_subport, pc in box_conf.items():
-            if self.is_output_port(port_subport):
-                self._config_box_inner(port_subport, pc)
+        for port, pc in box_conf.items():
+            if self.is_output_port(port):
+                self._config_box_inner(port, pc)
 
-        for port_subport, pc in box_conf.items():
-            if self.is_input_port(port_subport):
-                self._config_box_inner(port_subport, pc)
+        for port, pc in box_conf.items():
+            if self.is_input_port(port):
+                self._config_box_inner(port, pc)
 
-    def _config_box_inner(self, port_subport: Quel1PortType, pc: Dict[str, Any]):
+    def _config_box_inner(self, port: Quel1PortType, pc: Dict[str, Any]):
         port_conf = copy.deepcopy(pc)
         if "direction" in port_conf:
             del port_conf["direction"]  # direction will be validated at the end
@@ -948,18 +570,11 @@ class Quel1Box:
         else:
             runit_confs = {}
 
-        if isinstance(port_subport, int):
-            port, subport = port_subport, 0
-        elif self._is_port_subport(port_subport):
-            port, subport = port_subport
-        else:
-            raise ValueError(f"malformed port: {port_subport}")
-
         for ch, channel_conf in channel_confs.items():
-            self.config_channel(port, subport=subport, channel=ch, **channel_conf)
+            self.config_channel(port, channel=ch, **channel_conf)
         for runit, runit_conf in runit_confs.items():
             self.config_runit(port, runit=runit, **runit_conf)
-        self.config_port(port, subport=subport, **port_conf)
+        self.config_port(port, **port_conf)
 
     def _parse_port_str(self, port_name: str) -> Quel1PortType:
         port_idx: Union[Quel1PortType, None] = None
@@ -1012,7 +627,7 @@ class Quel1Box:
         else:
             return self._parse_ports_conf(cfg0)
 
-    def config_box(
+    def _config_box(
         self,
         box_conf: Union[Dict[str, Dict[Quel1PortType, Dict[str, Any]]], Dict[Quel1PortType, Dict[str, Any]]],
         ignore_validation: bool = False,
@@ -1029,17 +644,27 @@ class Quel1Box:
             self._config_ports(ports_conf)
 
         if not ignore_validation:
-            if not self.config_validate_box(box_conf):
+            if not self._config_validate_box(box_conf):
                 raise ValueError("the provided settings looks to be inconsistent")
 
+    @guarded_by_device_lock
+    def config_box(
+        self,
+        box_conf: Union[Dict[str, Dict[Quel1PortType, Dict[str, Any]]], Dict[Quel1PortType, Dict[str, Any]]],
+        ignore_validation: bool = False,
+    ):
+        self._config_box(box_conf, ignore_validation)
+
+    @guarded_by_device_lock
     def config_box_from_jsonfile(self, box_conf_filepath: Path, ignore_validation: bool = False):
         with open(box_conf_filepath) as f:
             cfg = self._parse_box_conf(json.load(f))
-            self.config_box(cfg, ignore_validation)
+            self._config_box(cfg, ignore_validation)
 
+    @guarded_by_device_lock
     def config_box_from_jsonstr(self, box_conf_str: str, ignore_validation: bool = False):
         cfg = self._parse_box_conf(json.loads(box_conf_str))
-        self.config_box(cfg, ignore_validation)
+        self._config_box(cfg, ignore_validation)
 
     def _config_validate_mxfe(self, mxfe_idx: int, mxfe_conf: Dict[str, Any]) -> bool:
         validity: bool = True
@@ -1059,9 +684,9 @@ class Quel1Box:
                 validity = False
         return validity
 
-    def _config_validate_port(self, port_subport: Quel1PortType, lc: Dict[str, Any]) -> bool:
-        group, line = self._convert_any_port(port_subport)
-        portname = self._portname(port_subport)
+    def _config_validate_port(self, port: Quel1PortType, lc: Dict[str, Any]) -> bool:
+        group, line = self._convert_any_port(port)
+        portname = self._portname(port)
         if self._dev.is_output_line(group, line):
             alc: Dict[str, Any] = self.css.dump_line(group, cast(int, line))
             ad: str = "out"
@@ -1103,15 +728,14 @@ class Quel1Box:
                     valid = False
                     logger.error(f"unexpected settings at {portname}:{k} = {alc[k]} (!= {lc[k]})")
             elif k == "cnco_locked_with":
-                dac_p, dac_sp = self._decode_port(lc[k])
-                dac_g, dac_l = self._convert_output_port_decoded(dac_p, dac_sp)
+                dac_g, dac_l = self._convert_output_port(lc[k])
                 alf = alc["cnco_freq"]
                 lf = self._dev._css.get_dac_cnco(dac_g, dac_l)
                 if lf != alf:
                     valid = False
                     logger.error(
                         f"unexpected settings at {portname}:cnco_freq = {alf} (!= {lf}, "
-                        f"that is cnco frequency of port-{self._portname(dac_p, dac_sp)}"
+                        f"that is cnco frequency of port-{self._portname(lc[k])}"
                     )
             elif k == "fullscale_current":
                 if k not in alc:
@@ -1129,7 +753,7 @@ class Quel1Box:
                     logger.error(f"unexpected settings at {portname}:{k} = {alc[k]} (!= {lc[k]})")
         return valid
 
-    def config_validate_box(
+    def _config_validate_box(
         self,
         box_conf: Union[
             Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]], Dict[Quel1PortType, Dict[str, Any]]
@@ -1158,47 +782,56 @@ class Quel1Box:
 
         return valid
 
-    def is_output_port(self, port_subport: Quel1PortType):
+    @guarded_by_device_lock
+    def config_validate_box(
+        self,
+        box_conf: Union[
+            Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]], Dict[Quel1PortType, Dict[str, Any]]
+        ],
+    ) -> bool:
+        return self._config_validate_box(box_conf)
+
+    def is_output_port(self, port: Quel1PortType):
         """check whether the given port is an output port or not.
 
-        :param port_subport: an index of the target port.
+        :param port: an index of the target port.
         :return: True if the port is an output port.
         """
-        group, line = self._convert_any_port(port_subport)
+        group, line = self._convert_any_port(port)
         return self._dev.is_output_line(group, line)
 
-    def is_input_port(self, port_subport: Quel1PortType):
+    def is_input_port(self, port: Quel1PortType):
         """check whether the given port is an input port or not.
 
-        :param port_subport: an index of the target port.
+        :param port: an index of the target port.
         :return: True if the port is an input port.
         """
-        group, line = self._convert_any_port(port_subport)
+        group, line = self._convert_any_port(port)
         return self._dev.is_input_line(group, line)
 
-    def is_monitor_input_port(self, port_subport: Quel1PortType):
+    def is_monitor_input_port(self, port: Quel1PortType):
         """check whether the given port is a monitor input port or not.
 
-        :param port_subport: an index of the target port.
+        :param port: an index of the target port.
         :return: True if the port is a monitor input port.
         """
-        group, line = self._convert_any_port(port_subport)
+        group, line = self._convert_any_port(port)
         return self._dev.is_monitor_input_line(group, line)
 
-    def is_read_input_port(self, port_subport: Quel1PortType):
+    def is_read_input_port(self, port: Quel1PortType):
         """check whether the given port is a read input port or not.
 
-        :param port_subport: an index of the target port.
+        :param port: an index of the target port.
         :return: True if the port is a read input port.
         """
-        group, line = self._convert_any_port(port_subport)
+        group, line = self._convert_any_port(port)
         return self._dev.is_read_input_line(group, line)
 
+    @guarded_by_device_lock
     def config_port(
         self,
         port: Quel1PortType,
         *,
-        subport: Union[int, None] = None,
         lo_freq: Union[float, None] = None,
         cnco_freq: Union[float, None] = None,
         cnco_locked_with: Union[Quel1PortType, None] = None,
@@ -1220,8 +853,8 @@ class Quel1Box:
         :param rfswitch: state of RF switch, 'block' or 'pass' for output port, 'loop' or 'open' for input port.
         :return: None
         """
-        group, line = self._convert_any_port_flex(port, subport)
-        portname = "port-" + self._portname(port, subport)
+        group, line = self._convert_any_port(port)
+        portname = "port-" + self._portname(port)
         if self._dev.is_output_line(group, line):
             if cnco_locked_with is not None:
                 raise ValueError(f"no cnco_locked_with is available for the output {portname}")
@@ -1246,12 +879,11 @@ class Quel1Box:
 
         elif self._dev.is_input_line(group, line):
             if vatt is not None or sideband is not None:
-                raise ValueError(f"no mixer is available for the input {portname}")
+                raise ValueError(f"no configurable mixer is available for the input {portname}")
             if fullscale_current is not None:
                 raise ValueError(f"no DAC is available for the input {portname}")
             if cnco_locked_with is not None:
-                p, sp = self._decode_port(cnco_locked_with)
-                converted_cnco_lock_with = self._convert_output_port_decoded(p, sp)
+                converted_cnco_lock_with = self._convert_output_port(cnco_locked_with)
             else:
                 converted_cnco_lock_with = None
             try:
@@ -1273,13 +905,14 @@ class Quel1Box:
         else:
             raise AssertionError
 
+    @guarded_by_device_lock
     def config_channel(
         self,
         port: Quel1PortType,
         channel: int,
         *,
-        subport: Union[int, None] = None,
         fnco_freq: Union[float, None] = None,
+        awg_param: Union[AwgParam, None] = None,
     ) -> None:
         """configuring parameters of a given channel, either of transmitter or receiver one.
 
@@ -1287,13 +920,14 @@ class Quel1Box:
         :param channel: a port-local index of the channel.
         :param fnco_freq: the frequency of the corresponding FNCO in Hz. it must be within the range of -250e6 and
                           250e6.
+        :param awg_param: an object holding parameters of signal to be generated.
         :return: None
         """
-        group, line = self._convert_any_port_flex(port, subport)
-        portname = "port-" + self._portname(port, subport)
+        group, line = self._convert_any_port(port)
+        portname = "port-" + self._portname(port)
         if self._dev.is_output_line(group, line):
             try:
-                self._dev.config_channel(group, cast(int, line), channel, fnco_freq=fnco_freq)
+                self._dev.config_channel(group, cast(int, line), channel, fnco_freq=fnco_freq, awg_param=awg_param)
             except ValueError as e:
                 linename = f"group:{group}, line:{line}"
                 if linename in e.args[0]:
@@ -1303,12 +937,14 @@ class Quel1Box:
         else:
             raise ValueError(f"{portname} is not an output port, not applicable")
 
+    @guarded_by_device_lock
     def config_runit(
         self,
         port: Quel1PortType,
         runit: int,
         *,
         fnco_freq: Union[float, None] = None,
+        capture_param: Union[CapParam, None] = None,
     ) -> None:
         """configuring parameters of a given receiver channel.
 
@@ -1316,13 +952,14 @@ class Quel1Box:
         :param runit: a line-local index of the capture unit.
         :param fnco_freq: the frequency of the corresponding FNCO in Hz. it must be within the range of -250e6 and
                           250e6.
+        :param capture_param: an object keeping capture settings.
         :return: None
         """
-        group, rline = self._convert_any_port_flex(port, None)
-        portname = "port-" + self._portname(port, None)
+        group, rline = self._convert_any_port(port)
+        portname = "port-" + self._portname(port)
         if self._dev.is_input_line(group, rline):
             try:
-                self._dev.config_runit(group, cast(str, rline), runit, fnco_freq=fnco_freq)
+                self._dev.config_runit(group, cast(str, rline), runit, fnco_freq=fnco_freq, capture_param=capture_param)
             except ValueError as e:
                 # Notes: tweaking error message
                 linename = f"group:{group}, rline:{rline}"
@@ -1333,6 +970,7 @@ class Quel1Box:
         else:
             raise ValueError(f"{portname} is not an input port, not applicable")
 
+    @guarded_by_device_lock
     def block_all_output_ports(self) -> None:
         """set RF switch of all output ports to block.
 
@@ -1340,6 +978,7 @@ class Quel1Box:
         """
         self._dev.block_all_output_lines()
 
+    @guarded_by_device_lock
     def pass_all_output_ports(self):
         """set RF switch of all output ports to pass.
 
@@ -1347,26 +986,32 @@ class Quel1Box:
         """
         self._dev.pass_all_output_lines()
 
+    @guarded_by_device_lock
     def config_rfswitches(self, rfswitch_confs: Dict[Quel1PortType, str], ignore_validation: bool = False) -> None:
-        for port_subport, rc in rfswitch_confs.items():
-            p, sp = self._decode_port(port_subport)
-            self.config_rfswitch(p, rfswitch=rc)
+        for port, rc in rfswitch_confs.items():
+            p, sp = self._decode_port(port)
+            self._config_rfswitch(p, rfswitch=rc)
 
         valid = True
-        for port_subport, rc in rfswitch_confs.items():
-            p, sp = self._decode_port(port_subport)
+        for port, rc in rfswitch_confs.items():
+            p, sp = self._decode_port(port)
             arc = self.dump_rfswitch(p)
             if rc != arc:
                 valid = False
-                logger.warning(f"rfswitch of port-{self._portname(p, sp)} is finally set to {arc} (!= {rc})")
+                logger.warning(f"rfswitch of port-{self._portname(port)} is finally set to {arc} (!= {rc})")
 
         if not (ignore_validation or valid):
             raise ValueError("the specified configuration of rf switches is not realizable")
 
-    def config_rfswitch(self, port: int, *, rfswitch: str):
-        group, line = self._convert_any_port_decoded(port, 0)
+    def _config_rfswitch(self, port: Quel1PortType, *, rfswitch: str):
+        group, line = self._convert_any_port(port)
         self._dev.config_rfswitch(group, line, rfswitch=rfswitch)
 
+    @guarded_by_device_lock
+    def config_rfswitch(self, port: Quel1PortType, *, rfswitch: str):
+        self._config_rfswitch(port, rfswitch=rfswitch)
+
+    @guarded_by_device_lock
     def activate_monitor_loop(self, group: int) -> None:
         """enabling an internal monitor loop-back path from a monitor-out port to a monitor-in port.
 
@@ -1375,6 +1020,7 @@ class Quel1Box:
         """
         self._dev.activate_monitor_loop(group)
 
+    @guarded_by_device_lock
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal monitor loop-back path.
 
@@ -1403,13 +1049,13 @@ class Quel1Box:
             raise AssertionError
         return retval
 
-    def dump_rfswitch(self, port: Quel1PortType, *, subport: Union[int, None] = None) -> str:
+    def dump_rfswitch(self, port: Quel1PortType) -> str:
         """dumping the current configuration of an RF switch
         :param port: an index of the target port
 
         :return: the current configuration setting of the RF switch
         """
-        group, line = self._convert_any_port_flex(port, subport)
+        group, line = self._convert_any_port(port)
         return self._dev.dump_rfswitch(group, line)
 
     def dump_rfswitches(self, exclude_subordinate: bool = True) -> Dict[Quel1PortType, str]:
@@ -1427,20 +1073,17 @@ class Quel1Box:
                 retval[port] = retval_intrinsic[group, line]
         return retval
 
-    def dump_port(self, port: Quel1PortType, *, subport: Union[int, None] = None) -> Dict[str, Any]:
+    @guarded_by_device_lock
+    def dump_port(self, port: Quel1PortType) -> Dict[str, Any]:
         """dumping the current configuration of a port
         :param port: an index of the target port
 
         :return: the current configuration setting of the RF switch
         """
-        group, line = self._convert_any_port_flex(port, subport)
+        group, line = self._convert_any_port(port)
         return self._dump_port(group, line)
 
-    def dump_box(self) -> Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]]:
-        """dumping the current configuration of the ports
-
-        :return: the current configuration of ports in dictionary.
-        """
+    def _dump_box(self) -> Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]]:
         retval: Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]] = {"mxfes": {}, "ports": {}}
 
         for mxfe_idx in self.css.get_all_mxfes():
@@ -1468,12 +1111,22 @@ class Quel1Box:
             cfg1["ports"][str(pidx)] = pcfg1
         return cfg1
 
+    @guarded_by_device_lock
+    def dump_box(self) -> Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]]:
+        """dumping the current configuration of the ports
+
+        :return: the current configuration of ports in dictionary.
+        """
+        return self._dump_box()
+
+    @guarded_by_device_lock
     def dump_box_to_jsonfile(self, box_conf_filepath: Path) -> None:
         with open(box_conf_filepath, "w") as f:
-            json.dump(self._unparse_box_conf(self.dump_box()), f, indent=2)
+            json.dump(self._unparse_box_conf(self._dump_box()), f, indent=2)
 
+    @guarded_by_device_lock
     def dump_box_to_jsonstr(self) -> str:
-        return json.dumps(self._unparse_box_conf(self.dump_box()))
+        return json.dumps(self._unparse_box_conf(self._dump_box()))
 
     def get_output_ports(self) -> Set[Quel1PortType]:
         """show a set of output ports of this box.
@@ -1503,15 +1156,12 @@ class Quel1Box:
         """
         return set([p for p in self._PORT2LINE[self._boxtype] if self.is_read_input_port(p)])
 
-    def get_loopbacks_of_port(self, port: Quel1PortType, *, subport: Union[int, None] = None) -> Set[Quel1PortType]:
+    def get_loopbacks_of_port(self, port: Quel1PortType) -> Set[Quel1PortType]:
         """show a set of output ports which can be loop-backed to the specified input port
 
         :param port: an index of the target input port
         :return: a set of output ports which has loopback path to the input port
         """
-        if isinstance(port, int) and isinstance(subport, int):
-            port = (port, subport)
-
         if self.is_input_port(port):
             lpbk = self._LOOPBACK[self._boxtype]
             if port in lpbk:
@@ -1537,6 +1187,134 @@ class Quel1Box:
         :param port: an index of the target output port
         :return: a set of channels of the output port
         """
-
         group, rline = self._convert_input_port(port)
         return self._dev.get_runits_of_rline(group, rline)
+
+    def get_names_of_wavedata(self, port: Quel1PortType, channel: int) -> set[str]:
+        group, line, channel = self._convert_output_channel((port, channel))
+        return self._dev.get_names_of_wavedata(group, line, channel)
+
+    def register_wavedata(
+        self,
+        port: Quel1PortType,
+        channel: int,
+        name: str,
+        iq: npt.NDArray[np.complex64],
+        allow_update: bool = True,
+        **kwdargs,
+    ) -> None:
+        group, line, channel = self._convert_output_channel((port, channel))
+        self._dev.register_wavedata(group, line, channel, name, iq, allow_update, **kwdargs)
+
+    def has_wavedata(self, port: Quel1PortType, channel: int, name: str) -> bool:
+        group, line, channel = self._convert_output_channel((port, channel))
+        return self._dev.has_wavedata(group, line, channel, name)
+
+    def delete_wavedata(self, port: Quel1PortType, channel: int, name: str) -> None:
+        group, line, channel = self._convert_output_channel((port, channel))
+        self._dev.delete_wavedata(group, line, channel, name)
+
+    def initialize_all_awgunits(self):
+        self._dev.initialize_all_awgunits()
+
+    def initialize_all_capunits(self):
+        self._dev.initialize_all_capunits()
+
+    def get_current_timecounter(self) -> int:
+        return self._dev.get_current_timecounter()
+
+    def get_latest_sysref_timecounter(self) -> int:
+        return self._dev.get_latest_sysref_timecounter()
+
+    def start_wavegen(
+        self,
+        channels: Collection[Tuple[Quel1PortType, int]],
+        timecounter: Optional[int] = None,
+        *,
+        timeout: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+        return_after_start_emission: Optional[bool] = None,
+    ) -> AbstractStartAwgunitsTask:
+        return self._dev.start_wavegen(
+            self._convert_output_channels(channels),
+            timecounter,
+            timeout=timeout,
+            polling_period=polling_period,
+            disable_timeout=disable_timeout,
+            return_after_start_emission=return_after_start_emission,
+        )
+
+    def start_capture_now(
+        self,
+        runits: Collection[Tuple[Quel1PortType, int]],
+        *,
+        timeout: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+    ) -> BoxStartCapunitsNowTask:
+
+        mapping: dict[tuple[int, int], tuple[Quel1PortType, int]] = {}
+        for port, runit in runits:
+            gr, rl = self._convert_input_port(port)
+            cu = self._dev._get_capunit_from_runit(gr, rl, runit)
+            mapping[cu] = (port, runit)
+
+        capunit_idxs = set(mapping.keys())
+        return BoxStartCapunitsNowTask(
+            self.wss.start_capunits_now(
+                capunit_idxs, timeout=timeout, polling_period=polling_period, disable_timeout=disable_timeout
+            ),
+            mapping,
+        )
+
+    def start_capture_by_awg_trigger(
+        self,
+        runits: Collection[Tuple[Quel1PortType, int]],
+        channels: Collection[Tuple[Quel1PortType, int]],
+        timecounter: Optional[int] = None,
+        *,
+        timeout_before_trigger: Optional[float] = None,
+        timeout_after_trigger: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+    ) -> tuple[BoxStartCapunitsByTriggerTask, AbstractStartAwgunitsTask]:
+        if len(runits) == 0:
+            raise ValueError("no capture units are specified")
+        if len(channels) == 0:
+            raise ValueError("no triggering channel are specified")
+        if timecounter and timecounter < 0:
+            raise ValueError("negative timecounter is not allowed")
+        if timeout_before_trigger and timeout_before_trigger <= 0.0:
+            raise ValueError("non-positive timeout_before_trigger is not allowed")
+        if timeout_after_trigger and timeout_after_trigger <= 0.0:
+            raise ValueError("non-positive timeout_after_trigger is not allowed")
+        if polling_period and polling_period <= 0.0:
+            raise ValueError("non-positive polling_period is not allowed")
+
+        mapping: dict[tuple[int, int], tuple[Quel1PortType, int]] = {}
+        capmod_idxs: set[int] = set()
+        for port, runit in runits:
+            gr, rl = self._convert_input_port(port)
+            cu = self._dev._get_capunit_from_runit(gr, rl, runit)
+            mapping[cu] = (port, runit)
+            capmod_idxs.add(cu[0])
+
+        # Notes: any channel is fine since they all will start at the same time.
+        trigger_idx = self._dev._get_awg_from_channel(*self._convert_output_channel(list(channels)[0]))
+        for capmod_idx in capmod_idxs:
+            self.wss.set_triggering_awg_to_line(capmod_idx, trigger_idx)
+
+        capunit_idxs = set(mapping.keys())
+        cap_task = BoxStartCapunitsByTriggerTask(
+            self.wss.start_capunits_by_trigger(
+                capunit_idxs,
+                timeout_before_trigger=timeout_before_trigger,
+                timeout_after_trigger=timeout_after_trigger,
+                polling_period=polling_period,
+                disable_timeout=disable_timeout,
+            ),
+            mapping,
+        )
+        gen_task: AbstractStartAwgunitsTask = self.start_wavegen(channels, timecounter, polling_period=polling_period)
+        return cap_task, gen_task

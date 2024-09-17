@@ -8,7 +8,7 @@ from quel_ic_config.quel_config_common import QUEL1_BOXTYPE_ALIAS, Quel1BoxType,
 
 def parse_boxtype(boxtypename: str) -> Quel1BoxType:
     if boxtypename not in QUEL1_BOXTYPE_ALIAS:
-        raise ValueError
+        raise ValueError(f"invalid boxtype: '{boxtypename}'")
     return Quel1BoxType.fromstr(boxtypename)
 
 

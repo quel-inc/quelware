@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "version": "0.0.1"
+  },
+  "ad9082": [
+    [
+      "quel-1/ad9082.json",
+      "quel-1/ad9082_dac_channel_assign_for_mxfe0.json",
+      "quel-1/ad9082_read.json",
+      "quel-2/ad9082_serdes.json",
+      {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe0"},
+      {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe0"}
+    ],
+    [
+      "quel-1/ad9082.json",
+      "quel-1/ad9082_dac_channel_assign_for_mxfe1.json",
+      "quel-1/ad9082_read.json",
+      "quel-2/ad9082_serdes.json",
+      {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe1"},
+      {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe1"}
+    ]
+  ],
+  "lmx2594": [
+    [
+      "quel-1/lmx2594_refclk.json"
+    ],
+    [
+      "quel-1/lmx2594_refclk.json"
+    ]
+  ],
+  "ad7490": [
+    "quel-1se/ad7490_adda.json"
+  ],
+  "powerboard_pwm": []
+}
