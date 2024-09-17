@@ -13,6 +13,8 @@ function hs2_color_to_id {
     echo 210249B2B992
   elif [ "$1" == "wht" ]; then
     echo 210249B87FAE
+  elif [ "$1" == "gry" ]; then
+    echo 210249B87F93
   else
     echo xxx
   fi
@@ -102,7 +104,7 @@ function select_quel1se {
 }
 
 if [ $# -lt 2 ]; then
-  echo "Usage: $0 box_number_in_3_digits red|ylw|grn|blk|wht"
+  echo "Usage: $0 box_number_in_3_digits red|ylw|grn|blk|wht|gry"
   exit 1
 fi
 
