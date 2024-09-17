@@ -1,0 +1,50 @@
+[project]
+name = "e7awghal"
+version = "0.1.0"
+dependencies = [
+    "numpy ~= 1.26.0",
+    "pydantic ~= 2.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "mypy",
+    "pyproject-flake8",
+    "pytest",
+    "pytest-cov",
+    "matplotlib",
+    "pycairo",
+    "PyGObject",
+]
+
+[tool.setuptools]
+packages = ["e7awghal"]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+e7awghal = ["py.typed"]
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.flake8]
+max-line-length = 120
+ignore = "E203,W503"
+
+[tool.black]
+line-length = 120
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.mypy]
+python_version = 3.9
+
+[[tool.mypy.overrides]]
+module = "matplotlib.*,aiocoap.*,ping3,ulid,e7awgsw.*,quel_clock_master.*"
+ignore_missing_imports = true
