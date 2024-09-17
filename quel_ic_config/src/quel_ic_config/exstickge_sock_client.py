@@ -3,6 +3,7 @@ import socket
 import struct
 import threading
 import time
+from abc import abstractmethod
 from typing import Mapping, Tuple, Union
 
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
@@ -31,16 +32,38 @@ class _ExstickgeSockClientBase(_ExstickgeProxyBase):
         target_port: int = _DEFAULT_PORT,
         timeout: float = _DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
-        sock: Union[socket.socket, None] = None,
     ):
         super().__init__(target_address, target_port, timeout)
-        self._socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if sock is None else sock
-        self._socket.settimeout(self._timeout)
-        if receiver_limit_by_binding:
-            self._socket.bind((self._get_my_ip_addr(), 0))
-        else:
-            self._socket.bind(("", 0))
+        self._locked: bool = False
+        self._receiver_limit_by_binding: bool = receiver_limit_by_binding
+        self._sock: Union[socket.socket, None] = None
         self._lock: threading.Lock = threading.Lock()
+
+    def initialize(self):
+        with self._lock:
+            self._take_lock()
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._sock.settimeout(self._timeout)
+            if self._receiver_limit_by_binding:
+                self._sock.bind((self._get_my_ip_addr(), 0))
+            else:
+                self._sock.bind(("", 0))
+
+    @property
+    def _socket(self) -> socket.socket:
+        if self._sock is None:
+            raise RuntimeError(f"proxy of {self._target[0]} is not initialized")
+        return self._sock
+
+    @property
+    def has_lock(self) -> bool:
+        return self._locked
+
+    @abstractmethod
+    def _take_lock(self): ...
+
+    @abstractmethod
+    def _release_lock(self): ...
 
     def _get_my_ip_addr(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -90,6 +113,7 @@ class _ExstickgeSockClientBase(_ExstickgeProxyBase):
         return self._make_pkt(self._MODE_WRITE_CMD, if_idx, csel_addr, value)
 
     def _send_and_recv(self, cmd: bytes) -> Union[bytes, None]:
+        # Notes: lock should be acquired by caller
         try:
             if self._dump_enable:
                 cmdrepr = " ".join([f"{x:02x}" for x in cmd])
@@ -138,4 +162,6 @@ class _ExstickgeSockClientBase(_ExstickgeProxyBase):
         return False
 
     def terminate(self):
-        self._socket.close()
+        if self._sock is not None:
+            self._sock.close()
+        self._release_lock()

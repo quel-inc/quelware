@@ -11,8 +11,8 @@ def test_parameter_validation_a():
     css = Quel1TypeAConfigSubsystem(
         css_addr="10.254.253.252",
         boxtype=Quel1BoxType.QuEL1_TypeA,
-        features={Quel1Feature.SINGLE_ADC},
     )
+    css.initialize(features={Quel1Feature.SINGLE_ADC})
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {
@@ -159,8 +159,8 @@ def test_parameter_validation_b():
     css = Quel1TypeBConfigSubsystem(
         css_addr="10.254.253.252",
         boxtype=Quel1BoxType.QuEL1_TypeB,
-        features={Quel1Feature.SINGLE_ADC},
     )
+    css.initialize(features={Quel1Feature.SINGLE_ADC})
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {

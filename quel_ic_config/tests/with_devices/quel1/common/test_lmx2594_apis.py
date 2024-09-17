@@ -3,67 +3,20 @@ import logging
 import pytest
 
 from quel_ic_config.quel1_config_subsystem import QubeConfigSubsystem
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config_utils.init_helper_for_prebox import init_box_with_linkup
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-TEST_SETTINGS = (
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.74",
-            "ipaddr_sss": "10.2.0.74",
-            "ipaddr_css": "10.5.0.74",
-            "boxtype": Quel1BoxType.fromstr("quel1-a"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
-        },
-    },
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.60",
-            "ipaddr_sss": "10.2.0.60",
-            "ipaddr_css": "10.5.0.60",
-            "boxtype": Quel1BoxType.fromstr("quel1-b"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
-        },
-    },
-)
+def test_lo_mult(fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
 
-
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
-def fixtures(request) -> QubeConfigSubsystem:
-    param0 = request.param
-
-    # TODO: write something to modify boxtype.
-
-    linkstat, css, _, _, _ = init_box_with_linkup(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
-    if isinstance(css, QubeConfigSubsystem):
-        for mxfe in css.get_all_groups():
-            if not linkstat[mxfe]:
-                raise RuntimeError(f"test is not ready for group-{mxfe}")
-        return css
-    else:
-        raise AssertionError
-
-
-def test_lo_mult(fixtures):
-    css: QubeConfigSubsystem = fixtures
     mult = {
         0: 85,
         1: 87,
@@ -78,8 +31,13 @@ def test_lo_mult(fixtures):
             assert css.get_lo_multiplier(group, line) == mult[line]
 
 
-def test_divider(fixtures):
-    css: QubeConfigSubsystem = fixtures
+def test_divider(fixtures1):
+    box, params, dpath = fixtures1
+    if params["label"] not in {"staging-058", "staging-060"}:
+        pytest.skip()
+    css = box.css
+    if not isinstance(css, QubeConfigSubsystem):
+        assert False
 
     if css._boxtype in {Quel1BoxType.QuEL1_TypeA}:
         assert css.lmx2594[0].get_divider_ratio() == (1, 1)

@@ -1,76 +1,55 @@
 import copy
 import logging
-from concurrent.futures import Future
+import time
 from ipaddress import IPv4Address
 from pathlib import Path
-from typing import Any, Collection, Dict, Final, Set, Tuple, Union, cast
+from typing import Any, Callable, Collection, Dict, Final, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 import numpy.typing as npt
 
-from quel_clock_master import SequencerClient  # to be replaced
-from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
+from e7awghal import AwgParam, CapParam, E7FwType
+from quel_ic_config.e7resource_mapper import (
+    AbstractQuel1E7ResourceMapper,
+    create_rmap_object,
+    validate_configuration_integrity,
+)
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem, Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_config_subsystem import (
     QubeOuTypeAConfigSubsystem,
     QubeOuTypeBConfigSubsystem,
     Quel1BoxType,
     Quel1ConfigOption,
-    Quel1Feature,
     Quel1NecConfigSubsystem,
     Quel1TypeAConfigSubsystem,
     Quel1TypeBConfigSubsystem,
 )
-from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemAd9082Mixin
-from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, E7FwLifeStage, E7FwType, Quel1WaveSubsystem
-from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem
-from quel_ic_config.quel1se_fujitsu11_config_subsystem import Quel1seFujitsu11DebugConfigSubsystem
-from quel_ic_config.quel1se_proto8_config_subsystem import Quel1seProto8ConfigSubsystem
-from quel_ic_config.quel1se_proto11_config_subsystem import Quel1seProto11ConfigSubsystem
-from quel_ic_config.quel1se_proto_adda_config_subsystem import Quel1seProtoAddaConfigSubsystem
+from quel_ic_config.quel1_wave_subsystem import (
+    AbstractCancellableTaskWrapper,
+    AbstractStartAwgunitsTask,
+    CapIqDataReader,
+    Quel1WaveSubsystem,
+    StartAwgunitsNowTask,
+    StartAwgunitsTimedTask,
+    StartCapunitsByTriggerTask,
+    StartCapunitsNowTask,
+)
+from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem, Quel2ProtoAddaConfigSubsystem
+from quel_ic_config.quel1se_device_lock import DeviceLockException
+from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
+    Quel1seFujitsu11TypeADebugConfigSubsystem,
+    Quel1seFujitsu11TypeBDebugConfigSubsystem,
+)
 from quel_ic_config.quel1se_riken8_config_subsystem import (
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
 )
+from quel_ic_config.quel_config_common import Quel1Feature
 
 logger = logging.getLogger(__name__)
 
-
-def _validate_boxtype(boxtype):
-    if boxtype not in {
-        Quel1BoxType.QuBE_OU_TypeA,
-        Quel1BoxType.QuBE_RIKEN_TypeA,
-        Quel1BoxType.QuEL1_TypeA,
-        Quel1BoxType.QuBE_OU_TypeB,
-        Quel1BoxType.QuBE_RIKEN_TypeB,
-        Quel1BoxType.QuEL1_TypeB,
-        Quel1BoxType.QuEL1_NEC,
-        Quel1BoxType.QuEL1SE_ProtoAdda,
-        Quel1BoxType.QuEL1SE_Proto8,
-        Quel1BoxType.QuEL1SE_Proto11,
-        Quel1BoxType.QuEL1SE_Adda,
-        Quel1BoxType.QuEL1SE_RIKEN8,
-        Quel1BoxType.QuEL1SE_RIKEN8DBG,
-        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
-    }:
-        raise ValueError(f"unsupported boxtype: {boxtype}")
-
-
-def _is_box_available_for(boxtype: Quel1BoxType) -> bool:
-    return boxtype in {
-        Quel1BoxType.QuBE_OU_TypeA,
-        Quel1BoxType.QuBE_RIKEN_TypeA,
-        Quel1BoxType.QuEL1_TypeA,
-        Quel1BoxType.QuBE_OU_TypeB,
-        Quel1BoxType.QuBE_RIKEN_TypeB,
-        Quel1BoxType.QuEL1_TypeB,
-        Quel1BoxType.QuEL1_NEC,
-        Quel1BoxType.QuEL1SE_RIKEN8,
-        Quel1BoxType.QuEL1SE_RIKEN8DBG,
-        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
-        Quel1BoxType.QuEL1SE_Adda,
-    }
+Quel1LineType = tuple[int, Union[int, str]]
 
 
 def _complete_ipaddrs(ipaddr_wss: str, ipaddr_sss: Union[str, None], ipaddr_css: Union[str, None]) -> Tuple[str, str]:
@@ -81,71 +60,127 @@ def _complete_ipaddrs(ipaddr_wss: str, ipaddr_sss: Union[str, None], ipaddr_css:
     return ipaddr_sss, ipaddr_css
 
 
-def _create_wss_object(ipaddr_wss: str, features: Set[Quel1Feature]) -> Quel1WaveSubsystem:
-    wss: Quel1WaveSubsystem = Quel1WaveSubsystem(ipaddr_wss)
-    if wss.hw_lifestage == E7FwLifeStage.TO_DEPRECATE:
-        logger.warning(f"the firmware will deprecate soon, consider to update it as soon as possible: {wss.hw_version}")
-    elif wss.hw_lifestage == E7FwLifeStage.EXPERIMENTAL:
-        logger.warning(f"be aware that the firmware is still in an experimental stage: {wss.hw_version}")
-
-    wss.validate_installed_e7awgsw()
-    if wss.hw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
-        features.add(Quel1Feature.SINGLE_ADC)
-    elif wss.hw_type in {E7FwType.FEEDBACK_VERYEARLY}:
-        features.add(Quel1Feature.BOTH_ADC_EARLY)
-    elif wss.hw_type in {E7FwType.SIMPLEMULTI_STANDARD, E7FwType.FEEDBACK_EARLY}:
-        features.add(Quel1Feature.BOTH_ADC)
-    else:
-        raise ValueError(f"unsupported firmware is detected: {wss.hw_type}")
-    return wss
-
-
 def _create_css_object(
     ipaddr_css: str,
     boxtype: Quel1BoxType,
-    features: Collection[Quel1Feature],
-    config_root: Union[Path, None],
-    config_options: Collection[Quel1ConfigOption],
+    config_root: Optional[Path] = None,
+    config_options: Optional[Collection[Quel1ConfigOption]] = None,
 ) -> Quel1AnyConfigSubsystem:
     if boxtype in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
-        css: Quel1AnyConfigSubsystem = Quel1TypeAConfigSubsystem(
-            ipaddr_css, boxtype, features, config_root, config_options
-        )
+        css: Quel1AnyConfigSubsystem = Quel1TypeAConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
-        css = Quel1TypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1TypeBConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuBE_OU_TypeA:
-        css = QubeOuTypeAConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = QubeOuTypeAConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuBE_OU_TypeB:
-        css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1_NEC:
-        css = Quel1NecConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_ProtoAdda:
-        css = Quel1seProtoAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_Proto8:
-        css = Quel1seProto8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_Proto11:
-        css = Quel1seProto11ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1NecConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_Adda:
-        css = Quel1seAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seAddaConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuEL2_ProtoAdda:
+        css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8:
-        css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8DBG:
-        css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA:
-        css = Quel1seFujitsu11DebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seFujitsu11TypeADebugConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB:
+        css = Quel1seFujitsu11TypeBDebugConfigSubsystem(ipaddr_css, boxtype, config_root, config_options)
     else:
         raise ValueError(f"unsupported boxtype: {boxtype}")
 
-    if not isinstance(css, Quel1ConfigSubsystemAd9082Mixin):
-        raise AssertionError("the given ConfigSubsystem Object doesn't provide AD9082 interface")
+    # TODO: should be moved to the right place.
+    for i in range(10):
+        if i > 0:
+            time.sleep(0.5)
+        if css.has_lock:
+            break
+    else:
+        del css
+        raise DeviceLockException(f"failed to acquire lock of css at {ipaddr_css}")
 
-    return css
+    return css  # noqa: F821 (avoiding a possible bug of pflake8)
+
+
+def _dummy_auth_callback():
+    # Notes: only for debug purpose. no access control will be applied.
+    return True
+
+
+def _create_wss_object(
+    ipaddr_wss: str, ipaddr_sss: Optional[str] = None, css: Optional[Quel1AnyConfigSubsystem] = None
+) -> Quel1WaveSubsystem:
+    if css:
+        auth_callback: Optional[Callable[[], bool]] = lambda: css.has_lock
+    else:
+        logger.warning(f"creating wss at {ipaddr_wss} without any access control.")
+        auth_callback = _dummy_auth_callback
+
+    return Quel1WaveSubsystem(ipaddr_wss, ipaddr_sss, auth_callback)
+
+
+def _get_features_from_wss(wss: Quel1WaveSubsystem) -> set[Quel1Feature]:
+    features: set[Quel1Feature] = set()
+    if wss.fw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
+        features.add(Quel1Feature.SINGLE_ADC)
+    elif wss.fw_type in {E7FwType.FEEDBACK_VERYEARLY}:
+        features.add(Quel1Feature.BOTH_ADC_EARLY)
+    elif wss.fw_type in {E7FwType.SIMPLEMULTI_STANDARD, E7FwType.FEEDBACK_EARLY}:
+        features.add(Quel1Feature.BOTH_ADC)
+    else:
+        raise ValueError(f"unsupported firmware is detected: {wss.fw_type}")
+    return features
+
+
+def create_css_wss_rmap(
+    *,
+    ipaddr_wss: str,
+    ipaddr_sss: Union[str, None] = None,
+    ipaddr_css: Union[str, None] = None,
+    boxtype: Union[Quel1BoxType, str],
+    config_root: Union[Path, None] = None,
+    config_options: Union[Collection[Quel1ConfigOption], None] = None,
+) -> tuple[Quel1AnyConfigSubsystem, Quel1WaveSubsystem, AbstractQuel1E7ResourceMapper]:
+    ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
+    if isinstance(boxtype, str):
+        boxtype = Quel1BoxType.fromstr(boxtype)
+    if config_options is None:
+        config_options = set()
+
+    css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype, config_root, config_options)
+    wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, ipaddr_sss, css)
+    css.initialize(_get_features_from_wss(wss))
+    rmap: AbstractQuel1E7ResourceMapper = create_rmap_object(boxname=ipaddr_wss, fw_type=wss.fw_type)
+    return css, wss, rmap
+
+
+class BoxIntrinsicStartCapunitsNowTask(
+    AbstractCancellableTaskWrapper[dict[tuple[int, int], CapIqDataReader], dict[tuple[int, str, int], CapIqDataReader]]
+):
+    def __init__(self, task: StartCapunitsNowTask, mapping: dict[tuple[int, int], tuple[int, str, int]]):
+        super().__init__(task)
+        self._mapping = mapping
+
+    def _conveter(self, orig: dict[tuple[int, int], CapIqDataReader]) -> dict[tuple[int, str, int], CapIqDataReader]:
+        return {self._mapping[capunit]: reader for capunit, reader in orig.items()}
+
+
+class BoxIntrinsicStartCapunitsByTriggerTask(
+    AbstractCancellableTaskWrapper[dict[tuple[int, int], CapIqDataReader], dict[tuple[int, str, int], CapIqDataReader]]
+):
+    def __init__(self, task: StartCapunitsByTriggerTask, mapping: dict[tuple[int, int], tuple[int, str, int]]):
+        super().__init__(task)
+        self._mapping = mapping
+
+    def _conveter(self, orig: dict[tuple[int, int], CapIqDataReader]) -> dict[tuple[int, str, int], CapIqDataReader]:
+        return {self._mapping[capunit]: reader for capunit, reader in orig.items()}
 
 
 class Quel1BoxIntrinsic:
     __slots__ = (
         "_css",
-        "_sss",
         "_wss",
         "_rmap",
         "_linkupper",
@@ -164,19 +199,16 @@ class Quel1BoxIntrinsic:
     DEFAULT_SCHEDULE_WINDOW: Final[float] = 300.0  # [s]
 
     @classmethod
-    def is_applicable_to(cls, boxtype: Quel1BoxType) -> bool:
-        return _is_box_available_for(boxtype)
-
-    @classmethod
     def create(
         cls,
         *,
         ipaddr_wss: str,
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
-        boxtype: Union[Quel1BoxType, str],
+        boxtype: Quel1BoxType,
         config_root: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1BoxIntrinsic":
         """create QuEL intrinsic box objects
@@ -186,6 +218,7 @@ class Quel1BoxIntrinsic:
         :param boxtype: type of the target box
         :param config_root: root path of config setting files to read (optional)
         :param config_options: a collection of config options (optional)
+        :param skip_init: skip calling box.initialization(), just for debugging.
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_access_failure_of_adrf6780: a list of ADRF6780 whose communication faiulre via SPI bus is
                                                   dismissed (optional)
@@ -194,36 +227,37 @@ class Quel1BoxIntrinsic:
                                                               dismissed (optional)
         :return: SimpleBoxIntrinsic objects
         """
-        ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
-        if isinstance(boxtype, str):
-            boxtype = Quel1BoxType.fromstr(boxtype)
-        if not _is_box_available_for(boxtype):
-            raise ValueError(f"unsupported boxtype: {boxtype}")
-        if config_options is None:
-            config_options = set()
-
-        features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
-        sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyBoxConfigSubsystem = cast(
-            Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+        css, wss, rmap = create_css_wss_rmap(
+            ipaddr_wss=ipaddr_wss,
+            ipaddr_sss=ipaddr_sss,
+            ipaddr_css=ipaddr_css,
+            boxtype=boxtype,
+            config_root=config_root,
+            config_options=config_options,
         )
-        return Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
+        box = Quel1BoxIntrinsic(css=css, wss=wss, rmap=rmap, linkupper=None, **options)
+        if not skip_init:
+            box.initialize()
+        return box
 
     # TODO: consider to re-locate to the right place
     def _validate_options(self, flags: Dict[str, Collection[int]]):
+        num_ad9082 = self.css.get_num_ic("ad9082")
+        num_adrf6780 = self.css.get_num_ic("adrf6780")
+        num_lmx2594 = self.css.get_num_ic("lmx2594")
+
         for k, v in flags.items():
             if k == "ignore_crc_error_of_mxfe":
-                if not all([0 <= u < self.css._NUM_IC["ad9082"] for u in v]):
+                if not all([0 <= u < num_ad9082 for u in v]):
                     raise ValueError(f"invalid index of mxfe is found in {k} (= {v})")
             elif k == "ignore_access_failure_of_adrf6780":
-                if not all([0 <= u < self.css._NUM_IC["adrf6780"] for u in v]):
+                if not all([0 <= u < num_adrf6780 for u in v]):
                     raise ValueError(f"invalid index of adrf6780 is found in {k} (= {v})")
             elif k == "ignore_lock_failure_of_lmx2594":
-                if not all([0 <= u < self.css._NUM_IC["lmx2594"] for u in v]):
+                if not all([0 <= u < num_lmx2594 for u in v]):
                     raise ValueError(f"invalid index of lmx2594 is found in {k} (= {v})")
             elif k == "ignore_extraordinary_converter_select_of_mxfe":
-                if not all([0 <= u < self.css._NUM_IC["ad9082"] for u in v]):
+                if not all([0 <= u < num_ad9082 for u in v]):
                     raise ValueError(f"invalid index of ad9082 is found in {k} (= {v})")
             else:
                 raise ValueError(f"invalid workaround options: {k}")
@@ -240,18 +274,14 @@ class Quel1BoxIntrinsic:
     def __init__(
         self,
         *,
-        css: Quel1AnyBoxConfigSubsystem,
+        css: Quel1AnyConfigSubsystem,
         wss: Quel1WaveSubsystem,
-        sss: SequencerClient,
-        rmap: Union[Quel1E7ResourceMapper, None] = None,
+        rmap: AbstractQuel1E7ResourceMapper,
         linkupper: Union[LinkupFpgaMxfe, None] = None,
         **options: Collection[int],
     ):
         self._css = css
         self._wss = wss
-        self._sss = sss
-        if rmap is None:
-            rmap = Quel1E7ResourceMapper(css, wss)
         self._rmap = rmap
         if linkupper is None:
             linkupper = LinkupFpgaMxfe(css, wss, rmap)
@@ -262,10 +292,10 @@ class Quel1BoxIntrinsic:
         self._options: Dict[str, Collection[int]] = options
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}:{self._wss._wss_addr}:{self.boxtype}>"
+        return f"<{self.__class__.__name__}:{self._wss.ipaddr_wss}:{self.boxtype}>"
 
     @property
-    def css(self) -> Quel1AnyBoxConfigSubsystem:
+    def css(self) -> Quel1AnyConfigSubsystem:
         return self._css
 
     @property
@@ -273,11 +303,7 @@ class Quel1BoxIntrinsic:
         return self._wss
 
     @property
-    def sss(self) -> SequencerClient:
-        return self._sss
-
-    @property
-    def rmap(self) -> Quel1E7ResourceMapper:
+    def rmap(self) -> AbstractQuel1E7ResourceMapper:
         return self._rmap
 
     @property
@@ -289,11 +315,15 @@ class Quel1BoxIntrinsic:
         return self.css.boxtype.tostr()
 
     @property
+    def has_lock(self) -> bool:
+        return self.css.has_lock
+
+    @property
     def options(self) -> Dict[str, Collection[int]]:
         return self._options
 
-    def _is_quel1se(self) -> bool:
-        return self.css._boxtype in {Quel1BoxType.QuEL1SE_RIKEN8, Quel1BoxType.QuEL1SE_RIKEN8DBG}
+    def initialize(self) -> None:
+        self.wss.initialize()
 
     def reconnect(
         self,
@@ -325,16 +355,19 @@ class Quel1BoxIntrinsic:
 
         link_ok = {}
         for mxfe_idx in mxfe_list:
-            self._rmap.validate_configuration_integrity(
-                mxfe_idx,
-                ignore_extraordinary_converter_select=mxfe_idx in ignore_extraordinary_converter_select_of_mxfe,
-            )
             try:
                 valid_link: bool = self._css.configure_mxfe(
                     mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe
                 )
-                self._css.ad9082[mxfe_idx].device_chip_id_get()
-            except RuntimeError:
+                if valid_link:
+                    self._css.validate_chip_id(mxfe_idx)
+                    validate_configuration_integrity(
+                        self.css.get_virtual_adc_select(mxfe_idx),
+                        self.wss.fw_type,
+                        ignore_extraordinary_converter_select=mxfe_idx in ignore_extraordinary_converter_select_of_mxfe,
+                    )
+            except RuntimeError as e:
+                logger.warning(e)
                 valid_link = False
 
             if not valid_link:
@@ -362,7 +395,7 @@ class Quel1BoxIntrinsic:
         if mxfes_to_linkup is None:
             mxfes_to_linkup = self._css.get_all_mxfes()
         if hard_reset is None:
-            hard_reset = self._is_quel1se()
+            hard_reset = self.css.boxtype.is_quel1se()
         if ignore_crc_error_of_mxfe is None:
             ignore_crc_error_of_mxfe = self._options["ignore_crc_error_of_mxfe"]
         if ignore_access_failure_of_adrf6780 is None:
@@ -397,9 +430,6 @@ class Quel1BoxIntrinsic:
             )
         return linkup_ok
 
-    def terminate(self):
-        self.css.terminate()
-
     def link_status(self, *, ignore_crc_error_of_mxfe: Union[Collection[int], None] = None) -> Dict[int, bool]:
         if ignore_crc_error_of_mxfe is None:
             ignore_crc_error_of_mxfe = self._options["ignore_crc_error_of_mxfe"]
@@ -411,440 +441,31 @@ class Quel1BoxIntrinsic:
             )
         return link_health
 
-    @staticmethod
-    def _calc_wave_repeats(duration_in_sec: float, num_samples: int) -> Tuple[int, int]:
-        unit_len = num_samples / 500e6
-        duration_in_unit = duration_in_sec / unit_len
-        u = round(duration_in_unit)
-        v = 1
-        while (u > 0xFFFFFFFF) and (v <= 0xFFFFFFFF):
-            u //= 2
-            v *= 2
-        if v > 0xFFFFFFFF:
-            return 0xFFFFFFFF, 0xFFFFFFFF
+    def _get_rchannel_from_runit(self, group: int, rline: str, runit: int) -> int:
+        # TODO: implement a method to connect runit and rchannel in this (BoxIntrinsic) layer.
+        if runit in self.get_runits_of_rline(group, rline):
+            return 0
         else:
-            return u, v
+            raise ValueError(f"invalid runit:{runit} for group:{group}, rline:{rline}")
 
-    def easy_start_cw(
-        self,
-        group: int,
-        line: int,
-        channel: int,
-        *,
-        lo_freq: Union[float, None] = None,
-        cnco_freq: Union[float, None] = None,
-        fnco_freq: Union[float, None] = None,
-        vatt: Union[int, None] = None,
-        sideband: Union[str, None] = None,
-        fullscale_current: Union[int, None] = None,
-        amplitude: float = DEFAULT_AMPLITUDE,
-        duration: float = VERY_LONG_DURATION,
-        control_port_rfswitch: bool = True,
-        control_monitor_rfswitch: bool = False,
-    ) -> None:
-        """an easy-to-use API to generate continuous wave from a given channel.
+    def _get_awg_from_channel(self, group: int, line: int, channel: int) -> int:
+        mxfe_idx, fduc_idx = self.css.get_fduc_idx(group, line, channel)
+        return self.rmap.get_awg_from_fduc(mxfe_idx, fduc_idx)
 
-        :param group: an index of a group which the channel belongs to.
-        :param line: a group-local index of a line which the channel belongs to.
-        :param channel: a line-local index of the channel.
-        :param lo_freq: the frequency of the corresponding local oscillator in Hz. it must be multiple of 100_000_000.
-        :param cnco_freq: the frequency of the corresponding CNCO in Hz.
-        :param fnco_freq: the frequency of the corresponding FNCO in Hz.
-        :param vatt: the control voltage of the corresponding VATT in unit of 3.3V / 4096.
-        :param sideband: the active sideband of the corresponding mixer, "U" for upper and "L" for lower.
-        :param fullscale_current: full-scale current of output DAC of AD9082 in uA.
-        :param amplitude: the amplitude of the sinusoidal wave to be passed to DAC.
-        :param duration: the duration of wave generation in second.
-        :param control_port_rfswitch: allowing the port corresponding to the line to emit the RF signal if True.
-        :param control_monitor_rfswitch: allowing the monitor-out port to emit the RF signal if True.
-        :return: None
-        """
-        self.config_line(
-            group=group,
-            line=line,
-            lo_freq=lo_freq,
-            cnco_freq=cnco_freq,
-            vatt=vatt,
-            sideband=sideband,
-            fullscale_current=fullscale_current,
-        )
-        self.config_channel(group=group, line=line, channel=channel, fnco_freq=fnco_freq)
-        if control_port_rfswitch:
-            self.open_rfswitch(group, line)
-        if control_monitor_rfswitch:
-            self.open_rfswitch(group, "m")
-        num_repeats = self._calc_wave_repeats(duration, 64)
-        logger.info(
-            f"start emitting continuous wave signal from ({group}, {line}, {channel}) "
-            f"for {num_repeats[0]*num_repeats[1]*128e-9} seconds"
-        )
-        self.load_cw_into_channel(group, line, channel, amplitude=amplitude, num_repeats=num_repeats)
-        self.start_emission({(group, line, channel)})
+    def _get_awgs_from_channels(self, channels: Collection[Tuple[int, int, int]]):
+        return {self._get_awg_from_channel(gr, ln, ch) for gr, ln, ch in channels}
 
-    def easy_stop(
-        self,
-        group: int,
-        line: int,
-        channel: Union[int, None] = None,
-        *,
-        control_port_rfswitch: bool = True,
-        control_monitor_rfswitch: bool = False,
-    ) -> None:
-        """stopping the wave generation on a given channel.
+    def _get_capmod_from_rchannel(self, group: int, rline: str, rchannel: int) -> int:
+        mxfe_idx, fddc_idx = self.css.get_fddc_idx(group, rline, rchannel)
+        return self.rmap.get_capmod_from_fddc(mxfe_idx, fddc_idx)
 
-        :param group: an index of a group which the channel belongs to.
-        :param line: a group-local index of a line which the channel belongs to.
-        :param channel: an index of the channel in the line. stop the signal generation of all the channel of
-                        the line if None.
-        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
-        :param control_monitor_rfswitch: blocking the emission of the RF signal from the monitor-out port if True.
-        :return: None
-        """
+    def _get_capunit_from_runit(self, group: int, rline: str, runit: int) -> tuple[int, int]:
+        rchannel = self._get_rchannel_from_runit(group, rline, runit)
+        # Notes: runit --> capunit doens't work in near future!
+        return (self._get_capmod_from_rchannel(group, rline, rchannel), runit)
 
-        if channel is None:
-            channels = {(group, line, ch) for ch in range(self.css.get_num_channels_of_line(group, line))}
-        else:
-            channels = {(group, line, channel)}
-        self.stop_emission(channels)
-        logger.info(f"stop emitting continuous wave signal from ({group}, {line}, {channel})")
-        self.close_rfswitch(group, line)
-        if control_port_rfswitch:
-            self.close_rfswitch(group, line)
-        if control_monitor_rfswitch:
-            self.activate_monitor_loop(group)
-
-    def easy_stop_all(self, control_port_rfswitch: bool = True) -> None:
-        """stopping the signal generation on all the channels of the box.
-
-        :param control_port_rfswitch: blocking the emission of the RF signal from the corresponding port if True.
-        :return: None
-        """
-        for group in self._css.get_all_groups():
-            for line in self._css.get_all_lines_of_group(group):
-                self.easy_stop(group, line, control_port_rfswitch=control_port_rfswitch)
-
-    def easy_capture(
-        self,
-        group: int,
-        rline: Union[str, None] = None,
-        runit: int = 0,
-        *,
-        lo_freq: Union[float, None] = None,
-        cnco_freq: Union[float, None] = None,
-        fnco_freq: Union[float, None] = None,
-        activate_internal_loop: Union[None, bool] = None,
-        num_samples: int = DEFAULT_NUM_CAPTURE_SAMPLE,
-    ) -> npt.NDArray[np.complex64]:
-        """capturing the wave signal from a given receiver channel.
-
-        :param group: an index of a group which the channel belongs to.
-        :param rline: a group-local index of a line which the channel belongs to.
-        :param runit: a line-local index of the capture unit.
-        :param lo_freq: the frequency of the corresponding local oscillator in Hz. it must be multiple of 100_000_000.
-        :param cnco_freq: the frequency of the corresponding CNCO in Hz.
-        :param fnco_freq: the frequency of the corresponding FNCO in Hz.
-        :param activate_internal_loop: activate the corresponding loop-back path if True
-        :param num_samples: number of samples to capture
-        :return: captured wave data in NumPy array
-        """
-        input_line = self._rmap.resolve_rline(group, rline)
-        self.config_rline(group=group, rline=input_line, lo_freq=lo_freq, cnco_freq=cnco_freq)
-        self.config_runit(group=group, rline=input_line, runit=runit, fnco_freq=fnco_freq)
-
-        if activate_internal_loop is not None:
-            if input_line == "r":
-                if activate_internal_loop:
-                    self.activate_read_loop(group)
-                else:
-                    self.deactivate_read_loop(group)
-            elif input_line == "m":
-                if activate_internal_loop:
-                    self.activate_monitor_loop(group)
-                else:
-                    self.deactivate_monitor_loop(group)
-            else:
-                raise AssertionError
-
-        if num_samples % 4 != 0:
-            num_samples = ((num_samples + 3) // 4) * 4
-            logger.warning(f"num_samples is extended to multiples of 4: {num_samples}")
-
-        if num_samples > 0:
-            capmod = self._rmap.get_capture_module_of_rline(group, input_line)
-            status, iq = self._wss.simple_capture(capmod, num_words=num_samples // 4)
-            if status == CaptureReturnCode.SUCCESS:
-                return iq
-            elif status == CaptureReturnCode.CAPTURE_TIMEOUT:
-                raise RuntimeError("failed to capture due to time out")
-            elif status == CaptureReturnCode.CAPTURE_ERROR:
-                raise RuntimeError("failed to capture due to internal error of FPGA")
-            elif status == CaptureReturnCode.BROKEN_DATA:
-                raise RuntimeError("failed to capture due to broken data")
-            else:
-                raise AssertionError
-        elif num_samples == 0:
-            logger.warning("attempting to read zero samples")
-            return np.zeros(0, dtype=np.complex64)
-        else:
-            raise ValueError(f"nagative value for num_samples (= {num_samples})")
-
-    def load_cw_into_channel(
-        self,
-        group: int,
-        line: int,
-        channel: int,
-        *,
-        amplitude: float = DEFAULT_AMPLITUDE,
-        num_wave_sample: int = DEFAULT_NUM_WAVE_SAMPLE,
-        num_repeats: Tuple[int, int] = DEFAULT_REPEATS,
-        num_wait_samples: Tuple[int, int] = DEFAULT_NUM_WAIT_SAMPLES,
-    ) -> None:
-        """loading continuous wave data into a channel.
-
-        :param group: an index of a group which the channel belongs to.
-        :param line: a group-local index of a line which the channel belongs to.
-        :param channel: a line-local index of the channel.
-        :param amplitude: amplitude of the continuous wave, 0 -- 32767.
-        :param num_wave_sample: number of samples in wave data to generate.
-        :param num_repeats: number of repetitions of a unit wave data whose length is num_wave_sample.
-                            given as a tuple of two integers that specifies the number of repetition as multiple of
-                            the two.
-        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
-                               length of wait at the start of the whole wave sequence and the length of wait between
-                               each repeated motifs, respectively.
-        :return: None
-        """
-        if num_wave_sample % self.NUM_SAMPLE_IN_WAVE_BLOCK != 0:
-            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WAVE_BLOCK}")
-        if num_wait_samples[0] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"global wait samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
-        if num_wait_samples[1] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"wait samples between chunks must be multiple of {self.NUM_SAMPLE_IN_WORD}")
-
-        awg = self._rmap.get_awg_of_channel(group, line, channel)
-        self._wss.set_cw(
-            awg,
-            amplitude=amplitude,
-            num_repeats=num_repeats,
-            num_wave_blocks=num_wave_sample // self.NUM_SAMPLE_IN_WAVE_BLOCK,
-            num_wait_words=(
-                num_wait_samples[0] // self.NUM_SAMPLE_IN_WORD,
-                num_wait_samples[1] // self.NUM_SAMPLE_IN_WORD,
-            ),
-        )
-
-    def load_iq_into_channel(
-        self,
-        group: int,
-        line: int,
-        channel: int,
-        *,
-        iq: npt.NDArray[np.complex64],
-        num_repeats: Tuple[int, int] = DEFAULT_REPEATS,
-        num_wait_samples: Tuple[int, int] = DEFAULT_NUM_WAIT_SAMPLES,
-    ) -> None:
-        """loading arbitrary wave data into a channel.
-
-        :param group: an index of a group which the channel belongs to.
-        :param line: a group-local index of a line which the channel belongs to.
-        :param channel: a line-local index of the channel.
-        :param iq: complex data of the signal to generate in 500Msps. I and Q coefficients of each sample must be
-                   within the range of -32768 -- 32767. its length must be a multiple of 64.
-        :param num_repeats: the number of repetitions of the given wave data given as a tuple of two integers,
-                            a product of the two is the number of repetitions.
-        :param num_wait_samples: number of wait duration in samples. given as a tuple of two integers that specify the
-                               length of wait at the start of the whole wave sequence and the length of wait between
-                               each repeated motifs, respectively.
-        :return: None
-        """
-        if len(iq) % self.NUM_SAMPLE_IN_WAVE_BLOCK != 0:
-            raise ValueError(f"the length of iq data must be multiple of {self.NUM_SAMPLE_IN_WAVE_BLOCK}")
-        if num_wait_samples[0] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
-        if num_wait_samples[1] % self.NUM_SAMPLE_IN_WORD != 0:
-            raise ValueError(f"wave samples must be multiple of {self.NUM_SAMPLE_IN_WORD}")
-
-        awg = self._rmap.get_awg_of_channel(group, line, channel)
-        self._wss.set_iq(
-            awg,
-            iq=iq,
-            num_repeats=num_repeats,
-            num_wait_words=(
-                num_wait_samples[0] // self.NUM_SAMPLE_IN_WORD,
-                num_wait_samples[1] // self.NUM_SAMPLE_IN_WORD,
-            ),
-        )
-
-    def initialize_all_awgs(self) -> None:
-        self.wss.initialize_all_awgs()
-
-    def initialize_all_capunits(self) -> None:
-        self.wss.initialize_all_capunits()
-
-    def prepare_for_emission(self, channels: Collection[Tuple[int, int, int]]):
-        """making preparation of signal generation of multiple channels at the same time.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a group,
-                         a line, and a channel.
-        """
-        awgs = {self._rmap.get_awg_of_channel(gp, ln, ch) for gp, ln, ch in channels}
-        self.wss.clear_before_starting_emission(awgs)
-
-    def start_emission(self, channels: Collection[Tuple[int, int, int]]):
-        """starting signal generation of multiple channels at the same time.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a group,
-                         a line, and a channel.
-        """
-        awgs = {self._rmap.get_awg_of_channel(gp, ln, ch) for gp, ln, ch in channels}
-        self.wss.start_emission(awgs)
-
-    def read_current_clock(self) -> int:
-        valid, now, _ = self.sss.read_clock()
-        if not valid:
-            raise RuntimeError(f"failed to acquire the current time count of {self._sss.ipaddress}")
-        return now
-
-    def read_current_and_latched_clock(self) -> Tuple[int, int]:
-        valid, now, latched = self.sss.read_clock()
-        if not valid:
-            raise RuntimeError(f"failed to acquire the current time count of {self._sss.ipaddress}")
-        if latched < 0:
-            raise RuntimeError(
-                f"failed to acquire the latched time count of {self._sss.ipaddress}, its firmware should be updated."
-            )
-        return now, latched
-
-    def reserve_emission(
-        self,
-        channels: Collection[Tuple[int, int, int]],
-        time_count: int,
-        margin: float = DEFAULT_SCHEDULE_DEADLINE,
-        window: float = DEFAULT_SCHEDULE_WINDOW,
-        skip_validation: bool = False,
-    ) -> None:
-        """scheduling to start signal generation of multiple channels at the specified timing.
-
-        :param channels: a collection of channels to be activated. each channel is specified as a tuple of a group,
-                         a line, and a channel.
-        :param time_count: time to start emission in terms of the time count of the synchronization subsystem.
-        :param margin: reservations with less than time `margin` in second will not be accepted.
-                       default value is 0.25 seconds.
-        :param window: reservations out of the time `window` in second from now is rejected.
-                       default value is 300 seconds.
-        :param skip_validation: skip the validation of time count if True. default is False.
-        """
-        awg_bitmap = sum([(1 << self._rmap.get_awg_of_channel(gp, ln, ch)) for gp, ln, ch in set(channels)])
-        if not skip_validation:
-            now = self.read_current_clock()
-            start_of_window = now + round(margin * 125_000_000)
-            end_of_window = now + round(window * 125_000_000)
-            if time_count < start_of_window:
-                timediff = round((time_count - now) / 125_000_000, 3)
-                raise ValueError(f"time_count is too close to make a reservation, ({timediff:.3f} second from now)")
-            if end_of_window < time_count:
-                timediff = round((time_count - now) / 125_000_000, 3)
-                raise ValueError(f"time count is too far to make a reservation, ({timediff:.3f} second from now)")
-
-        if not self._sss.add_sequencer(time_count, awg_bitmap):
-            raise RuntimeError(f"failed to schedule emission at time_count (= {time_count})")
-
-    def stop_emission(self, channels: Collection[Tuple[int, int, int]]):
-        """stopping signal generation on a given channel.
-
-        :param channels: a collection of channels to be deactivated. each channel is specified as a tuple of a group,
-                         a line, and a channel.
-        """
-        awgs = {self._rmap.get_awg_of_channel(gp, ln, ch) for gp, ln, ch in channels}
-        self._wss.stop_emission(awgs)
-
-    def simple_capture_start(
-        self,
-        group: int,
-        rline: Union[str, None] = None,
-        runits: Union[Collection[int], None] = None,
-        *,
-        num_samples: int = DEFAULT_NUM_CAPTURE_SAMPLE,
-        delay_samples: int = 0,
-        triggering_channel: Union[Tuple[int, int, int], None] = None,
-        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
-    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
-        """capturing the wave signal from a given receiver channel.
-
-        :param group: an index of a group which the channel belongs to.
-        :param rline: a group-local index of a line which the channel belongs to.
-        :param runits: line-local indices of the capture units.
-        :param num_samples: number of samples to capture, recommended to be multiple of 4.
-        :param delay_samples: delay in sampling clocks before starting capture.
-        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
-                                   it is specified by a tuple of group, line, and channel. the capture starts
-                                   immediately if None.
-        :param timeout: waiting time in second before capturing thread quits.
-        :return: captured wave data in NumPy array
-        """
-        input_line = self._rmap.resolve_rline(group, rline)
-        if runits is None:
-            runits = {0}
-
-        if triggering_channel is None:
-            triggering_awg: Union[int, None] = None
-        elif isinstance(triggering_channel, tuple) and len(triggering_channel) == 3:
-            triggering_awg = self._rmap.get_awg_of_channel(*triggering_channel)
-        else:
-            raise ValueError(f"invalid triggering channel: {triggering_channel}")
-
-        if num_samples % 4 != 0:
-            num_samples = ((num_samples + 3) // 4) * 4
-            logger.warning(f"num_samples is extended to multiples of 4: {num_samples}")
-        if delay_samples % 64 != 0:
-            logger.warning(
-                f"the effective delay_samples will be {((delay_samples + 32) // 64) * 64} (!= {delay_samples})"
-            )
-        if num_samples > 0:
-            return self._wss.simple_capture_start(
-                capmod=self._rmap.get_capture_module_of_rline(group, input_line),
-                capunits=runits,
-                num_words=num_samples // 4,
-                delay=delay_samples // 4,
-                triggering_awg=triggering_awg,
-                timeout=timeout,
-            )
-        else:
-            raise ValueError(f"non-positive value for num_samples (= {num_samples})")
-
-    def capture_start(
-        self,
-        group: int,
-        rline: str,
-        runits: Collection[int],
-        *,
-        triggering_channel: Union[Tuple[int, int, int], None] = None,
-        timeout: float = Quel1WaveSubsystem.DEFAULT_CAPTURE_TIMEOUT,
-    ) -> "Future[Tuple[CaptureReturnCode, Dict[int, npt.NDArray[np.complex64]]]]":
-        """capturing the wave signal from a given receiver channel.
-
-        :param group: an index of a group which the channel belongs to.
-        :param rline: a group-local index of a line which the channel belongs to.
-        :param runits: line-local indices of the capture units.
-        :param triggering_channel: a channel which triggers this capture when it starts to emit a signal.
-                                   it is specified by a tuple of group, line, and channel. the capture starts
-                                   immediately if None.
-        :param timeout: waiting time in second before capturing thread quits.
-        :return: captured wave data in NumPy array
-        """
-        if triggering_channel is None:
-            triggering_awg: Union[int, None] = None
-        elif isinstance(triggering_channel, tuple) and len(triggering_channel) == 3:
-            triggering_awg = self._rmap.get_awg_of_channel(*triggering_channel)
-        else:
-            raise ValueError(f"invalid triggering channel: {triggering_channel}")
-
-        return self._wss.capture_start(
-            capmod=self._rmap.get_capture_module_of_rline(group, rline),
-            capunits=runits,
-            triggering_awg=triggering_awg,
-            timeout=timeout,
-        )
+    def _get_capunits_from_runits(self, runits: Collection[tuple[int, str, int]]) -> set[tuple[int, int]]:
+        return {self._get_capunit_from_runit(*runit) for runit in runits}
 
     def _config_box_inner_line(
         self,
@@ -983,8 +604,7 @@ class Quel1BoxIntrinsic:
         raise AssertionError
 
     def _config_validate_fsc(self, group: int, line: int, fsc0: int, fsc1: int) -> bool:
-        mxfe_idx, _ = self._css._get_dac_idx(group, line)
-        return self._css.ad9082[mxfe_idx].is_equal_fullscale_current(fsc0, fsc1)
+        return self._css.is_equal_fullscale_current(group, line, fsc0, fsc1)
 
     def _config_validate_line(self, group: int, line: Union[int, str], lc: Dict[str, Any]) -> bool:
         if self.is_output_line(group, line):
@@ -1041,10 +661,24 @@ class Quel1BoxIntrinsic:
         return valid
 
     def is_output_line(self, group: int, line: Union[int, str]):
-        return isinstance(line, int)
+        return (group in self.css.get_all_groups()) and isinstance(line, int)
+
+    def is_output_channel(self, group: int, line: Union[int, str], channel: int):
+        return (
+            (group in self.css.get_all_groups())
+            and isinstance(line, int)
+            and (channel in self.get_channels_of_line(group, line))
+        )
 
     def is_input_line(self, group: int, line: Union[int, str]):
-        return isinstance(line, str)
+        return (group in self.css.get_all_groups()) and isinstance(line, str)
+
+    def is_input_runit(self, group: int, rline: Union[int, str], runit: int):
+        return (
+            (group in self.css.get_all_groups())
+            and isinstance(rline, str)
+            and (runit in self.get_runits_of_rline(group, rline))
+        )
 
     def is_read_input_line(self, group: int, line: Union[int, str]):
         return line == "r"
@@ -1106,7 +740,15 @@ class Quel1BoxIntrinsic:
         if rfswitch is not None:
             self.config_rfswitch(group, line, rfswitch=rfswitch)
 
-    def config_channel(self, group: int, line: int, channel: int, *, fnco_freq: Union[float, None] = None) -> None:
+    def config_channel(
+        self,
+        group: int,
+        line: int,
+        channel: int,
+        *,
+        fnco_freq: Union[float, None] = None,
+        awg_param: Union[AwgParam, None] = None,
+    ) -> None:
         """configuring parameters of a given transmitter channel.
 
         :param group: a group which the channel belongs to.
@@ -1114,10 +756,14 @@ class Quel1BoxIntrinsic:
         :param channel: a line-local index of the channel.
         :param fnco_freq: the frequency of the corresponding FNCO in Hz. it must be within the range of -250e6 and
                           250e6.
+        :param awg_param: an object holding parameters of signal to be generated.
         :return: None
         """
         if fnco_freq is not None:
             self._css.set_dac_fnco(group, line, channel, fnco_freq)
+
+        if awg_param is not None:
+            self._wss.config_awgunit(self._get_awg_from_channel(group, line, channel), awg_param)
 
     def config_rline(
         self,
@@ -1170,7 +816,15 @@ class Quel1BoxIntrinsic:
         if rfswitch is not None:
             self.config_rfswitch(group, rline, rfswitch=rfswitch)
 
-    def config_runit(self, group: int, rline: str, runit: int, *, fnco_freq: Union[float, None] = None) -> None:
+    def config_runit(
+        self,
+        group: int,
+        rline: str,
+        runit: int,
+        *,
+        fnco_freq: Union[float, None] = None,
+        capture_param: Union[CapParam, None] = None,
+    ) -> None:
         """configuring parameters of a given receiver channel.
 
         :param group: an index of a group which the channel belongs to.
@@ -1178,11 +832,16 @@ class Quel1BoxIntrinsic:
         :param runit: a line-local index of the capture unit.
         :param fnco_freq: the frequency of the corresponding FNCO in Hz. it must be within the range of -250e6 and
                           250e6.
+        :param capture_param: an object holding capture settings.
         :return: None
         """
         if fnco_freq is not None:
-            rchannel = self._rmap.get_rchannel_of_runit(group, rline, runit)
+            rchannel = self._get_rchannel_from_runit(group, rline, runit)
             self._css.set_adc_fnco(group, rline, rchannel, freq_in_hz=fnco_freq)
+
+        if capture_param is not None:
+            capunit = self._get_capunit_from_runit(group, rline, runit)
+            self._wss.config_capunit(capunit, capture_param)
 
     def block_all_output_lines(self) -> None:
         """set RF switch of all output lines to block.
@@ -1245,10 +904,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        if hasattr(self._css, "pass_line"):
-            self._css.pass_line(group, line)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.pass_line(group, line)
 
     def close_rfswitch(self, group: int, line: Union[int, str]):
         """closing RF switch of the port corresponding to a given line, either of transmitter or receiver one.
@@ -1257,10 +913,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        if hasattr(self._css, "block_line"):
-            self._css.block_line(group, line)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.block_line(group, line)
 
     def _decode_rfswitch_conf(self, group: int, line: Union[int, str], block: bool) -> str:
         if self.is_output_line(group, line):
@@ -1294,10 +947,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the monitor path belongs to.
         :return: None
         """
-        if hasattr(self._css, "activate_monitor_loop"):
-            self._css.activate_monitor_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.activate_monitor_loop(group)
 
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal monitor loop-back path.
@@ -1305,10 +955,7 @@ class Quel1BoxIntrinsic:
         :param group: a group which the monitor path belongs to.
         :return: None
         """
-        if hasattr(self._css, "deactivate_monitor_loop"):
-            self._css.deactivate_monitor_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.deactivate_monitor_loop(group)
 
     def is_loopedback_monitor(self, group: int) -> bool:
         """checking if an internal monitor loop-back path is activated or not.
@@ -1316,10 +963,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the monitor loop-back path belongs to.
         :return: True if the monitor loop-back path is activated.
         """
-        if hasattr(self._css, "is_loopedback_monitor"):
-            return self._css.is_loopedback_monitor(group)
-        else:
-            return False
+        return self._css.is_loopedback_monitor(group)
 
     def activate_read_loop(self, group: int) -> None:
         """enabling an internal read loop-back path from read-out port to read-in port.
@@ -1327,10 +971,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        if hasattr(self._css, "activate_read_loop"):
-            self._css.activate_read_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.activate_read_loop(group)
 
     def deactivate_read_loop(self, group: int) -> None:
         """disabling an internal read loop-back.
@@ -1338,10 +979,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        if hasattr(self._css, "deactivate_read_loop"):
-            self._css.deactivate_read_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.deactivate_read_loop(group)
 
     def is_loopedback_read(self, group: int) -> bool:
         """checking if an internal read loop-back path is activated or not.
@@ -1349,31 +987,19 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read loop-back path belongs to.
         :return: True if the read loop-back path is activated.
         """
-        if hasattr(self._css, "is_loopedback_read"):
-            return self._css.is_loopedback_read(group)
-        else:
-            return False
+        return self._css.is_loopedback_read(group)
 
     def _dump_runit(
         self, group: int, rline: str, runit: int, rchannel_conf: Union[Dict[str, Any], None] = None
     ) -> Dict[str, Any]:
         if rchannel_conf is None:
-            rchannel_conf = self.css.dump_rchannel(group, rline, self.rmap.get_rchannel_of_runit(group, rline, runit))
+            rchannel_conf = self.css.dump_rchannel(group, rline, self._get_rchannel_from_runit(group, rline, runit))
         else:
             rchannel_conf = copy.copy(rchannel_conf)
 
         # Notes: currently contents of runit_settings and rchannel_setttings are identical.
         runit_conf = rchannel_conf
         return runit_conf
-
-    def _rchannels_to_runits(
-        self, group: int, rline: str, rchannels: Dict[int, Dict[str, Any]]
-    ) -> Dict[int, Dict[str, Any]]:
-        runits: Dict[int, Dict[str, Any]] = {}
-        for rmod, runit in self.rmap.get_capture_units_of_rline(group, rline):
-            rch = self.rmap.get_rchannel_of_runit(group, rline, runit)
-            runits[runit] = self._dump_runit(group, rline, runit, rchannels[rch])
-        return runits
 
     def dump_rfswitch(self, group: int, line: Union[int, str]) -> str:
         """dumpling the current configuration of a single RF switch
@@ -1382,11 +1008,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         :return:  the current configuration of the switch of the line.
         """
-        if hasattr(self._css, "is_blocked_line"):
-            state: bool = self._css.is_blocked_line(group, line)
-        else:
-            # Notes: always passing or opening
-            state = False
+        state: bool = self._css.is_blocked_line(group, line)
         return self._decode_rfswitch_conf(group, line, state)
 
     def dump_rfswitches(self, exclude_subordinate: bool = True) -> Dict[Tuple[int, Union[int, str]], str]:
@@ -1397,19 +1019,20 @@ class Quel1BoxIntrinsic:
         """
         retval: Dict[Tuple[int, Union[int, str]], str] = {}
         for group, line in self._css.get_all_any_lines():
-            if not (
-                exclude_subordinate
-                and hasattr(self._css, "is_subordinate_rfswitch")
-                and self._css.is_subordinate_rfswitch(group, line)
-            ):
+            if not (exclude_subordinate and self._css.is_subordinate_rfswitch(group, line)):
                 retval[(group, line)] = self.dump_rfswitch(group, line)
         return retval
 
     def _dump_rline(self, group: int, rline: str) -> Dict[str, Any]:
         rl_conf = self._css.dump_rline(group, rline)
-        rchannels = rl_conf["channels"]
+        rc_conf = rl_conf["channels"]
         del rl_conf["channels"]
-        rl_conf["runits"] = self._rchannels_to_runits(group, rline, rchannels)
+        ru_conf: Dict[int, Any] = {}
+        for runit in self.get_runits_of_rline(group, rline):
+            ru_conf[runit] = self._dump_runit(
+                group, rline, runit, rc_conf[self._get_rchannel_from_runit(group, rline, runit)]
+            )
+        rl_conf["runits"] = ru_conf
         return rl_conf
 
     def dump_line(self, group: int, line: Union[int, str]) -> Dict[str, Any]:
@@ -1453,7 +1076,208 @@ class Quel1BoxIntrinsic:
             raise ValueError(f"invalid output line: ({group}, {line})")
 
     def get_runits_of_rline(self, group: int, rline: str) -> Set[int]:
+        # TODO: refine the implementation later
         if self.is_input_line(group, rline):
-            return set(range(len(self.rmap.get_capture_units_of_rline(group, rline))))
+            num_capunt = 0
+            for rch in range(self.css.get_num_rchannels_of_rline(group, rline)):
+                capmod = self._get_capmod_from_rchannel(group, rline, rch)
+                num_capunt += self.wss.num_capunit_of_capmod(capmod)
+            return set(range(num_capunt))
         else:
             raise ValueError(f"invalid input line: ({group}, {rline})")
+
+    def get_groups(self) -> set[int]:
+        return self._css.get_all_groups()
+
+    def get_output_lines(self) -> set[tuple[int, int]]:
+        ol: set[tuple[int, int]] = set()
+        for g in self._css.get_all_groups():
+            for ln in self._css.get_all_lines_of_group(g):
+                ol.add((g, ln))
+        return ol
+
+    def get_input_rlines(self) -> set[tuple[int, str]]:
+        ol: set[tuple[int, str]] = set()
+        for g in self._css.get_all_groups():
+            for ln in self._css.get_all_rlines_of_group(g):
+                ol.add((g, ln))
+        return ol
+
+    def get_names_of_wavedata(self, group: int, line: int, channel: int) -> set[str]:
+        awgunit_idx = self._get_awg_from_channel(group, line, channel)
+        return self.wss.get_names_of_wavedata(awgunit_idx)
+
+    def register_wavedata(
+        self,
+        group: int,
+        line: int,
+        channel: int,
+        name: str,
+        iq: npt.NDArray[np.complex64],
+        allow_update: bool = True,
+        **kwdargs,
+    ) -> None:
+        awgunit_idx = self._get_awg_from_channel(group, line, channel)
+        self.wss.register_wavedata(awgunit_idx, name, iq, allow_update=allow_update, **kwdargs)
+
+    def has_wavedata(self, group: int, line: int, channel: int, name: str) -> bool:
+        awgunit_idx = self._get_awg_from_channel(group, line, channel)
+        return self.wss.has_wavedata(awgunit_idx, name)
+
+    def delete_wavedata(self, group: int, line: int, channel: int, name: str) -> None:
+        awgunit_idx = self._get_awg_from_channel(group, line, channel)
+        self.wss.delete_wavedata(awgunit_idx, name)
+
+    def initialize_all_awgunits(self) -> None:
+        self.wss.initialize_all_awgunits()
+
+    def initialize_all_capunits(self) -> None:
+        self.wss.initialize_all_capunits()
+
+    def get_current_timecounter(self) -> int:
+        return self.wss.get_current_timecounter()
+
+    def get_latest_sysref_timecounter(self) -> int:
+        return self.wss.get_latest_sysref_timecounter()
+
+    def start_wavegen(
+        self,
+        channels: Collection[Tuple[int, int, int]],
+        timecounter: Optional[int] = None,
+        *,
+        timeout: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+        return_after_start_emission: Optional[bool] = None,
+    ) -> AbstractStartAwgunitsTask:
+        if len(channels) == 0:
+            raise ValueError("no triggering channel are specified")
+        for ch in channels:
+            if not (isinstance(ch, tuple) and len(ch) == 3 and self.is_output_channel(*ch)):
+                raise ValueError("invalid channel: {ch}")
+
+        if timecounter and timecounter < 0:
+            raise ValueError("negative timecounter is not allowed")
+        if timeout and timeout <= 0.0:
+            raise ValueError("non-positive timeout is not allowed")
+        if polling_period and polling_period <= 0.0:
+            raise ValueError("non-positive polling_period is not allowed")
+
+        awgunit_idxs: Collection[int] = self._get_awgs_from_channels(channels)
+        if timecounter is None:
+            return self.wss.start_awgunits_now(
+                awgunit_idxs,
+                timeout=timeout,
+                polling_period=polling_period,
+                disable_timeout=disable_timeout,
+                return_after_start_emission=return_after_start_emission or True,
+            )
+        else:
+            return self.wss.start_awgunits_timed(
+                awgunit_idxs,
+                timecounter,
+                timeout=timeout,
+                polling_period=polling_period,
+                disable_timeout=disable_timeout,
+                return_after_start_emission=return_after_start_emission or False,
+            )
+
+    def start_capture_now(
+        self,
+        runits: Collection[Tuple[int, str, int]],
+        *,
+        timeout: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+    ) -> BoxIntrinsicStartCapunitsNowTask:
+        if len(runits) == 0:
+            raise ValueError("no capture units are specified")
+        for ru in runits:
+            if not (isinstance(ru, tuple) and len(ru) == 3 and self.is_input_runit(*ru)):
+                raise ValueError("invalid runit: {ru}")
+
+        if timeout and timeout <= 0.0:
+            raise ValueError("non-positive timeout is not allowed")
+        if polling_period and polling_period <= 0.0:
+            raise ValueError("non-positive polling_period is not allowed")
+
+        mapping: dict[tuple[int, int], tuple[int, str, int]] = {}
+        for ru in runits:
+            cu = self._get_capunit_from_runit(*ru)
+            mapping[cu] = ru
+
+        capunit_idxs = set(mapping.keys())
+        return BoxIntrinsicStartCapunitsNowTask(
+            self.wss.start_capunits_now(
+                capunit_idxs, timeout=timeout, polling_period=polling_period, disable_timeout=disable_timeout
+            ),
+            mapping,
+        )
+
+    def start_capture_by_awg_trigger(
+        self,
+        runits: Collection[Tuple[int, str, int]],
+        channels: Collection[Tuple[int, int, int]],
+        timecounter: Optional[int] = None,
+        *,
+        timeout_before_trigger: Optional[float] = None,
+        timeout_after_trigger: Optional[float] = None,
+        polling_period: Optional[float] = None,
+        disable_timeout: bool = False,
+    ) -> tuple[BoxIntrinsicStartCapunitsByTriggerTask, AbstractStartAwgunitsTask]:
+        if len(runits) == 0:
+            raise ValueError("no capture units are specified")
+        for ru in runits:
+            if not (isinstance(ru, tuple) and len(ru) == 3 and self.is_input_runit(*ru)):
+                raise ValueError("invalid runit: {ru}")
+        if len(channels) == 0:
+            raise ValueError("no triggering channel are specified")
+        for ch in channels:
+            if not (isinstance(ch, tuple) and len(ch) == 3 and self.is_output_channel(*ch)):
+                raise ValueError("invalid channel: {ch}")
+        if timecounter and timecounter < 0:
+            raise ValueError("negative timecounter is not allowed")
+        if timeout_before_trigger and timeout_before_trigger <= 0.0:
+            raise ValueError("non-positive timeout_before_trigger is not allowed")
+        if timeout_after_trigger and timeout_after_trigger <= 0.0:
+            raise ValueError("non-positive timeout_after_trigger is not allowed")
+        if polling_period and polling_period <= 0.0:
+            raise ValueError("non-positive polling_period is not allowed")
+
+        mapping: dict[tuple[int, int], tuple[int, str, int]] = {}
+        capmod_idxs: set[int] = set()
+        for ru in runits:
+            cu = self._get_capunit_from_runit(*ru)
+            mapping[cu] = ru
+            capmod_idxs.add(cu[0])
+
+        # Notes: any channel is fine since they all will start at the same time.
+        trigger_idx = self._get_awg_from_channel(*list(channels)[0])
+        for capmod_idx in capmod_idxs:
+            self.wss.set_triggering_awg_to_line(capmod_idx, trigger_idx)
+
+        if timecounter:
+            cur = self.wss.get_current_timecounter()
+            delta = self.wss.timecounter_to_second(timecounter - cur)
+            if delta < StartAwgunitsTimedTask._TRIGGER_SETTABLE_MARGIN:
+                raise RuntimeError(f"cannot schedule at the past or too close timecounter (= {timecounter})")
+            if timeout_before_trigger is None:
+                timeout_before_trigger = delta + StartAwgunitsTimedTask._START_TIMEOUT_MARGIN
+        else:
+            if timeout_before_trigger is None:
+                timeout_before_trigger = StartAwgunitsNowTask._START_TIMEOUT
+
+        capunit_idxs = set(mapping.keys())
+        cap_task = BoxIntrinsicStartCapunitsByTriggerTask(
+            self.wss.start_capunits_by_trigger(
+                capunit_idxs,
+                timeout_before_trigger=timeout_before_trigger,
+                timeout_after_trigger=timeout_after_trigger,
+                polling_period=polling_period,
+                disable_timeout=disable_timeout,
+            ),
+            mapping,
+        )
+
+        gen_task: AbstractStartAwgunitsTask = self.start_wavegen(channels, timecounter, polling_period=polling_period)
+        return cap_task, gen_task

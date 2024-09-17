@@ -3,12 +3,12 @@ import json
 import logging
 import socket
 import sys
+import time
 from pathlib import Path
 from pprint import pprint
 from typing import Dict, Tuple
 
-from quel_ic_config import LinkupFpgaMxfe, LinkupStatus, Quel1Box, Quel1BoxIntrinsic, Quel1BoxType, Quel1seTempctrlState
-from quel_ic_config_utils import create_box_objects
+from quel_ic_config import LinkupFpgaMxfe, LinkupStatus, Quel1Box, Quel1BoxIntrinsic, Quel1seTempctrlState
 from quel_ic_config_utils.common_arguments import (
     add_common_arguments,
     add_common_workaround_arguments,
@@ -137,13 +137,10 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
         else:
             use_bgcal = False
 
-    hard_reset = args.boxtype in {Quel1BoxType.QuEL1SE_RIKEN8, Quel1BoxType.QuEL1SE_RIKEN8DBG}
-    logger.info("mxfes will be reset during the initialization process of QuEL-1 SE by asserting hardware reset pin")
-
     cli_retcode: int = 0
     linkup_ok: Dict[int, bool] = box.relinkup(
         mxfes_to_linkup=mxfe_list,
-        hard_reset=hard_reset,
+        hard_reset=args.boxtype.is_quel1se(),
         use_204b=use_204b,
         use_bg_cal=use_bgcal,
         restart_tempctrl=args.restart_tempctrl,
@@ -162,7 +159,7 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
 
 
 def quel1_linkstatus() -> None:
-    logging.basicConfig(level=logging.ERROR, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
+    logging.basicConfig(level=logging.WARNING, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
     parser = argparse.ArgumentParser(description="show the link status of AD9082s")
     add_common_arguments(
         parser, use_mxfe=True, allow_implicit_mxfe=True, use_config_root=False, use_config_options=False
@@ -501,7 +498,7 @@ def quel1_firmware_version() -> None:
 
 def quel1_firmware_version_body(args: argparse.Namespace) -> int:
     try:
-        _, wss, _, _ = create_box_objects(
+        box = Quel1Box.create(
             ipaddr_wss=str(args.ipaddr_wss),
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
@@ -511,9 +508,8 @@ def quel1_firmware_version_body(args: argparse.Namespace) -> int:
         logger.error(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
         return -1
 
-    print(f"e7awg firmware version: {wss.hw_version}")
-    print(f"type of the firmware: {wss.hw_type}")
-    print(f"life cycle of the firmware: {wss.hw_lifestage}")
+    print(f"e7awghw firmware version: {box.wss.fw_version}")
+    print(f"type of the firmware: {box.wss.fw_type}")
     return 0
 
 
@@ -535,6 +531,7 @@ def quel1se_tempctrl_state() -> None:
 
     try:
         retcode = quel1se_tempctrl_state_body(args)
+        time.sleep(0.1)  # Notes: waiting for releasing the lock and closing coap context
         sys.exit(retcode)
     except AssertionError as e:
         if args.verbose:
@@ -553,7 +550,7 @@ def quel1se_tempctrl_state() -> None:
 
 def quel1se_tempctrl_state_body(args: argparse.Namespace) -> int:
     try:
-        css, _, _, _ = create_box_objects(
+        box = Quel1Box.create(
             ipaddr_wss=str(args.ipaddr_wss),
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
@@ -563,15 +560,11 @@ def quel1se_tempctrl_state_body(args: argparse.Namespace) -> int:
         logger.error(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
         return -1
 
-    if not (hasattr(css, "get_tempctrl_state") and hasattr(css, "get_tempctrl_state_count")):
-        logger.error(f"QuEL-1 SE style temperature control is NOT available for boxtype '{args.boxtype.tostr()}'")
-        return -1
-
-    state: Quel1seTempctrlState = css.get_tempctrl_state()
+    state: Quel1seTempctrlState = box.css.get_tempctrl_state()
     if state == Quel1seTempctrlState.INIT:
         expl: str = "temperature control is not started yet"
     elif state == Quel1seTempctrlState.PRERUN:
-        count: int = css.get_tempctrl_state_count()
+        count: int = box.css.get_tempctrl_state_count()
         expl = f"warming up will finish in {count*10} seconds before starting the active control"
     elif state == Quel1seTempctrlState.RUN:
         expl = "active control is working"
@@ -608,6 +601,7 @@ def quel1se_tempctrl_reset() -> None:
 
     try:
         retcode = quel1se_tempctrl_reset_body(args)
+        time.sleep(0.1)  # Notes: waiting for releasing the lock and closing coap context
         sys.exit(retcode)
     except AssertionError as e:
         if args.verbose:
@@ -626,7 +620,7 @@ def quel1se_tempctrl_reset() -> None:
 
 def quel1se_tempctrl_reset_body(args: argparse.Namespace) -> int:
     try:
-        css, _, _, _ = create_box_objects(
+        box = Quel1Box.create(
             ipaddr_wss=str(args.ipaddr_wss),
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
@@ -638,10 +632,6 @@ def quel1se_tempctrl_reset_body(args: argparse.Namespace) -> int:
 
     # Notes: css.start_tempctrl() is defined for QuEL-1 for the convenience.
     #        so, not enough for rejecting unsupported boxtypes.
-    if not (hasattr(css, "start_tempctrl") and hasattr(css, "set_tempctrl_state_count")):
-        logger.error(f"QuEL-1 SE style temperature control is NOT available for boxtype '{args.boxtype.tostr()}'")
-        return -1
-
     if args.duration < 0:
         logger.error("warm-up duration must be positive")
         return -1
@@ -654,6 +644,6 @@ def quel1se_tempctrl_reset_body(args: argparse.Namespace) -> int:
         count = 0xFFFFFFFF
         logger.warning(f"warmup duration is set to too long, clipped to {count*10} seconds, the longest duration")
 
-    css.start_tempctrl(new_count=count)
+    box.css.start_tempctrl(new_count=count)
     print(f"the active temperature control starts after {count*10}-sencod warming-up")
     return 0

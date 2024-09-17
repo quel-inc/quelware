@@ -40,8 +40,8 @@ def _init_tempctrl(proxy: ProxyType):
     logger.info("tempctrl state is set to init")
 
 
-@pytest.fixture(scope="session", params=DEVICE_SETTINGS)
-def fixtures(request):
+@pytest.fixture(scope="module", params=DEVICE_SETTINGS)
+def fixtures_local(request):
     param0 = request.param
 
     proxy = create_proxy(param0["config"]["ipaddr_css"])
@@ -178,30 +178,30 @@ def _check_ad7490(proxy: ProxyType, idx: int, num_iter: int = 1000) -> bool:
     return cnt_error == 0
 
 
-def test_ad9082(fixtures):
-    proxy = fixtures
+def test_ad9082(fixtures_local):
+    proxy = fixtures_local
     for idx in range(2):
         assert _check_ad9082(proxy, idx, 2)
 
 
-def test_lmx2594(fixtures):
-    proxy = fixtures
+def test_lmx2594(fixtures_local):
+    proxy = fixtures_local
     for idx in range(5):
         assert _check_lmx2594(proxy, idx, 5)
 
 
-def test_adrf6780(fixtures):
-    proxy = fixtures
+def test_adrf6780(fixtures_local):
+    proxy = fixtures_local
     for idx in range(2):
         assert _check_adrf6780(proxy, idx, 5)
 
 
-def test_pwm(fixtures):
-    proxy = fixtures
+def test_pwm(fixtures_local):
+    proxy = fixtures_local
     assert _check_pwm(proxy, 0, 5)
 
 
-def test_ad7490(fixtures):
-    proxy = fixtures
+def test_ad7490(fixtures_local):
+    proxy = fixtures_local
     for idx in range(8):
         assert _check_ad7490(proxy, idx, 2)

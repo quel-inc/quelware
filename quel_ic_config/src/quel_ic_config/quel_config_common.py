@@ -1,5 +1,8 @@
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Final
+
+_DEFAULT_LOCK_DIRECTORY: Final[Path] = Path("/var/run/quelware")
 
 
 class Quel1BoxType(Enum):
@@ -14,12 +17,12 @@ class Quel1BoxType(Enum):
     QuEL1SE_RIKEN8 = ("quel-1se", "riken8")
     QuEL1SE_RIKEN8DBG = ("quel-1se", "riken8dbg")  # for development purpose
     QuEL1SE_FUJITSU11_TypeA = ("quel-1se", "fujitsu11-type-a")  # not available yet
+    QuEL1SE_FUJITSU11_TypeB = ("quel-1se", "fujitsu11-type-b")  # not available yet
     QuEL1SE_FUJITSU11DBG_TypeA = ("quel-1se", "fujitsu11dbg-type-a")  # for development purpose
+    QuEL1SE_FUJITSU11DBG_TypeB = ("quel-1se", "fujitsu11dbg-type-b")  # for development purpose
     # Notes: the following boxtypes can be eliminated without the prior notification.
     QuEL1SE_Adda = ("quel-1se", "adda")  # Prototype configuration
-    QuEL1SE_Proto8 = ("quel-1se", "proto8")  # Prototype configuration
-    QuEL1SE_Proto11 = ("quel-1se", "proto11")  # Prototype configuration
-    QuEL1SE_ProtoAdda = ("quel-1se", "protoadda")  # Prototype configuration
+    QuEL2_ProtoAdda = ("quel-2", "protoadda")  # Prototype configuration
 
     @classmethod
     def fromstr(cls, label: str) -> "Quel1BoxType":
@@ -32,6 +35,10 @@ class Quel1BoxType(Enum):
         else:
             raise AssertionError
 
+    def is_quel1se(self) -> bool:
+        # Notes: quel-2 is regarded as being quel-1se since it is in early stage and not so different from quel-1se.
+        return self.value[0] in {"quel-1se", "quel-2"}
+
 
 QUEL1_BOXTYPE_ALIAS: Final[Dict[str, Quel1BoxType]] = {
     "qube-ou-a": Quel1BoxType.QuBE_OU_TypeA,
@@ -43,12 +50,13 @@ QUEL1_BOXTYPE_ALIAS: Final[Dict[str, Quel1BoxType]] = {
     "quel1-ntt": Quel1BoxType.QuEL1_NTT,
     "quel1-nec": Quel1BoxType.QuEL1_NEC,
     "quel1se-riken8": Quel1BoxType.QuEL1SE_RIKEN8,
-    "x-quel1se-protoadda": Quel1BoxType.QuEL1SE_ProtoAdda,
-    "x-quel1se-proto8": Quel1BoxType.QuEL1SE_Proto8,
-    "x-quel1se-proto11": Quel1BoxType.QuEL1SE_Proto11,
+    "quel1se-fujitsu11-a": Quel1BoxType.QuEL1SE_FUJITSU11_TypeA,
+    "quel1se-fujitsu11-b": Quel1BoxType.QuEL1SE_FUJITSU11_TypeB,
     "x-quel1se-adda": Quel1BoxType.QuEL1SE_Adda,
     "x-quel1se-riken8": Quel1BoxType.QuEL1SE_RIKEN8DBG,
-    "x-quel1se-fujitsu11a": Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
+    "x-quel1se-fujitsu11-a": Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
+    "x-quel1se-fujitsu11-b": Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB,
+    "x-quel2-protoadda": Quel1BoxType.QuEL2_ProtoAdda,
 }
 
 

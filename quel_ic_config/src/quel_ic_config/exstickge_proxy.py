@@ -67,6 +67,10 @@ class _ExstickgeProxyBase(metaclass=ABCMeta):
     def write_reg(self, kind, idx, addr, value) -> bool:
         pass
 
+    @property
+    def has_lock(self) -> bool:
+        return False
+
     @abstractmethod
     def terminate(self):
         pass

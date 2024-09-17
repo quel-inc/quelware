@@ -1,7 +1,8 @@
 import logging
-import socket
 from pathlib import Path
-from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
+from typing import Any, Collection, Dict, Mapping, Optional, Set, Tuple, Union
+
+from filelock import FileLock
 
 from quel_ic_config.exstickge_sock_client import LsiKindId, _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_subsystem_common import (
@@ -9,16 +10,17 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
+    Quel1ConfigSubsystemNoRfswitch,
     Quel1ConfigSubsystemRfswitch,
     Quel1ConfigSubsystemRoot,
 )
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel_config_common import _DEFAULT_LOCK_DIRECTORY, Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
 
-class ExstickgeSockClientQuel1(_ExstickgeSockClientBase):
+class AbstractExstickgeSockClientQuel1(_ExstickgeSockClientBase):
     _AD9082_IF_0 = LsiKindId.AD9082
     _ADRF6780_IF_0 = LsiKindId.ADRF6780
     _ADRF6780_IF_1 = LsiKindId.ADRF6780 + 1
@@ -68,9 +70,41 @@ class ExstickgeSockClientQuel1(_ExstickgeSockClientBase):
         target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
         timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
-        sock: Union[socket.socket, None] = None,
     ):
-        super().__init__(target_address, target_port, timeout, receiver_limit_by_binding, sock)
+        super().__init__(target_address, target_port, timeout, receiver_limit_by_binding)
+
+
+class ExstickgeSockClientQuel1WithDummyLock(AbstractExstickgeSockClientQuel1):
+    def _take_lock(self):
+        self._locked = True
+
+    def _release_lock(self):
+        self._locked = False
+
+
+class ExstickgeSockClientQuel1WithFileLock(AbstractExstickgeSockClientQuel1):
+    def __init__(
+        self,
+        target_address,
+        target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
+        lock_directory: Path = _DEFAULT_LOCK_DIRECTORY,
+        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        receiver_limit_by_binding: bool = False,
+    ):
+        super().__init__(target_address, target_port, timeout, receiver_limit_by_binding)
+        self._lockfile = FileLock(lock_directory / target_address)
+
+    def _take_lock(self):
+        try:
+            self._lockfile.acquire(blocking=False)
+            self._locked = True
+            logger.info(f"successfully acquired the lock of {self._target[0]}")
+        except TimeoutError:
+            logger.error(f"device lock of {self._target[0]} is not available now")
+
+    def _release_lock(self):
+        self._lockfile.release()
+        self._locked = False
 
 
 class QuelMeeBoardConfigSubsystem(
@@ -101,7 +135,6 @@ class QuelMeeBoardConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -109,8 +142,11 @@ class QuelMeeBoardConfigSubsystem(
         sender_limit_by_binding: bool = False,
     ):
         Quel1ConfigSubsystemRoot.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
         )
+
+    def initialize(self, features: Optional[Collection[Quel1Feature]] = None) -> None:
+        super().initialize(features)
         self._construct_ad9082()
         self._construct_lmx2594()
         self._construct_adrf6780()
@@ -119,7 +155,12 @@ class QuelMeeBoardConfigSubsystem(
     def _create_exstickge_proxy(
         self, port: int, timeout: float, sender_limit_by_binding: bool
     ) -> _ExstickgeSockClientBase:
-        return ExstickgeSockClientQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
+        # TODO: update to accept user defined lock directory
+        proxy = ExstickgeSockClientQuel1WithFileLock(
+            self._css_addr, port, _DEFAULT_LOCK_DIRECTORY, timeout, sender_limit_by_binding
+        )
+        proxy.initialize()
+        return proxy
 
     def configure_peripherals(
         self,
@@ -301,16 +342,13 @@ class QubeConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
         timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
 
 
 class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
@@ -320,7 +358,6 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -328,8 +365,11 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         sender_limit_by_binding: bool = False,
     ):
         QubeConfigSubsystem.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
         )
+
+    def initialize(self, features: Optional[Collection[Quel1Feature]] = None) -> None:
+        super().initialize(features)
         self._construct_rfswitch(0)
 
     def configure_peripherals(
@@ -355,7 +395,7 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         return r
 
 
-class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
+class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfswitch):
     __slots__ = ()
 
     _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
@@ -364,16 +404,15 @@ class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
     }
 
     # TODO: will be replaced with a parser method
-    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
-        (0, "r"): (5,),
-        (1, "r"): (5,),
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[Tuple[int, int], ...]] = {
+        (0, "r"): ((0, 5),),
+        (1, "r"): ((1, 5),),
     }
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -382,24 +421,21 @@ class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeA:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
 
 
-class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem):
+class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfswitch):
     __slots__ = ()
 
     _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {}
 
     # TODO: will be replaced with a parser method
-    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {}
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[Tuple[int, int], ...]] = {}
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -408,9 +444,7 @@ class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem):
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeB:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
 
 
 class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
@@ -424,11 +458,11 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
     }
 
     # TODO: will be replaced with a parser method
-    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
-        (0, "r"): (5,),
-        (0, "m"): (4,),
-        (1, "r"): (5,),
-        (1, "m"): (4,),
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[Tuple[int, int], ...]] = {
+        (0, "r"): ((0, 5),),
+        (0, "m"): ((0, 4),),
+        (1, "r"): ((1, 5),),
+        (1, "m"): ((1, 4),),
     }
 
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {
@@ -455,7 +489,6 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -464,9 +497,7 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
 
 
 class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
@@ -478,9 +509,9 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
     }
 
     # TODO: will be replaced with a parser method
-    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
-        (0, "m"): (4,),
-        (1, "m"): (4,),
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[Tuple[int, int], ...]] = {
+        (0, "m"): ((0, 4),),
+        (1, "m"): ((1, 4),),
     }
 
     _RFSWITCH_NAME: Dict[Tuple[int, Union[int, str]], Tuple[int, str]] = {
@@ -502,7 +533,6 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -511,13 +541,12 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
 
 
 class Quel1NecConfigSubsystem(
     QuelMeeBoardConfigSubsystem,
+    Quel1ConfigSubsystemNoRfswitch,
 ):
     __slots__ = ()
 
@@ -579,18 +608,17 @@ class Quel1NecConfigSubsystem(
     }
 
     # TODO: will be replaced with a parser method
-    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[int, ...]] = {
-        (0, "r"): (5,),
-        (1, "r"): (4,),
-        (2, "r"): (5,),
-        (3, "r"): (4,),
+    _ADC_CH_IDX: Dict[Tuple[int, str], Tuple[Tuple[int, int], ...]] = {
+        (0, "r"): ((0, 5),),
+        (1, "r"): ((0, 4),),
+        (2, "r"): ((1, 5),),
+        (3, "r"): ((1, 4),),
     }
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
         config_path: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
@@ -599,6 +627,4 @@ class Quel1NecConfigSubsystem(
     ):
         if boxtype != Quel1BoxType.QuEL1_NEC:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)

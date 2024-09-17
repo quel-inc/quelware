@@ -6,26 +6,9 @@ logger = logging.getLogger()
 
 
 def relinkup():
-    global box, args
+    global box
 
-    use_204b: bool = False
-    if args.use_204b:
-        if args.use_204c:
-            raise ValueError("it is not allowed to specify both --use_204b and --use_204c at the same time")
-        else:
-            use_204b = True
-
-    use_bgcal: bool = True
-    if args.nouse_bgcal:
-        if args.use_bgcal:
-            raise ValueError("it is not allowed to specify both --use_bgcal and --nouse_bgcal at the same time")
-        else:
-            use_bgcal = False
-
-    link_ok = box.relinkup(
-        use_204b=use_204b,
-        use_bg_cal=use_bgcal,
-    )
+    link_ok = box.relinkup()
     return link_ok
 
 
@@ -43,26 +26,6 @@ if __name__ == "__main__":
         description="check the basic functionalities of QuEL-1",
     )
     add_common_arguments(parser)
-    parser.add_argument(
-        "--use_204c",
-        action="store_true",
-        help="enable JESD204C link calibration instead of the conventional 204B one (default)",
-    )
-    parser.add_argument(
-        "--use_204b",
-        action="store_true",
-        help="dare to use the conventional JESD204B link calibration instead of 204C one",
-    )
-    parser.add_argument(
-        "--use_bgcal",
-        action="store_true",
-        help="enable background calibration of JESD204C link (default)",
-    )
-    parser.add_argument(
-        "--nouse_bgcal",
-        action="store_true",
-        help="disable background calibration of JESD204C link",
-    )
     add_common_workaround_arguments(
         parser, use_ignore_crc_error_of_mxfe=True, use_ignore_access_failure_of_adrf6780=True
     )

@@ -129,7 +129,7 @@ def check_established(name: str, box: Quel1Box) -> bool:
 def get_crc_error_count(box: Quel1Box) -> Dict[int, List[int]]:
     cntr: Dict[int, List[int]] = {}
     for mxfe_idx in box.css.get_all_mxfes():
-        cntr[mxfe_idx] = box.css.ad9082[mxfe_idx].get_crc_error_counts()
+        cntr[mxfe_idx] = box.css.get_crc_error_counts(mxfe_idx)
     return cntr
 
 
@@ -211,6 +211,7 @@ def main() -> int:
     logging.getLogger("quel_ic_config.quel1_config_subsystem_tempctrl").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.exstickge_coap_client").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1se_riken8_config_subsystem").setLevel(logging.WARNING)
+    logging.getLogger("quel_ic_config.quel1se_fujitsu11_config_subsystem").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.e7workaround").setLevel(logging.WARNING)
     # Notes: workaround for preventing e7awgsw from generating unnecessary logs
     logging.getLogger("nullLibLog").disabled = True

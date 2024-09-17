@@ -1,6 +1,6 @@
 import logging
 import os
-import shutil
+from concurrent.futures import CancelledError
 from pathlib import Path
 
 import matplotlib as mpl
@@ -8,62 +8,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from quel_ic_config.quel1_box import Quel1BoxIntrinsic
-from quel_ic_config.quel_config_common import Quel1BoxType
+from testlibs.easy_capture import boxi_easy_capture
+from testlibs.gen_cw import boxi_gen_cw
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-DEVICE_SETTINGS = (
-    {
-        "label": "staging-074",
-        "box_config": {
-            "ipaddr_wss": "10.1.0.74",
-            "ipaddr_sss": "10.2.0.74",
-            "ipaddr_css": "10.5.0.74",
-            "boxtype": Quel1BoxType.fromstr("quel1-a"),
-            "config_root": None,
-            "config_options": [],
-        },
-        "linkup_config": {
-            "mxfes_to_linkup": (0, 1),
-            "use_204b": True,
-        },
-    },
-)
-
-
-OUTPUT_SETTING = {
-    "spectrum_image_path": Path("./artifacts/loopback"),
-}
-
-
-@pytest.fixture(scope="session", params=DEVICE_SETTINGS)
-def fixtures(request):
-    param0 = request.param
-
-    box = Quel1BoxIntrinsic.create(**param0["box_config"])
-    linkstatus = box.relinkup(**param0["linkup_config"])
-    assert linkstatus[0]
-    assert linkstatus[1]
-    yield make_outdir(param0["label"]), box
-
-    box.easy_stop_all()
-
-
-def make_outdir(dirname: str) -> Path:
+def make_outdir(dirpath: Path):
     mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
 
-    dirpath = OUTPUT_SETTING["spectrum_image_path"] / dirname
-    if os.path.exists(dirpath):
-        shutil.rmtree(dirpath)
-    os.makedirs(dirpath)
+    os.makedirs(dirpath, exist_ok=True)
     return dirpath
 
 
 @pytest.mark.parametrize(
-    ("mxfe", "line", "channel", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
+    ("group", "line", "channel", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
     [
         (0, 0, 0, 11500, 1500, 1500, 0, 0, "L"),
         (0, 0, 0, 11500, 1500, 1500, 10, 0, "L"),
@@ -102,7 +62,7 @@ def make_outdir(dirname: str) -> Path:
     ],
 )
 def test_monitor_loopback(
-    mxfe: int,
+    group: int,
     line: int,
     channel: int,
     lo_mhz: int,
@@ -111,38 +71,47 @@ def test_monitor_loopback(
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
     sideband: str,
-    fixtures,
+    fixtures1,
 ):
-    outdir, box = fixtures
+    box, params, topdirpath = fixtures1
+    if params["label"] not in {"staging-074"}:
+        pytest.skip()
+    boxi = box._dev
+    outdir = make_outdir(topdirpath / "monitor_loopbck")
 
-    box.easy_start_cw(
-        group=mxfe,
+    task = boxi_gen_cw(
+        boxi=boxi,
+        group=group,
         line=line,
         channel=channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz_tx * 1e6,
         fnco_freq=fnco_mhz_tx * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband=sideband,
-        amplitude=32767.0,
+        via_monitor=False,
     )
 
-    num_samples = 65536 * 4
+    num_capture_sample = 65536 * 4
 
-    x = box.easy_capture(
-        group=mxfe,
+    x = boxi_easy_capture(
+        boxi=boxi,
+        group=group,
         rline="m",
         runit=0,
         lo_freq=lo_mhz * 1e6 if line != 1 else None,
         cnco_freq=cnco_mhz_rx * 1e6,
         fnco_freq=fnco_mhz_rx * 1e6,
         activate_internal_loop=True,
-        num_samples=num_samples,
+        num_capture_sample=num_capture_sample,
     )
 
-    box.easy_stop(group=mxfe, line=line, channel=channel)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
-    assert (x is not None) and (len(x) == num_samples)
+    assert (x is not None) and (len(x) == num_capture_sample)
     p = abs(np.fft.fft(x))
     f = np.fft.fftfreq(len(p), 1.0 / 500e6)
     max_idx = np.argmax(p)
@@ -150,25 +119,25 @@ def test_monitor_loopback(
     expected_freq = ((cnco_mhz_tx - cnco_mhz_rx) + (fnco_mhz_tx - fnco_mhz_rx)) * 1e6
 
     logger.info(f"freq error = {f[max_idx] - expected_freq}Hz")
-    logger.info(f"power = {p[max_idx]/num_samples}")
+    logger.info(f"power = {p[max_idx]/num_capture_sample}")
 
     plt.cla()
-    plt.plot(f, p / num_samples)
+    plt.plot(f, p / num_capture_sample)
     plt.savefig(
-        outdir / f"monitor-mxfe{mxfe:d}-line{line:d}-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
+        outdir / f"monitor-mxfe{group:d}-line{line:d}-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
         f"-fnco{fnco_mhz_tx:d}_{fnco_mhz_rx:d}.png"
     )
 
     assert abs(f[max_idx] - expected_freq) < abs(f[1] - f[0])
     if fnco_mhz_rx == 0:
-        assert p[max_idx] / num_samples >= 2000.0
+        assert p[max_idx] / num_capture_sample >= 2000.0
     else:
         # TODO: investigate why the amplitude of the received signal is smaller when fnco_rx != 0.
-        assert p[max_idx] / num_samples >= 1000.0
+        assert p[max_idx] / num_capture_sample >= 1000.0
 
 
 @pytest.mark.parametrize(
-    ("mxfe", "line", "channel", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
+    ("group", "line", "channel", "lo_mhz", "cnco_mhz_tx", "cnco_mhz_rx", "fnco_mhz_tx", "fnco_mhz_rx", "sideband"),
     [
         (0, 0, 0, 11500, 1500, 1500, 0, 0, "L"),
         (0, 0, 0, 11500, 1500, 1500, 10, 0, "L"),
@@ -183,7 +152,7 @@ def test_monitor_loopback(
     ],
 )
 def test_read_loopback(
-    mxfe: int,
+    group: int,
     line: int,
     channel: int,
     lo_mhz: int,
@@ -192,37 +161,47 @@ def test_read_loopback(
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
     sideband: str,
-    fixtures,
+    fixtures1,
 ):
-    outdir, box = fixtures
+    box, params, topdirpath = fixtures1
+    if params["label"] not in {"staging-074"}:
+        pytest.skip()
+    boxi = box._dev
+    outdir = make_outdir(topdirpath / "read_loopbck")
 
-    box.easy_start_cw(
-        group=mxfe,
+    task = boxi_gen_cw(
+        boxi=boxi,
+        group=group,
         line=line,
         channel=channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz_tx * 1e6,
         fnco_freq=fnco_mhz_tx * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband=sideband,
-        amplitude=32767.0,
+        via_monitor=False,
     )
 
-    num_samples = 65536 * 16 * 4
-    x = box.easy_capture(
-        group=mxfe,
+    num_capture_sample = 65536 * 16 * 4
+
+    x = boxi_easy_capture(
+        boxi=boxi,
+        group=group,
         rline="r",
         runit=0,
         lo_freq=None,
         cnco_freq=cnco_mhz_rx * 1e6,
         fnco_freq=fnco_mhz_rx * 1e6,
         activate_internal_loop=True,
-        num_samples=num_samples,
+        num_capture_sample=num_capture_sample,
     )
 
-    box.easy_stop(group=mxfe, line=line, channel=channel)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
-    assert (x is not None) and (len(x) == num_samples)
+    assert (x is not None) and (len(x) == num_capture_sample)
 
     p = abs(np.fft.fft(x))
     f = np.fft.fftfreq(len(p), 1.0 / 500e6)
@@ -231,12 +210,12 @@ def test_read_loopback(
     expected_freq = ((cnco_mhz_tx - cnco_mhz_rx) + (fnco_mhz_tx - fnco_mhz_rx)) * 1e6
 
     logger.info(f"freq error = {f[max_idx] - expected_freq}Hz")
-    logger.info(f"power = {p[max_idx]/num_samples}")
+    logger.info(f"power = {p[max_idx]/num_capture_sample}")
 
     plt.cla()
-    plt.plot(f, p / num_samples)
+    plt.plot(f, p / num_capture_sample)
     plt.savefig(
-        outdir / f"read-mxfe{mxfe:d}-line0-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
+        outdir / f"read-mxfe{group:d}-line0-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
         f"-fnco{fnco_mhz_tx:d}_{fnco_mhz_rx:d}.png"
     )
 

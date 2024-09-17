@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Dict
 
@@ -11,6 +12,8 @@ import pytest
 from quel_ic_config.quel1_box import Quel1Box
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
+from testlibs.gen_cw import box_gen_cw
+from testlibs.register_cw import register_cw_to_all_ports
 from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise
 
 logger = logging.getLogger(__name__)
@@ -52,7 +55,7 @@ TEST_SETTINGS = (
 MAX_BACKGROUND_NOISE = -62.0  # dBm
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
@@ -61,13 +64,15 @@ def fixtures(request):
     assert linkstatus[0]
     assert linkstatus[1]
 
+    register_cw_to_all_ports(box)
+
     ms2xxxx: SpectrumAnalyzer = init_ms2xxxx(request.param["spa_type"])
     ms2xxxx.input_attenuation = 10.0
     max_noise = measure_floor_noise(ms2xxxx)
     assert max_noise < MAX_BACKGROUND_NOISE
     yield box, ms2xxxx, make_outdir(request.param), request.param["port_availability"], request.param["relative_loss"]
 
-    box.easy_stop_all()
+    box.initialize_all_awgunits()
     box.activate_monitor_loop(0)
     box.activate_monitor_loop(1)
 
@@ -152,22 +157,24 @@ def test_all_single_awgs(
         via_monitor = True
 
     # TODO: fix
-    box.easy_start_cw(
+    task = box_gen_cw(
+        box,
         port,
         channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz * 1e6,
         fnco_freq=fnco_mhz * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband="L",
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
+        via_monitor=via_monitor,
     )
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(ms2xxxx, -50.0)
     # notes: stop all the awgs of the line
-    box.easy_stop(port, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     e0 = ExpectedSpectrumPeaks([(expected_freq, -20 - relative_loss)])
@@ -220,21 +227,23 @@ def test_vatt(
         The expected output voltages are 0.72V, 1.03V, 1.34V, 1.65V, 1.96V, and 2.27V, respectively.
         Their corresponding gains at 10GHz are approximately -10dB, -7dB, -2dB, 3dB, 7dB, and 12dB, respectively.
         """
-        box.easy_start_cw(
+        task = box_gen_cw(
+            box,
             port,
             channel,
             lo_freq=lo_mhz * 1e6,
             cnco_freq=cnco_mhz * 1e6,
             fnco_freq=fnco_mhz * 1e6,
+            fullscale_current=40527,
             sideband="L",
             vatt=vatt,
-            amplitude=32767.0,
-            control_port_rfswitch=not via_monitor,
-            control_monitor_rfswitch=via_monitor,
+            via_monitor=via_monitor,
         )
         # notes: -60.0dBm fails due to spurious below 7GHz.
         m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(ms2xxxx, -50.0)
-        box.easy_stop(port, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+        task.cancel()
+        with pytest.raises(CancelledError):
+            task.result()
 
         plt.cla()
         plt.plot(t0[:, 0], t0[:, 1])
@@ -296,21 +305,23 @@ def test_sideband(
     elif port in port_availability["via_monitor_out"]:
         via_monitor = True
 
-    box.easy_start_cw(
+    task = box_gen_cw(
+        box,
         port,
         channel,
         lo_freq=lo_mhz * 1e6,
         cnco_freq=cnco_mhz * 1e6,
         fnco_freq=fnco_mhz * 1e6,
+        fullscale_current=40527,
         vatt=0xA00,
         sideband=sideband,
-        amplitude=32767.0,
-        control_port_rfswitch=not via_monitor,
-        control_monitor_rfswitch=via_monitor,
+        via_monitor=via_monitor,
     )
     # notes: -60.0dBm fails due to spurious below 7GHz.
     m0, t0 = MeasuredSpectrumPeak.from_spectrumanalyzer_with_trace(ms2xxxx, -50.0)
-    box.easy_stop(port, control_port_rfswitch=not via_monitor, control_monitor_rfswitch=via_monitor)
+    task.cancel()
+    with pytest.raises(CancelledError):
+        task.result()
 
     plt.cla()
     plt.plot(t0[:, 0], t0[:, 1])
