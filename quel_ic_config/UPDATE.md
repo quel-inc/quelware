@@ -1,6 +1,6 @@
 # 更新リスト
 
-## v0.10.1 beta1 (Public pre-Release)
+## v0.10.1 beta2 (Public pre-Release)
 - WaveSubsystem(wss)を挿し替え 
   - e7awgsw との依存を解消。
   - 500MHz情報帯域のチャネルを生のままユーザに提供する形式のAPIは固定。
@@ -10,6 +10,7 @@
     - 従来のe7awgswのロックと同様の機能的制約があるので注意。
   - QuEL-1 SEで cssファームウェアが v1.3.0以降の装置は、装置本体のロック機構を利用するので、ロック範囲が特定のホストPC内に制約されない。
   - 何れにしてもquelware-0.8.x系との混在は排他制御の確保に障害が発生するので基本禁止。
+  - 詳細は[こちら](./docs/BOX_EXCLUSIVE_ACCESS_CONTROL.md)を参照。
 - SIMPLEMULTI_CLASSIC版ファームウェアの対応停止
 - FEEDBACK_EARLY版ファームウェアの対応一時停止
 
