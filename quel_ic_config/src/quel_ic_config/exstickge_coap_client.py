@@ -275,9 +275,9 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
     ):
         super().__init__(looping_timeout=looping_timeout)
         self._target: Tuple[str, int] = target
-        if not os.path.isdir(lock_directory):
+        if not lock_directory.is_dir():
             raise RuntimeError(f"lock directory '{lock_directory}' is unavailable")
-        self._lockfile = FileLock(lock_directory / (target[0]))
+        self._lockfile = FileLock(lock_directory / (target[0]), mode=lock_directory.stat().st_mode & 0o666)
         self._lock_tried: bool = False
 
     async def _take_lock(self, context, with_token: bool) -> None:

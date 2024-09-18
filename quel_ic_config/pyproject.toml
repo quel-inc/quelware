@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.1b1"
+version = "0.10.1b2"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",

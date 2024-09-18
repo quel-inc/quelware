@@ -92,7 +92,9 @@ class ExstickgeSockClientQuel1WithFileLock(AbstractExstickgeSockClientQuel1):
         receiver_limit_by_binding: bool = False,
     ):
         super().__init__(target_address, target_port, timeout, receiver_limit_by_binding)
-        self._lockfile = FileLock(lock_directory / target_address)
+        if not lock_directory.is_dir():
+            raise RuntimeError(f"lock directory {lock_directory} is not available")
+        self._lockfile = FileLock(lock_directory / target_address, mode=lock_directory.stat().st_mode & 0o666)
 
     def _take_lock(self):
         try:
