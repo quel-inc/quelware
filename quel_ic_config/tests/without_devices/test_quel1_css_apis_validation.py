@@ -13,6 +13,18 @@ def test_parameter_validation_a():
         boxtype=Quel1BoxType.QuEL1_TypeA,
         features={Quel1Feature.SINGLE_ADC},
     )
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2, 1, 0),
+        (5, 4, 3),
+        (6,),
+        (7,),
+    )
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {
@@ -152,14 +164,27 @@ def test_parameter_validation_a():
 
                 with pytest.raises(ValueError):
                     css.get_adc_fnco(g, rl, rc)  # type: ignore
+    del css
 
 
 # TODO: make it dry.
 def test_parameter_validation_b():
     css = Quel1TypeBConfigSubsystem(
-        css_addr="10.254.253.252",
+        css_addr="10.254.253.253",
         boxtype=Quel1BoxType.QuEL1_TypeB,
         features={Quel1Feature.SINGLE_ADC},
+    )
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2, 1, 0),
+        (5, 4, 3),
+        (6,),
+        (7,),
     )
 
     bad_group = (-1, 2, 1.5, "r", None)
@@ -300,3 +325,4 @@ def test_parameter_validation_b():
 
                 with pytest.raises(ValueError):
                     css.get_adc_fnco(g, rl, rc)  # type: ignore
+    del css

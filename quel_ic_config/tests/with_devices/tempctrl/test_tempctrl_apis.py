@@ -43,7 +43,7 @@ def diff_temperatures(
     return diff
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 

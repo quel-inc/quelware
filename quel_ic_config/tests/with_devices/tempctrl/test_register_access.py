@@ -40,7 +40,7 @@ def _init_tempctrl(proxy: ProxyType):
     logger.info("tempctrl state is set to init")
 
 
-@pytest.fixture(scope="session", params=DEVICE_SETTINGS)
+@pytest.fixture(scope="module", params=DEVICE_SETTINGS)
 def fixtures(request):
     param0 = request.param
 

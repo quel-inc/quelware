@@ -11,7 +11,7 @@ import numpy.typing as npt
 from quel_clock_master import SequencerClient  # to be replaced
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem, Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_config_subsystem import (
     QubeOuTypeAConfigSubsystem,
     QubeOuTypeBConfigSubsystem,
@@ -22,13 +22,12 @@ from quel_ic_config.quel1_config_subsystem import (
     Quel1TypeAConfigSubsystem,
     Quel1TypeBConfigSubsystem,
 )
-from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemAd9082Mixin
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, E7FwLifeStage, E7FwType, Quel1WaveSubsystem
-from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem
-from quel_ic_config.quel1se_fujitsu11_config_subsystem import Quel1seFujitsu11DebugConfigSubsystem
-from quel_ic_config.quel1se_proto8_config_subsystem import Quel1seProto8ConfigSubsystem
-from quel_ic_config.quel1se_proto11_config_subsystem import Quel1seProto11ConfigSubsystem
-from quel_ic_config.quel1se_proto_adda_config_subsystem import Quel1seProtoAddaConfigSubsystem
+from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem, Quel2ProtoAddaConfigSubsystem
+from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
+    Quel1seFujitsu11TypeADebugConfigSubsystem,
+    Quel1seFujitsu11TypeBDebugConfigSubsystem,
+)
 from quel_ic_config.quel1se_riken8_config_subsystem import (
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
@@ -36,41 +35,7 @@ from quel_ic_config.quel1se_riken8_config_subsystem import (
 
 logger = logging.getLogger(__name__)
 
-
-def _validate_boxtype(boxtype):
-    if boxtype not in {
-        Quel1BoxType.QuBE_OU_TypeA,
-        Quel1BoxType.QuBE_RIKEN_TypeA,
-        Quel1BoxType.QuEL1_TypeA,
-        Quel1BoxType.QuBE_OU_TypeB,
-        Quel1BoxType.QuBE_RIKEN_TypeB,
-        Quel1BoxType.QuEL1_TypeB,
-        Quel1BoxType.QuEL1_NEC,
-        Quel1BoxType.QuEL1SE_ProtoAdda,
-        Quel1BoxType.QuEL1SE_Proto8,
-        Quel1BoxType.QuEL1SE_Proto11,
-        Quel1BoxType.QuEL1SE_Adda,
-        Quel1BoxType.QuEL1SE_RIKEN8,
-        Quel1BoxType.QuEL1SE_RIKEN8DBG,
-        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
-    }:
-        raise ValueError(f"unsupported boxtype: {boxtype}")
-
-
-def _is_box_available_for(boxtype: Quel1BoxType) -> bool:
-    return boxtype in {
-        Quel1BoxType.QuBE_OU_TypeA,
-        Quel1BoxType.QuBE_RIKEN_TypeA,
-        Quel1BoxType.QuEL1_TypeA,
-        Quel1BoxType.QuBE_OU_TypeB,
-        Quel1BoxType.QuBE_RIKEN_TypeB,
-        Quel1BoxType.QuEL1_TypeB,
-        Quel1BoxType.QuEL1_NEC,
-        Quel1BoxType.QuEL1SE_RIKEN8,
-        Quel1BoxType.QuEL1SE_RIKEN8DBG,
-        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA,
-        Quel1BoxType.QuEL1SE_Adda,
-    }
+Quel1LineType = tuple[int, Union[int, str]]
 
 
 def _complete_ipaddrs(ipaddr_wss: str, ipaddr_sss: Union[str, None], ipaddr_css: Union[str, None]) -> Tuple[str, str]:
@@ -119,25 +84,20 @@ def _create_css_object(
         css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1_NEC:
         css = Quel1NecConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_ProtoAdda:
-        css = Quel1seProtoAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_Proto8:
-        css = Quel1seProto8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
-    elif boxtype == Quel1BoxType.QuEL1SE_Proto11:
-        css = Quel1seProto11ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_Adda:
         css = Quel1seAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuEL2_ProtoAdda:
+        css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8:
         css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8DBG:
         css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA:
-        css = Quel1seFujitsu11DebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seFujitsu11TypeADebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB:
+        css = Quel1seFujitsu11TypeBDebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
     else:
         raise ValueError(f"unsupported boxtype: {boxtype}")
-
-    if not isinstance(css, Quel1ConfigSubsystemAd9082Mixin):
-        raise AssertionError("the given ConfigSubsystem Object doesn't provide AD9082 interface")
 
     return css
 
@@ -164,17 +124,13 @@ class Quel1BoxIntrinsic:
     DEFAULT_SCHEDULE_WINDOW: Final[float] = 300.0  # [s]
 
     @classmethod
-    def is_applicable_to(cls, boxtype: Quel1BoxType) -> bool:
-        return _is_box_available_for(boxtype)
-
-    @classmethod
     def create(
         cls,
         *,
         ipaddr_wss: str,
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
-        boxtype: Union[Quel1BoxType, str],
+        boxtype: Quel1BoxType,
         config_root: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         **options: Collection[int],
@@ -197,33 +153,34 @@ class Quel1BoxIntrinsic:
         ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
         if isinstance(boxtype, str):
             boxtype = Quel1BoxType.fromstr(boxtype)
-        if not _is_box_available_for(boxtype):
-            raise ValueError(f"unsupported boxtype: {boxtype}")
         if config_options is None:
             config_options = set()
 
         features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
+        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)  # Notes: features is updated here.
+        css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyBoxConfigSubsystem = cast(
-            Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
-        )
+
         return Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     # TODO: consider to re-locate to the right place
     def _validate_options(self, flags: Dict[str, Collection[int]]):
+        num_ad9082 = self.css.get_num_ic("ad9082")
+        num_adrf6780 = self.css.get_num_ic("adrf6780")
+        num_lmx2594 = self.css.get_num_ic("lmx2594")
+
         for k, v in flags.items():
             if k == "ignore_crc_error_of_mxfe":
-                if not all([0 <= u < self.css._NUM_IC["ad9082"] for u in v]):
+                if not all([0 <= u < num_ad9082 for u in v]):
                     raise ValueError(f"invalid index of mxfe is found in {k} (= {v})")
             elif k == "ignore_access_failure_of_adrf6780":
-                if not all([0 <= u < self.css._NUM_IC["adrf6780"] for u in v]):
+                if not all([0 <= u < num_adrf6780 for u in v]):
                     raise ValueError(f"invalid index of adrf6780 is found in {k} (= {v})")
             elif k == "ignore_lock_failure_of_lmx2594":
-                if not all([0 <= u < self.css._NUM_IC["lmx2594"] for u in v]):
+                if not all([0 <= u < num_lmx2594 for u in v]):
                     raise ValueError(f"invalid index of lmx2594 is found in {k} (= {v})")
             elif k == "ignore_extraordinary_converter_select_of_mxfe":
-                if not all([0 <= u < self.css._NUM_IC["ad9082"] for u in v]):
+                if not all([0 <= u < num_ad9082 for u in v]):
                     raise ValueError(f"invalid index of ad9082 is found in {k} (= {v})")
             else:
                 raise ValueError(f"invalid workaround options: {k}")
@@ -240,7 +197,7 @@ class Quel1BoxIntrinsic:
     def __init__(
         self,
         *,
-        css: Quel1AnyBoxConfigSubsystem,
+        css: Quel1AnyConfigSubsystem,
         wss: Quel1WaveSubsystem,
         sss: SequencerClient,
         rmap: Union[Quel1E7ResourceMapper, None] = None,
@@ -265,7 +222,7 @@ class Quel1BoxIntrinsic:
         return f"<{self.__class__.__name__}:{self._wss._wss_addr}:{self.boxtype}>"
 
     @property
-    def css(self) -> Quel1AnyBoxConfigSubsystem:
+    def css(self) -> Quel1AnyConfigSubsystem:
         return self._css
 
     @property
@@ -292,8 +249,8 @@ class Quel1BoxIntrinsic:
     def options(self) -> Dict[str, Collection[int]]:
         return self._options
 
-    def _is_quel1se(self) -> bool:
-        return self.css._boxtype in {Quel1BoxType.QuEL1SE_RIKEN8, Quel1BoxType.QuEL1SE_RIKEN8DBG}
+    def initialize(self) -> None:
+        pass
 
     def reconnect(
         self,
@@ -333,8 +290,9 @@ class Quel1BoxIntrinsic:
                 valid_link: bool = self._css.configure_mxfe(
                     mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe
                 )
-                self._css.ad9082[mxfe_idx].device_chip_id_get()
-            except RuntimeError:
+                self._css.validate_chip_id(mxfe_idx)
+            except RuntimeError as e:
+                logger.warning(e)
                 valid_link = False
 
             if not valid_link:
@@ -362,7 +320,7 @@ class Quel1BoxIntrinsic:
         if mxfes_to_linkup is None:
             mxfes_to_linkup = self._css.get_all_mxfes()
         if hard_reset is None:
-            hard_reset = self._is_quel1se()
+            hard_reset = self.css.boxtype.is_quel1se()
         if ignore_crc_error_of_mxfe is None:
             ignore_crc_error_of_mxfe = self._options["ignore_crc_error_of_mxfe"]
         if ignore_access_failure_of_adrf6780 is None:
@@ -396,9 +354,6 @@ class Quel1BoxIntrinsic:
                 restart_tempctrl=restart_tempctrl,
             )
         return linkup_ok
-
-    def terminate(self):
-        self.css.terminate()
 
     def link_status(self, *, ignore_crc_error_of_mxfe: Union[Collection[int], None] = None) -> Dict[int, bool]:
         if ignore_crc_error_of_mxfe is None:
@@ -983,8 +938,7 @@ class Quel1BoxIntrinsic:
         raise AssertionError
 
     def _config_validate_fsc(self, group: int, line: int, fsc0: int, fsc1: int) -> bool:
-        mxfe_idx, _ = self._css._get_dac_idx(group, line)
-        return self._css.ad9082[mxfe_idx].is_equal_fullscale_current(fsc0, fsc1)
+        return self._css.is_equal_fullscale_current(group, line, fsc0, fsc1)
 
     def _config_validate_line(self, group: int, line: Union[int, str], lc: Dict[str, Any]) -> bool:
         if self.is_output_line(group, line):
@@ -1245,10 +1199,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        if hasattr(self._css, "pass_line"):
-            self._css.pass_line(group, line)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.pass_line(group, line)
 
     def close_rfswitch(self, group: int, line: Union[int, str]):
         """closing RF switch of the port corresponding to a given line, either of transmitter or receiver one.
@@ -1257,10 +1208,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         return None
         """
-        if hasattr(self._css, "block_line"):
-            self._css.block_line(group, line)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.block_line(group, line)
 
     def _decode_rfswitch_conf(self, group: int, line: Union[int, str], block: bool) -> str:
         if self.is_output_line(group, line):
@@ -1294,10 +1242,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the monitor path belongs to.
         :return: None
         """
-        if hasattr(self._css, "activate_monitor_loop"):
-            self._css.activate_monitor_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.activate_monitor_loop(group)
 
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal monitor loop-back path.
@@ -1305,10 +1250,7 @@ class Quel1BoxIntrinsic:
         :param group: a group which the monitor path belongs to.
         :return: None
         """
-        if hasattr(self._css, "deactivate_monitor_loop"):
-            self._css.deactivate_monitor_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.deactivate_monitor_loop(group)
 
     def is_loopedback_monitor(self, group: int) -> bool:
         """checking if an internal monitor loop-back path is activated or not.
@@ -1316,10 +1258,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the monitor loop-back path belongs to.
         :return: True if the monitor loop-back path is activated.
         """
-        if hasattr(self._css, "is_loopedback_monitor"):
-            return self._css.is_loopedback_monitor(group)
-        else:
-            return False
+        return self._css.is_loopedback_monitor(group)
 
     def activate_read_loop(self, group: int) -> None:
         """enabling an internal read loop-back path from read-out port to read-in port.
@@ -1327,10 +1266,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        if hasattr(self._css, "activate_read_loop"):
-            self._css.activate_read_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.activate_read_loop(group)
 
     def deactivate_read_loop(self, group: int) -> None:
         """disabling an internal read loop-back.
@@ -1338,10 +1274,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read path belongs to.
         :return: None
         """
-        if hasattr(self._css, "deactivate_read_loop"):
-            self._css.deactivate_read_loop(group)
-        else:
-            logger.info("do nothing because no RF switches are available")
+        self._css.deactivate_read_loop(group)
 
     def is_loopedback_read(self, group: int) -> bool:
         """checking if an internal read loop-back path is activated or not.
@@ -1349,10 +1282,7 @@ class Quel1BoxIntrinsic:
         :param group: an index of a group which the read loop-back path belongs to.
         :return: True if the read loop-back path is activated.
         """
-        if hasattr(self._css, "is_loopedback_read"):
-            return self._css.is_loopedback_read(group)
-        else:
-            return False
+        return self._css.is_loopedback_read(group)
 
     def _dump_runit(
         self, group: int, rline: str, runit: int, rchannel_conf: Union[Dict[str, Any], None] = None
@@ -1382,11 +1312,7 @@ class Quel1BoxIntrinsic:
         :param line: a group-local index of the line.
         :return:  the current configuration of the switch of the line.
         """
-        if hasattr(self._css, "is_blocked_line"):
-            state: bool = self._css.is_blocked_line(group, line)
-        else:
-            # Notes: always passing or opening
-            state = False
+        state: bool = self._css.is_blocked_line(group, line)
         return self._decode_rfswitch_conf(group, line, state)
 
     def dump_rfswitches(self, exclude_subordinate: bool = True) -> Dict[Tuple[int, Union[int, str]], str]:
@@ -1397,11 +1323,7 @@ class Quel1BoxIntrinsic:
         """
         retval: Dict[Tuple[int, Union[int, str]], str] = {}
         for group, line in self._css.get_all_any_lines():
-            if not (
-                exclude_subordinate
-                and hasattr(self._css, "is_subordinate_rfswitch")
-                and self._css.is_subordinate_rfswitch(group, line)
-            ):
+            if not (exclude_subordinate and self._css.is_subordinate_rfswitch(group, line)):
                 retval[(group, line)] = self.dump_rfswitch(group, line)
         return retval
 
@@ -1457,3 +1379,20 @@ class Quel1BoxIntrinsic:
             return set(range(len(self.rmap.get_capture_units_of_rline(group, rline))))
         else:
             raise ValueError(f"invalid input line: ({group}, {rline})")
+
+    def get_groups(self) -> set[int]:
+        return self._css.get_all_groups()
+
+    def get_output_lines(self) -> set[tuple[int, int]]:
+        ol: set[tuple[int, int]] = set()
+        for g in self._css.get_all_groups():
+            for ln in self._css.get_all_lines_of_group(g):
+                ol.add((g, ln))
+        return ol
+
+    def get_input_rlines(self) -> set[tuple[int, str]]:
+        ol: set[tuple[int, str]] = set()
+        for g in self._css.get_all_groups():
+            for ln in self._css.get_all_rlines_of_group(g):
+                ol.add((g, ln))
+        return ol

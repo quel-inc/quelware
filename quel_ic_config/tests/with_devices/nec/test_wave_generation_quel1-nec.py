@@ -52,7 +52,7 @@ TEST_SETTINGS = (
 MAX_BACKGROUND_NOISE = -62.0  # dBm
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 

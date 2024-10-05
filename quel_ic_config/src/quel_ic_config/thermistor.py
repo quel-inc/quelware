@@ -44,19 +44,6 @@ class Quel1PathSelectorThermistor(Thermistor):
         return _TfpltConv.convert(v / (7307 - v) * 3.0303)
 
 
-class Quel1seProtoThermistor(Thermistor):
-    def convert(self, v: int) -> float:
-        # TODO: check whether this is OK or not.
-        # Notes: Vref = 2.5V, range = Vref
-        return _TfpltConv.convert(v / (8192 - v) * 3.0303)
-
-
-class Quel1seProtoExternalThermistor(Thermistor):
-    def convert(self, v: int) -> float:
-        # Notes: Vref = 2.5V, range = 2 * Vref
-        return _TfpltConv.convert(v / (4096 - v))
-
-
 class Quel1seOnboardThermistor(Thermistor):
     """330Ohm thermistor + 1kOhm resistor"""
 

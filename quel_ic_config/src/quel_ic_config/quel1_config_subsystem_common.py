@@ -71,6 +71,18 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         "_tempctrl_auto_start_at_linkup",
     )
 
+    _VALID_IC_NAME: Set[str] = {
+        "ad9082",
+        "lmx2594",
+        "adrf6780",
+        "ad5328",
+        "ad7490",
+        "gpio",
+        "mixerboard_gpio",
+        "pathselectorboard_gpio",
+        "powerboard_pwm",
+    }
+
     _DEFAULT_CONFIG_JSONFILE: str
     _NUM_IC: Dict[str, int]
     _GROUPS: Set[int]
@@ -103,6 +115,12 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         self._rfswitch_helper: Union[RfSwitchArrayConfigHelper, None] = None
         self._gpio: Tuple[GenericGpio, ...] = ()
         self._gpio_helper: Tuple[GenericGpioConfigHelper, ...] = ()
+
+    def get_num_ic(self, ic_name: str) -> int:
+        if ic_name in self._VALID_IC_NAME:
+            return self._NUM_IC.get(ic_name, 0)
+        else:
+            raise ValueError(f"invalid name of ic: '{ic_name}'")
 
     def _set_runtime_option(self, option: Quel1RuntimeOption, value: bool) -> None:
         if value:
@@ -208,6 +226,10 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         self._runtime_options: Set[Quel1RuntimeOption] = set()
         self._param: Dict[str, Any] = self._load_config()  # TODO: Dict[str, Any] is tentative.
         self._proxy: _ExstickgeProxyBase = self._create_exstickge_proxy(port, timeout, sender_limit_by_binding)
+
+    def __del__(self):
+        if hasattr(self, "_proxy"):
+            self._proxy.terminate()
 
     @abstractmethod
     def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
@@ -398,9 +420,6 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         """
         pass
 
-    def terminate(self):
-        self._proxy.terminate()
-
 
 class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
@@ -408,6 +427,14 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     def _construct_ad9082(self):
         self._ad9082 = tuple(Ad9082V106(self._proxy, idx, p) for idx, p in enumerate(self._param["ad9082"]))
         self.allow_dual_modulus_nco = True
+
+    def validate_chip_id(self, mxfe_idx: int):
+        self._validate_mxfe(mxfe_idx)
+        chip_id = self.ad9082[mxfe_idx].device_chip_id_get()
+        if chip_id.prod_id != 0x9082 or chip_id.dev_revision < 3:
+            raise RuntimeError(
+                f"unexpected chip_id of mxfe-#{mxfe_idx}: prod_id = {chip_id.prod_id:04x}, rev = {chip_id.dev_revision}"
+            )
 
     @property
     def allow_dual_modulus_nco(self) -> bool:
@@ -506,25 +533,28 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
 
         return freq_in_hz, ftw
 
-    def _get_dac_idx(self, group: int, line: int) -> Tuple[int, int]:
+    def get_dac_idx(self, group: int, line: int) -> Tuple[int, int]:
         self._validate_line(group, line)
         return self._DAC_IDX[(group, line)]
 
-    def _get_channels_of_line(self, group: int, line: int) -> Tuple[int, ...]:
-        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
-        dac_ch_idxes = tuple(self._param["ad9082"][mxfe_idx]["dac"]["channel_assign"][f"dac{dac_idx}"])
-        return dac_ch_idxes
-
     def get_num_channels_of_line(self, group: int, line: int) -> int:
-        return len(self._get_channels_of_line(group, line))
+        return len(self.get_fduc_idx(group, line))
 
     def _get_dac_ch_idx(self, group: int, line: int, channel: int) -> int:
         self._validate_channel(group, line, channel)
-        return self._get_channels_of_line(group, line)[channel]
+        return self.get_fduc_idx(group, line)[channel]
 
-    def _get_adc_idx(self, group: int, rline: str) -> Tuple[int, int]:
+    def get_adc_idx(self, group: int, rline: str) -> Tuple[int, int]:
         self._validate_rline(group, rline)
         return self._ADC_IDX[(group, rline)]
+
+    def get_rline_from_adc_idx(self, mxfe_idx: int, adc_idx: int) -> Union[Tuple[int, str], None]:
+        self._validate_mxfe(mxfe_idx)
+        for gl, (m, c) in self._ADC_IDX.items():
+            if m == mxfe_idx and c == adc_idx:
+                return gl
+        else:
+            return None
 
     def _get_rchannels_of_rline(self, group: int, rline: str) -> Tuple[int, ...]:
         # TODO: determine rchannel based on self._param.
@@ -549,7 +579,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        mxfe_idx, dac_idx = self.get_dac_idx(group, line)
         freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "dac_cnco", freq_in_hz, ftw)
         logger.info(f"DAC-CNCO{dac_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz (ftw = {ftw_})")
         self.ad9082[mxfe_idx].set_dac_cnco({dac_idx}, ftw_)
@@ -561,12 +591,12 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line.
         :return: the current CNCO frequency of the line in Hz.
         """
-        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        mxfe_idx, dac_idx = self.get_dac_idx(group, line)
         ftw = self.ad9082[mxfe_idx].get_dac_cnco(dac_idx)
         return self.ad9082[mxfe_idx].calc_dac_cnco_freq(ftw)
 
     def is_equivalent_dac_cnco(self, group: int, line: int, freq0: float, freq1: float) -> bool:
-        mxfe_idx, _ = self._get_dac_idx(group, line)
+        mxfe_idx, _ = self.get_dac_idx(group, line)
         return self.ad9082[mxfe_idx].is_equivalent_dac_cnco(freq0, freq1, self.allow_dual_modulus_nco)
 
     def set_dac_fnco(
@@ -586,7 +616,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        mxfe_idx, _ = self._get_dac_idx(group, line)
+        mxfe_idx, _ = self.get_dac_idx(group, line)
         fnco_idx = self._get_dac_ch_idx(group, line, channel)
         freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "dac_fnco", freq_in_hz, ftw)
         logger.info(
@@ -602,13 +632,13 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param channel: a line-local index of the chennel.
         :return: the current FNCO frequency of the channel in Hz.
         """
-        mxfe_idx, _ = self._get_dac_idx(group, line)
+        mxfe_idx, _ = self.get_dac_idx(group, line)
         fnco_idx = self._get_dac_ch_idx(group, line, channel)
         ftw = self.ad9082[mxfe_idx].get_dac_fnco(fnco_idx)
         return self.ad9082[mxfe_idx].calc_dac_fnco_freq(ftw)
 
     def is_equivalent_dac_fnco(self, group: int, line: int, freq0: float, freq1: float) -> bool:
-        mxfe_idx, _ = self._get_dac_idx(group, line)
+        mxfe_idx, _ = self.get_dac_idx(group, line)
         return self.ad9082[mxfe_idx].is_equivalent_dac_fnco(freq0, freq1, self.allow_dual_modulus_nco)
 
     def set_adc_cnco(
@@ -622,7 +652,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        mxfe_idx, adc_idx = self._get_adc_idx(group, rline)
+        mxfe_idx, adc_idx = self.get_adc_idx(group, rline)
         freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "adc_cnco", freq_in_hz, ftw)
         logger.info(f"ADC-CNCO{adc_idx} of MxFE{mxfe_idx} of {self._css_addr} is set to {freq_in_hz_}Hz (ftw = {ftw_})")
         self.ad9082[mxfe_idx].set_adc_cnco({adc_idx}, ftw_)
@@ -634,12 +664,12 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line.
         :return: the current CNCO frequency of the line in Hz.
         """
-        mxfe_idx, adc_idx = self._get_adc_idx(group, rline)
+        mxfe_idx, adc_idx = self.get_adc_idx(group, rline)
         ftw = self.ad9082[mxfe_idx].get_adc_cnco(adc_idx)
         return self.ad9082[mxfe_idx].calc_adc_cnco_freq(ftw)
 
     def is_equivalent_adc_cnco(self, group: int, rline: str, freq0: float, freq1: float) -> bool:
-        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        mxfe_idx, _ = self.get_adc_idx(group, rline)
         return self.ad9082[mxfe_idx].is_equivalent_adc_cnco(freq0, freq1, self.allow_dual_modulus_nco)
 
     def set_adc_fnco(
@@ -659,7 +689,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param ftw: an FTW can be passed instead of freq_in_hz if necessary.
         :return: None
         """
-        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        mxfe_idx, _ = self.get_adc_idx(group, rline)
         fnco_idx = self._get_adc_rch_idx(group, rline, rchannel)
         freq_in_hz_, ftw_ = self._validate_frequency_info(mxfe_idx, "adc_fnco", freq_in_hz, ftw)
         logger.info(
@@ -675,18 +705,18 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param channel: a line-local index of the chennel.
         :return: the current FNCO frequency of the channel in Hz.
         """
-        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        mxfe_idx, _ = self.get_adc_idx(group, rline)
         fnco_idx = self._get_adc_rch_idx(group, rline, rchannel)
         ftw = self.ad9082[mxfe_idx].get_adc_fnco(fnco_idx)
         return self.ad9082[mxfe_idx].calc_adc_fnco_freq(ftw)
 
     def is_equivalent_adc_fnco(self, group: int, rline: str, freq0: float, freq1: float) -> bool:
-        mxfe_idx, _ = self._get_adc_idx(group, rline)
+        mxfe_idx, _ = self.get_adc_idx(group, rline)
         return self.ad9082[mxfe_idx].is_equivalent_adc_fnco(freq0, freq1, self.allow_dual_modulus_nco)
 
     def set_pair_cnco(self, group_dac: int, line_dac: int, group_adc: int, rline_adc: str, freq_in_hz: float) -> None:
-        dac_mxfe_idx, dac_idx = self._get_dac_idx(group_dac, line_dac)
-        adc_mxfe_idx, adc_idx = self._get_adc_idx(group_adc, rline_adc)
+        dac_mxfe_idx, dac_idx = self.get_dac_idx(group_dac, line_dac)
+        adc_mxfe_idx, adc_idx = self.get_adc_idx(group_adc, rline_adc)
 
         dac_clk = self.ad9082[dac_mxfe_idx].device.dev_info.dac_freq_hz
         adc_clk = self.ad9082[adc_mxfe_idx].device.dev_info.adc_freq_hz
@@ -721,7 +751,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param fsc: full-scale current of the DAC of the line in uA.
         :return: None
         """
-        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        mxfe_idx, dac_idx = self.get_dac_idx(group, line)
         self.ad9082[mxfe_idx].set_fullscale_current(1 << dac_idx, fsc)
 
     def get_fullscale_current(self, group: int, line: int) -> int:
@@ -731,8 +761,12 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         :param line: a group-local index of the line
         :return: the current full-scale current of the DAC in uA
         """
-        mxfe_idx, dac_idx = self._get_dac_idx(group, line)
+        mxfe_idx, dac_idx = self.get_dac_idx(group, line)
         return self.ad9082[mxfe_idx].get_fullscale_current(dac_idx)
+
+    def is_equal_fullscale_current(self, group: int, line: int, fsc0: int, fsc1: int) -> bool:
+        mxfe_idx, _ = self.get_dac_idx(group, line)
+        return self.ad9082[mxfe_idx].is_equal_fullscale_current(fsc0, fsc1)
 
     def get_main_interpolation_rate(self, mxfe_idx: int) -> int:
         """getting the current main interpolation rate of a MxFE of a group.
@@ -752,6 +786,10 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         self._validate_mxfe(mxfe_idx)
         return self.ad9082[mxfe_idx].get_channel_interpolation_rate()
 
+    def get_fduc_idx(self, group: int, line: int) -> Tuple[int, ...]:
+        mxfe_idx, dac_idx = self.get_dac_idx(group, line)
+        return self.ad9082[mxfe_idx].get_fduc_of_dac(dac_idx)
+
     def get_virtual_adc_select(self, mxfe_idx: int) -> List[int]:
         """getting converter select matrix of ADC virtual converters after FDDC.
 
@@ -760,6 +798,9 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         self._validate_mxfe(mxfe_idx)
         return self.ad9082[mxfe_idx].get_virtual_adc_select()
+
+    def get_crc_error_counts(self, mxfe_idx: int) -> List[int]:
+        return self.ad9082[mxfe_idx].get_crc_error_counts()
 
     def get_ad9082_temperatures(self, mxfe_idx: int) -> Tuple[int, int]:
         """getting the current die temperatures of a MxFE of a group.
@@ -888,7 +929,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
 
     def _construct_adrf6780(self):
         self._adrf6780: Tuple[Adrf6780, ...] = tuple(
-            Adrf6780(self._proxy, idx) for idx in range(self._NUM_IC["adrf6780"])
+            Adrf6780(self._proxy, idx) for idx in range(self._NUM_IC.get("adrf6780", 0))
         )
         self._adrf6780_helper: Tuple[Adrf6780ConfigHelper, ...] = tuple(
             Adrf6780ConfigHelper(ic) for ic in self._adrf6780
@@ -934,7 +975,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
     def _get_mixer_idx(self, group, line):
         if (group, line) in self._MIXER_IDX:
             return self._MIXER_IDX[(group, line)]
-        raise ValueError(f"no mixer is available for group:{group}, line:{line}")
+        raise ValueError(f"no configurable mixer is available for group:{group}, line:{line}")
 
     def set_sideband(self, group: int, line: int, sideband: str) -> None:
         """setting the active sideband of a mixer of a line.
@@ -966,7 +1007,7 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         mixer_idx = self._get_mixer_idx(group, line)
         if mixer_idx is None:
-            raise ValueError(f"no mixer is available for group:{group}, line:{line}")
+            raise ValueError(f"no configurable mixer is available for group:{group}, line:{line}")
 
         ic = self._adrf6780[mixer_idx]
         ssb = ic.get_lo_sideband()
@@ -986,7 +1027,9 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
     _VATT_IDX: Dict[Tuple[int, int], Tuple[int, int]]
 
     def _construct_ad5328(self):
-        self._ad5328: Tuple[Ad5328, ...] = tuple(Ad5328(self._proxy, idx) for idx in range(self._NUM_IC["ad5328"]))
+        self._ad5328: Tuple[Ad5328, ...] = tuple(
+            Ad5328(self._proxy, idx) for idx in range(self._NUM_IC.get("ad5328", 0))
+        )
         self._ad5328_helper: Tuple[Ad5328ConfigHelper, ...] = tuple(Ad5328ConfigHelper(ic) for ic in self._ad5328)
 
     @property
@@ -1043,6 +1086,43 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
         ic_idx, vatt_idx = self._get_vatt_idx(group, line)
         ic = self._ad5328[ic_idx]
         return ic.get_output_carboncopy(vatt_idx)
+
+
+class Quel1ConfigSubsystemNoRfswitch(Quel1ConfigSubsystemBaseSlot):
+    __slots__ = ()
+
+    def is_subordinate_rfswitch(self, group: int, line: Union[int, str]) -> bool:
+        return False
+
+    def pass_line(self, group: int, line: Union[int, str]) -> None:
+        logger.info(f"making (group:{group}, line:{line}) passing")
+
+    def block_line(self, group: int, line: Union[int, str]) -> None:
+        raise RuntimeError("no RF switch is available")
+
+    def is_blocked_line(self, group: int, line: Union[int, str]) -> bool:
+        return False
+
+    def is_passed_line(self, group: int, line: Union[int, str]) -> bool:
+        return True
+
+    def activate_monitor_loop(self, group: int) -> None:
+        raise RuntimeError("no monitor loopback is available")
+
+    def deactivate_monitor_loop(self, group: int) -> None:
+        logger.info(f"deactivate monitor loop (group:{group})")
+
+    def is_loopedback_monitor(self, group: int) -> bool:
+        return False
+
+    def activate_read_loop(self, group: int) -> None:
+        raise RuntimeError("no read loopback is available")
+
+    def deactivate_read_loop(self, group: int) -> None:
+        logger.info(f"deactivate read loop (group:{group})")
+
+    def is_loopedback_read(self, group: int) -> bool:
+        return False
 
 
 class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
@@ -1209,7 +1289,7 @@ class Quel1ConfigSubsystemGpioMixin(Quel1ConfigSubsystemBaseSlot):
 
     def _construct_gpio(self):
         self._gpio: Tuple[GenericGpio, ...] = tuple(
-            GenericGpio(self._proxy, idx) for idx in range(self._NUM_IC["gpio"])
+            GenericGpio(self._proxy, idx) for idx in range(self._NUM_IC.get("gpio", 0))
         )
         self._gpio_helper: Tuple[GenericGpioConfigHelper, ...] = tuple(GenericGpioConfigHelper(ic) for ic in self._gpio)
 
@@ -1234,7 +1314,7 @@ class Quel1ConfigSubsystemMixerboardGpioMixin(Quel1ConfigSubsystemBaseSlot):
 
     def _construct_mixerboard_gpio(self):
         self._mixerboard_gpio: Tuple[MixerboardGpio, ...] = tuple(
-            MixerboardGpio(self._proxy, idx) for idx in range(self._NUM_IC["mixerboard_gpio"])
+            MixerboardGpio(self._proxy, idx) for idx in range(self._NUM_IC.get("mixerboard_gpio", 0))
         )
 
         self._mixerboard_gpio_helper: Tuple[MixerboardGpioConfigHelper, ...] = tuple(
@@ -1266,7 +1346,7 @@ class Quel1ConfigSubsystemPathselectorboardGpioMixin(Quel1ConfigSubsystemBaseSlo
 
     def _construct_pathselectorboard_gpio(self):
         self._pathselectorboard_gpio: Tuple[PathselectorboardGpio, ...] = tuple(
-            PathselectorboardGpio(self._proxy, idx) for idx in range(self._NUM_IC["pathselectorboard_gpio"])
+            PathselectorboardGpio(self._proxy, idx) for idx in range(self._NUM_IC.get("pathselectorboard_gpio", 0))
         )
 
         self._pathselectorboard_gpio_helper: Tuple[PathselectorboardGpioConfigHelper, ...] = tuple(
@@ -1414,7 +1494,9 @@ class Quel1ConfigSubsystemAd7490Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
     def _construct_ad7490(self):
-        self._ad7490: Tuple[Ad7490, ...] = tuple(Ad7490(self._proxy, idx) for idx in range(self._NUM_IC["ad7490"]))
+        self._ad7490: Tuple[Ad7490, ...] = tuple(
+            Ad7490(self._proxy, idx) for idx in range(self._NUM_IC.get("ad7490", 0))
+        )
 
     @property
     def ad7490(self) -> Tuple[Ad7490, ...]:
@@ -1431,7 +1513,7 @@ class Quel1ConfigSubsystemPowerboardPwmMixin(Quel1ConfigSubsystemBaseSlot):
 
     def _construct_powerboard_pwm(self):
         self._powerboard_pwm: Tuple[PowerboardPwm, ...] = tuple(
-            PowerboardPwm(self._proxy, idx) for idx in range(self._NUM_IC["powerboard_pwm"])
+            PowerboardPwm(self._proxy, idx) for idx in range(self._NUM_IC.get("powerboard_pwm", 0))
         )
 
         self._powerboard_pwm_helper: Tuple[PowerboardPwmConfigHelper, ...] = tuple(

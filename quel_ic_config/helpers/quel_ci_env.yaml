@@ -9,9 +9,30 @@ boxes:
   - name: staging-060
     ipaddr: 10.1.0.60
     boxtype: quel1-b
+  - name: staging-076
+    ipaddr: 10.1.0.76
+    boxtype: quel1-a
+  - name: staging-071
+    ipaddr: 10.1.0.71
+    boxtype: quel1-a
+  - name: staging-080
+    ipaddr: 10.1.0.80
+    boxtype: quel1-a
+  - name: staging-075
+    ipaddr: 10.1.0.75
+    boxtype: quel1-b
+  - name: staging-079
+    ipaddr: 10.1.0.79
+    boxtype: quel1-a
   - name: staging-094
     ipaddr: 10.1.0.94
     boxtype: quel1se-riken8
   - name: staging-132
     ipaddr: 10.1.0.132
     boxtype: quel1se-riken8
+  - name: staging-157
+    ipaddr: 10.1.0.157
+    boxtype: x-quel1se-fujitsu11-a
+  - name: staging-164
+    ipaddr: 10.1.0.164
+    boxtype: x-quel1se-fujitsu11-b

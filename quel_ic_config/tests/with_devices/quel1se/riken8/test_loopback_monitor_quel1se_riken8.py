@@ -39,7 +39,7 @@ OUTPUT_SETTING = {
 }
 
 
-@pytest.fixture(scope="session", params=DEVICE_SETTINGS)
+@pytest.fixture(scope="module", params=DEVICE_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
@@ -54,6 +54,7 @@ def fixtures(request):
     yield make_outdir(param0["label"]), box
 
     box.easy_stop_all()
+    del box
 
 
 def make_outdir(label: str):
@@ -62,7 +63,7 @@ def make_outdir(label: str):
     dirpath = OUTPUT_SETTING["spectrum_image_path"] / label
     if os.path.exists(dirpath):
         shutil.rmtree(dirpath)
-    os.makedirs(dirpath / label)
+    os.makedirs(dirpath)
     return dirpath
 
 
@@ -136,7 +137,7 @@ def test_monitor_loopback_cf(
     plt.cla()
     plt.plot(f, p / num_samples)
     plt.savefig(
-        outdir / f"mxfe{group:d}-line0-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
+        outdir / f"mxfe{group:d}-line{line:d}-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
         f"-fnco{fnco_mhz_tx:d}_{fnco_mhz_rx:d}.png"
     )
 
@@ -229,7 +230,7 @@ def test_monitor_loopback_rp(
     plt.cla()
     plt.plot(f, p / num_samples)
     plt.savefig(
-        outdir / f"mxfe{group:d}-line0-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
+        outdir / f"mxfe{group:d}-line{line:d}-ch{channel:d}-cnco{cnco_mhz_tx:d}_{cnco_mhz_rx:d}"
         f"-fnco{fnco_mhz_tx:d}_{fnco_mhz_rx:d}.png"
     )
 

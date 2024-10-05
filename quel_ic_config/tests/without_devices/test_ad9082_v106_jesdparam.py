@@ -36,7 +36,7 @@ def test_jesdparam_normal():
     for k, v in dict0.items():
         assert getattr(cmsobj, k) == dict0[k]
 
-    attrs = {k for k in dir(cmsobj) if not k.startswith("__")}
+    attrs = {k for k in dir(cmsobj) if not k.startswith("_")}
     assert attrs == set(dict0.keys())
 
     # Notes: the following test case is not required since mypy detects via static analysis.

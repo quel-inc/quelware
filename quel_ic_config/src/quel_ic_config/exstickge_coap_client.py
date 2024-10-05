@@ -67,9 +67,6 @@ class SyncAsyncCoapClient(threading.Thread):
         self._looping_timeout = looping_timeout
         self._request_to_init_context = False
 
-    def __del__(self):
-        self.terminate()
-
     def run(self):
         loop = asyncio.new_event_loop()
         task = loop.create_task(
@@ -128,6 +125,7 @@ class SyncAsyncCoapClient(threading.Thread):
                     None, lambda: self.request_queue.get(timeout=self._looping_timeout)
                 )
                 if req is None:
+                    logger.info("None is detected in request_queue of SyncAsyncCoapClient")
                     break
                 logger.debug(req._data)
                 if self._request_to_init_context:
@@ -140,6 +138,7 @@ class SyncAsyncCoapClient(threading.Thread):
                 # Notes: timeout is set to avoid blocking
                 pass
 
+        logger.info("quitting _async_main()")
         _ = await context.shutdown()
 
     async def _single_access(self, req: SyncAsyncThunk, context: aiocoap.Context):
@@ -359,6 +358,7 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
 
     def terminate(self):
         self._core.terminate()
+        self._core.join()
 
 
 def get_exstickge_server_info(
@@ -388,6 +388,7 @@ def get_exstickge_server_info(
     else:
         res2 = None
     core.terminate()
+    del core
 
     if res1 is None:
         logger.info(f"no response from CoAP server at {ipaddr_css}")

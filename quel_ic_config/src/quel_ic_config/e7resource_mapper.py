@@ -1,10 +1,10 @@
 import logging
-from typing import Any, Dict, Final, List, Set, Tuple, Union
+from typing import Dict, Final, Set, Tuple, Union
 
 from e7awgsw import AWG
 
 from quel_ic_config.e7workaround import CaptureModule, E7FwType
-from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemAd9082Mixin
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 
 logger = logging.getLogger(__name__)
@@ -51,31 +51,19 @@ class Quel1E7ResourceMapper:
         (1, 2): CaptureModule.U2,
     }
 
-    def __init__(self, css: Quel1ConfigSubsystemAd9082Mixin, wss: Quel1WaveSubsystem):
+    def __init__(self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem):
         self._css = css
         self._wss = wss
 
-        # TODO: generate it from the current register values.
-        self.dac2fduc: Final[List[List[List[int]]]] = self._parse_tx_channel_assign(self._css._param["ad9082"])
+        self.active_adcs: Set[Tuple[int, int]] = set()
+        for mxfe_idx in self._css.get_all_mxfes():
+            self.active_adcs.update(self.get_active_adc_of_mxfe(mxfe_idx))
 
-        # Notes: using this is fine, but reconsider better interface.
-        # TODO: revise the inferface.
-        self.dac_idx: Final[Dict[Tuple[int, int], Tuple[int, int]]] = self._css._DAC_IDX
-        self.adc_idx: Final[Dict[Tuple[int, str], Tuple[int, int]]] = self._css._ADC_IDX
-
-    @staticmethod
-    def _parse_tx_channel_assign(ad9082_params: List[Dict[str, Any]]) -> List[List[List[int]]]:
-        r = []
-        for mxfe_idx, p in enumerate(ad9082_params):
-            q: List[List[int]] = [[], [], [], []]  # AD9082 has 4 DACs
-            # TODO: consider to share validation method with ad9081 wrapper.
-            for dac_name, fducs in p["dac"]["channel_assign"].items():
-                if len(dac_name) != 4 or not dac_name.startswith("dac") or dac_name[3] not in "0123":
-                    raise ValueError("invalid settings of ad9082[{mxfe_idx}].tx.channel_assign")
-                dac_idx = int(dac_name[3])
-                q[dac_idx] = fducs
-            r.append(q)
-        return r
+        self.adc2rline: Dict[Tuple[int, int], Tuple[int, str]] = {}
+        for mxfe_idx, adc_idx in self.active_adcs:
+            gl = self._css.get_rline_from_adc_idx(mxfe_idx, adc_idx)
+            if gl is not None:
+                self.adc2rline[mxfe_idx, adc_idx] = gl
 
     def validate_configuration_integrity(self, mxfe_idx: int, ignore_extraordinary_converter_select: bool = False):
         fw_ver = self._wss.hw_type
@@ -120,19 +108,17 @@ class Quel1E7ResourceMapper:
     def get_active_rlines_of_group(self, group: int) -> Set[str]:
         rlines: Set[str] = set()
 
-        active_adcs = self.get_active_adc()
-        for (g, rl), adc in self.adc_idx.items():
-            if adc in active_adcs and g == group:
+        for g, rl in self.adc2rline.values():
+            if g == group:
                 rlines.add(rl)
         return rlines
 
     def get_active_rlines_of_mxfe(self, mxfe_idx: int) -> Set[Tuple[int, str]]:
         rlines: Set[Tuple[int, str]] = set()
 
-        adcs = self.get_active_adc_of_mxfe(mxfe_idx)
-        for (group, rline), adc in self.adc_idx.items():
-            if adc in adcs:
-                rlines.add((group, rline))
+        for (m, c), (g, rl) in self.adc2rline.items():
+            if m == mxfe_idx:
+                rlines.add((g, rl))
         return rlines
 
     def resolve_rline(self, group: int, rline: Union[None, str]) -> str:
@@ -153,20 +139,20 @@ class Quel1E7ResourceMapper:
 
         return rline
 
-    def get_awgs_of_group(self, group: int) -> Set[int]:
+    def get_awgs_of_mxfe(self, mxfe_idx: int) -> Set[int]:
         # Notes: group must be validated at box-level
-        return {v for k, v in self._AWGS_FROM_FDUC.items() if k[0] == group}
+        return {v for k, v in self._AWGS_FROM_FDUC.items() if k[0] == mxfe_idx}
 
     def get_awg_of_line(self, group: int, line: int) -> Set[int]:
         # Notes: line must be validated at box-level
-        mxfe_idx, dac_idx = self.dac_idx[group, line]
-        fducs = self.dac2fduc[mxfe_idx][dac_idx]
+        mxfe_idx, _ = self._css.get_dac_idx(group, line)
+        fducs = self._css.get_fduc_idx(group, line)
         return {self._AWGS_FROM_FDUC[mxfe_idx, fduc] for fduc in fducs}
 
     def get_awg_of_channel(self, group: int, line: int, channel: int) -> int:
         # Notes: channel must be validated at box-level
-        mxfe_idx, dac_idx = self.dac_idx[(group, line)]
-        fducs = self.dac2fduc[mxfe_idx][dac_idx]
+        mxfe_idx, _ = self._css.get_dac_idx(group, line)
+        fducs = self._css.get_fduc_idx(group, line)
         if channel < len(fducs):
             return self._AWGS_FROM_FDUC[mxfe_idx, fducs[channel]]
         else:
@@ -180,7 +166,7 @@ class Quel1E7ResourceMapper:
 
     def get_capture_module_of_rline(self, group: int, rline: str) -> int:
         # Notes: rline must be validated at box-level
-        mxfe_idx, adc_idx = self.adc_idx[group, rline]
+        mxfe_idx, adc_idx = self._css.get_adc_idx(group, rline)
         return self.get_capture_module_of_adc(mxfe_idx, adc_idx)
 
     def get_capture_units_of_rline(self, group: int, rline: str) -> Set[Tuple[int, int]]:

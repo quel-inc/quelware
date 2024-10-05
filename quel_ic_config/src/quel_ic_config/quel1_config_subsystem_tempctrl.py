@@ -25,6 +25,10 @@ class Quel1ConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemBaseSlot):
         # Notes: temperature control is running independently of the control subsystem.
         return Quel1seTempctrlState.RUN
 
+    def get_tempctrl_state_count(self) -> int:
+        # Notes: temperature control is running independently of the control subsystem.
+        return 0
+
     def start_tempctrl(self, new_count: Union[int, None] = None) -> None:
         # Notes: this method should not be called, just exists for the purpose of static analysis.
         logger.warning(f"temperature control starts at power-on in this boxtype (={self._boxtype}), do nothing")

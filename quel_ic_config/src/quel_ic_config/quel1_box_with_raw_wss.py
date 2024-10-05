@@ -7,14 +7,9 @@ from e7awgsw import CaptureParam, WaveSequence
 from quel_clock_master import SequencerClient
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box import Quel1Box, Quel1PortType
-from quel_ic_config.quel1_box_intrinsic import (
-    _complete_ipaddrs,
-    _create_css_object,
-    _create_wss_object,
-    _is_box_available_for,
-)
+from quel_ic_config.quel1_box_intrinsic import _complete_ipaddrs, _create_css_object, _create_wss_object
 from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 
@@ -54,23 +49,23 @@ class Quel1BoxWithRawWss(Quel1Box):
         ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
         if isinstance(boxtype, str):
             boxtype = Quel1BoxType.fromstr(boxtype)
-        if not _is_box_available_for(boxtype):
-            raise ValueError(f"unsupported boxtype: {boxtype}")
+        if boxtype not in cls._PORT2LINE:
+            raise ValueError(f"unsupported boxtype for Quel1Box: {boxtype}")
         if config_options is None:
             config_options = set()
 
         features: Set[Quel1Feature] = set()
         wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyBoxConfigSubsystem = cast(
-            Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+        css: Quel1AnyConfigSubsystem = cast(
+            Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
         )
         return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(
         self,
         *,
-        css: Quel1AnyBoxConfigSubsystem,
+        css: Quel1AnyConfigSubsystem,
         sss: SequencerClient,
         wss: Quel1WaveSubsystem,
         rmap: Union[Quel1E7ResourceMapper, None] = None,

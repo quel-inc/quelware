@@ -1,7 +1,7 @@
 import copy
 import json
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import pytest
 from pydantic.v1.utils import deep_update
@@ -29,6 +29,17 @@ class Ad9082V106Dummy(Ad9082V106Mixin):
         self.device.dev_info.dev_freq_hz = self.param.clock.ref
         self.device.dev_info.dac_freq_hz = self.param.clock.dac
         self.device.dev_info.adc_freq_hz = self.param.clock.adc
+
+        self._interp_cache = (
+            int(self.param.dac.interpolation_rate.main),
+            int(self.param.dac.interpolation_rate.channel),
+        )
+        self._fduc_map_cache: Union[Tuple[Tuple[int, ...], ...], None] = (
+            tuple([int(i) for i in self.param.dac.channel_assign.dac0]),
+            tuple([int(i) for i in self.param.dac.channel_assign.dac1]),
+            tuple([int(i) for i in self.param.dac.channel_assign.dac2]),
+            tuple([int(i) for i in self.param.dac.channel_assign.dac3]),
+        )
 
 
 @pytest.fixture(scope="session")
