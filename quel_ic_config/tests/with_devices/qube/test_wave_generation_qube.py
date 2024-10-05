@@ -61,7 +61,7 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
@@ -182,7 +182,7 @@ def test_all_single_awgs(
     )
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     max_sprious_peek = noise["max_sprious_peek"]
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -242,7 +242,7 @@ def test_vatt(
         via_monitor = True
 
     pwr: Dict[int, float] = {}
-    is_pump = line == 1 and box.css._boxtype in {
+    is_pump = line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -363,7 +363,7 @@ def test_sideband(
         expected_freq = (lo_mhz + (cnco_mhz + fnco_mhz)) * 1e6
     else:
         raise AssertionError
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,

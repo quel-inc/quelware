@@ -45,7 +45,7 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def box(request) -> Quel1Box:
     param0 = request.param
 
@@ -55,7 +55,10 @@ def box(request) -> Quel1Box:
     box.reconnect()
     for mxfe_idx, status in box.link_status().items():
         if not status:
-            raise RuntimeError(f"test is not ready for {param0['box_config']['ipaddr_wss']}:mxfe-{mxfe_idx}")
+            raise RuntimeError(
+                f"test is not ready for {param0['box_config']['ipaddr_wss']}:mxfe-{mxfe_idx} "
+                f"due to invalid link status (= {status})"
+            )
     return box
 
 

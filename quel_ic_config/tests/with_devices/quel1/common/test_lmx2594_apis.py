@@ -3,13 +3,14 @@ import logging
 import pytest
 
 from quel_ic_config.quel1_config_subsystem import QubeConfigSubsystem
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config_utils.init_helper_for_prebox import init_box_with_linkup
+from quel_ic_config.quel_config_common import Quel1BoxType
+from quel_ic_config_utils.init_helper_for_prebox import init_box_with_reconnect
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
+# Notes: leave CNCO_1500MHz setting and test cases as comment for someday.
 TEST_SETTINGS = (
     {
         "box_config": {
@@ -17,14 +18,14 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.74",
             "ipaddr_css": "10.5.0.74",
             "boxtype": Quel1BoxType.fromstr("quel1-a"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
+            # "mxfes_to_linkup": {0, 1},
+            # "config_root": None,
+            # "config_options": [
+            #     Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
+            #     Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
+            #     Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
+            #     Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
+            # ],
         },
     },
     {
@@ -33,30 +34,34 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.60",
             "ipaddr_css": "10.5.0.60",
             "boxtype": Quel1BoxType.fromstr("quel1-b"),
-            "mxfes_to_linkup": {0, 1},
-            "config_root": None,
-            "config_options": [
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
-                Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
-                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
-            ],
+            # "mxfes_to_linkup": {0, 1},
+            # "config_root": None,
+            # "config_options": [
+            #     Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
+            #     Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
+            #     Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
+            #     Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
+            # ],
         },
     },
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request) -> QubeConfigSubsystem:
     param0 = request.param
 
     # TODO: write something to modify boxtype.
 
-    linkstat, css, _, _, _ = init_box_with_linkup(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
+    # linkstat, css, _, _, _ = init_box_with_linkup(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
+    linkstat, css, _, _, _ = init_box_with_reconnect(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
     if isinstance(css, QubeConfigSubsystem):
         for mxfe in css.get_all_groups():
             if not linkstat[mxfe]:
-                raise RuntimeError(f"test is not ready for group-{mxfe}")
+                raise RuntimeError(
+                    f"test is not ready for {param0['box_config']['ipaddr_wss']}:group-{mxfe} "
+                    f"due to the invalid link status (= {linkstat[mxfe]})"
+                )
         return css
     else:
         raise AssertionError

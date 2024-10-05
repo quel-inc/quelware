@@ -52,7 +52,7 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
@@ -76,7 +76,7 @@ def fixtures(request):
     box.easy_stop_all()
     box.activate_monitor_loop(0)
     box.activate_monitor_loop(1)
-    box.css.terminate()
+    del box
 
 
 def make_outdir(param):
@@ -145,7 +145,7 @@ def test_all_single_awgs_with_mixer(
     )
     expected_freq = (lo_mhz - (cnco_mhz + fnco_mhz)) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     max_sprious_peek = -50.0
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -185,10 +185,10 @@ def test_all_single_awgs_with_mixer(
         (5, 1, 0, 1, 5700, 0),
         (6, 1, 0, 2, 5000, 800),
         (7, 1, 1, 0, 2200, 0),
-        (8, 1, 1, 1, 5600, 0),
-        (9, 1, 1, 2, 4900, 800),
-        (10, 1, 2, 0, 2300, 0),
-        (11, 1, 3, 0, 2400, 0),
+        (8, 1, 2, 0, 2300, 0),
+        (9, 1, 3, 0, 2400, 0),
+        (10, 1, 3, 1, 5600, 0),
+        (11, 1, 3, 2, 4900, 800),
     ],
 )
 def test_all_single_awgs_without_mixer(
@@ -222,7 +222,7 @@ def test_all_single_awgs_without_mixer(
     )
     expected_freq = (cnco_mhz + fnco_mhz) * 1e6  # Note that LSB mode (= default sideband mode) is assumed.
     max_sprious_peek = -50.0
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -286,7 +286,7 @@ def test_vatt(
         via_monitor = True
 
     pwr: Dict[int, float] = {}
-    is_pump = line == 1 and box.css._boxtype in {
+    is_pump = line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,
@@ -396,7 +396,7 @@ def test_sideband(
         expected_freq = (lo_mhz + (cnco_mhz + fnco_mhz)) * 1e6
     else:
         raise AssertionError
-    if line == 1 and box.css._boxtype in {
+    if line == 1 and box.css.boxtype in {
         Quel1BoxType.QuEL1_TypeA,
         Quel1BoxType.QuBE_OU_TypeA,
         Quel1BoxType.QuBE_RIKEN_TypeA,

@@ -2,16 +2,37 @@ import logging
 
 import pytest
 
-from quel_ic_config import Quel1BoxType, Quel1Feature, Quel1seProto8ConfigSubsystem
+from quel_ic_config import ExstickgeCoapClientQuel1seRiken8, Quel1BoxType, Quel1Feature, Quel1seRiken8ConfigSubsystem
+from quel_ic_config.quel1se_riken8_config_subsystem import _ExstickgeCoapClientBase
 
 logger = logging.getLogger(__name__)
 
 
+class Quel1seRiken8DummyConfigSubsystem(Quel1seRiken8ConfigSubsystem):
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeCoapClientBase:
+        # Notes: this proxy should be never used due to error check of arguments.
+        return ExstickgeCoapClientQuel1seRiken8(self._css_addr, port, timeout)
+
+
 def test_parameter_validation():
-    css = Quel1seProto8ConfigSubsystem(
-        css_addr="10.254.253.252",
-        boxtype=Quel1BoxType.QuEL1SE_Proto8,
-        features={Quel1Feature.SINGLE_ADC},
+    css = Quel1seRiken8DummyConfigSubsystem(
+        css_addr="10.254.253.254",
+        boxtype=Quel1BoxType.QuEL1SE_RIKEN8,
+        features={Quel1Feature.BOTH_ADC},
+    )
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2, 1, 0),
+        (5,),
+        (4,),
+        (7, 6, 3),
     )
 
     bad_group = (-1, 2, 1.5, "r", None)
@@ -28,9 +49,9 @@ def test_parameter_validation():
         (0, 1): (-1, 1, 1.5, "r", None),
         (0, 2): (-1, 3, 1.5, "r", None),
         (0, 3): (-1, 3, 1.5, "r", None),
-        (1, 0): (-1, 1, 1.5, "r", None),
+        (1, 0): (-1, 3, 1.5, "r", None),
         (1, 1): (-1, 1, 1.5, "r", None),
-        (1, 2): (-1, 3, 1.5, "r", None),
+        (1, 2): (-1, 1, 1.5, "r", None),
         (1, 3): (-1, 3, 1.5, "r", None),
     }
     bad_rchannel = {

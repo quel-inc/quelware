@@ -10,9 +10,6 @@ from quel_ic_config.quel1_config_subsystem import (
     Quel1TypeBConfigSubsystem,
 )
 from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem
-from quel_ic_config.quel1se_proto8_config_subsystem import Quel1seProto8ConfigSubsystem
-from quel_ic_config.quel1se_proto11_config_subsystem import Quel1seProto11ConfigSubsystem
-from quel_ic_config.quel1se_proto_adda_config_subsystem import Quel1seProtoAddaConfigSubsystem
 from quel_ic_config.quel1se_riken8_config_subsystem import (
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
@@ -29,9 +26,6 @@ logger = logging.getLogger()
         (Quel1TypeAConfigSubsystem,),
         (Quel1TypeBConfigSubsystem,),
         (Quel1NecConfigSubsystem,),
-        (Quel1seProtoAddaConfigSubsystem,),
-        (Quel1seProto8ConfigSubsystem,),
-        (Quel1seProto11ConfigSubsystem,),
         (Quel1seAddaConfigSubsystem,),
         (Quel1seRiken8ConfigSubsystem,),
         (Quel1seRiken8DebugConfigSubsystem,),

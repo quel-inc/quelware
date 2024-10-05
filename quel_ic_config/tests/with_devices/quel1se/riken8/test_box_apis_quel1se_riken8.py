@@ -36,7 +36,7 @@ TEST_SETTINGS = (
 )
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS)
+@pytest.fixture(scope="module", params=TEST_SETTINGS)
 def box(request):
     param0 = request.param
 
@@ -53,7 +53,7 @@ def box(request):
     box.easy_stop_all()
     box.activate_monitor_loop(0)
     box.activate_monitor_loop(1)
-    box.css.terminate()
+    del box
 
 
 def test_just_run_apis(box):

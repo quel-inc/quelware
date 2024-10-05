@@ -1,5 +1,27 @@
 # 更新リスト
 
+## v0.8.11rc1 (Public PreRelease)
+- QuEL-1 SE RIKEN8モデルのAWGユニットのポートへの標準配置を変更
+   - Port-#7 の AWGユニット数を3から1に減少
+   - Port-#9 の AWGユニット数を1から3に増加
+- QuEL-1 SE の 11GHz版に試験的対応
+- `Quel1Box.reconnect()` の処理方式を変更。
+   - レジスタへの書き込みアクセスを伴うAPIに依存しない より安全なreconnect処理方式に変更。
+- いくつかの内部モジュールのリファクタリング（ユーザに非公開のAPIの変更を含む）
+   - `Quel1AnyConfigSubsystem` が 全てのConfigSubsystemの標準APIを規定
+      - `QuEL1AnyBoxConfigSubsystem` を廃止。 
+   - FDUCの割り当て情報をjsonファイルの内容ではなく、実際のレジスタ設定から引くようにした。
+      - `QuEL1AnyConfigSystem.parse_tx_channel_assign()` を廃止。`get_fduc_idx()`で置き換え。- 
+      - QuEL-1 SE のFDUC割り当てが以前のバージョンと変わるので、齟齬が発生しないようにする目的で、当初の予定よりも早くこの機能を導入した。
+         - linkup時に設定jsonファイルから割り当てを読み込み、レジスタに書き込む。
+         - reconnect時には、レジスタを参照して、現状の割り当てにしたがって動作する。
+   - `E7ResourceMapper` のメソッド名を一部変更。概念の混用を修正。
+      - `get_awgs_of_group()` を `get_awgs_of_mxfe()` に改名。
+- FDUCとDACチャネルの対応づけは「FDUCを降順で並べた順番をDACチャネル番号とする」ことを明文化。
+   - QuEL-1以前の装置の標準設定は変更なし。
+   - QuEL-1 SE RIKEN8モデルはルールに従っていない部分があったので、今回の割り当て変更と共に修正。
+   - 設定jsonファイルの記述において、各DACに紐づけるFDUCのリスト(`param.dac.channe_assign`)が降順に並んでいない場合には、警告を出すとともに順番の入れ替えが発生する。
+
 ## v0.8.10 (Public Release)
 - ソースコードのファイルツリーの大規模変更。
 - `quel1_clear_sequence`コマンドを追加。未実行の時刻指定型コマンドをキャンセルするときに使う。

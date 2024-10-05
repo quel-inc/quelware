@@ -364,11 +364,7 @@ cd sugita_experimental/quel_ic_config
 
 ## 拡張モジュールのStubの管理
 ### 更新方法
-`adi_ad9081_v106/__init__.pyi` は以下で生成したファイルに手で修正を加えて作成している。
-```shell
-PYTHONPATH=. pybind11-stubgen adi_ad9081_v106 --no-setup-py --root-module-suffix="" --ignore-invalid=all --output-dir="./generated"
-```
-手で加える修正は、変更前の adi_ad9081_v106 から `pybind11-stubgen` で生成した `__init__.pyi` と
-リポジトリ内にある `adi_ad9081_v106/__init__.pyi` との差分を参照してほしい。
-手修正が必要になるのは、配列データを引数に取るAPIなのだが、そのようなAPIが追加されていなければ、上記の差分が、作業終了時に保存されているはずである。
-差分は`diff`コマンドで取得できるが、 `diff`コマンドの出力には行番号が含まれているので、単純に `diff` の　`diff` が空にはならないことに注意が必要だ。
+`helper/rebuild_v106.sh` を実行すればよい。
+ただし、スタブを生成する前に対象のライブラリをインストールしておくと話が簡単になるので、依存パッケージを所定の場所に配置しておく
+必要がある。
+その依存パッケージの配置手順については、[`GETTING_STARTED.md`](./GETTING_STARTED.md) に記載がある。

@@ -9,6 +9,7 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
+    Quel1ConfigSubsystemNoRfswitch,
     Quel1ConfigSubsystemRfswitch,
     Quel1ConfigSubsystemRoot,
 )
@@ -355,7 +356,7 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         return r
 
 
-class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
+class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfswitch):
     __slots__ = ()
 
     _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {
@@ -387,7 +388,7 @@ class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem):
         )
 
 
-class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem):
+class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfswitch):
     __slots__ = ()
 
     _ADC_IDX: Dict[Tuple[int, str], Tuple[int, int]] = {}
@@ -518,6 +519,7 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
 
 class Quel1NecConfigSubsystem(
     QuelMeeBoardConfigSubsystem,
+    Quel1ConfigSubsystemNoRfswitch,
 ):
     __slots__ = ()
 

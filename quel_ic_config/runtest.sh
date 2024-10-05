@@ -3,7 +3,7 @@
 set -eu
 
 usage() {
-  echo "Usage: $0 [ -p(C|S|F) ] [ -d(C|S|F|8|T) ] [ -c(C|S|F) ] [ -l ] [ -h ]"
+  echo "Usage: $0 [ -d(C|S|Sr|F|8|8r|T|11r|N) ] [ -c(C|S|F|8) ] [ -l ] [ -h ]"
 }
 
 is_venv() {
@@ -71,10 +71,10 @@ function testenv_setup_classic {
 
 # Notes: currently, SIMPLEMULTI_CLASSIC firmware is flahsed in the SPI flash memory.
 function test_cli_classic {
-  echo "step 0 ================ (powercycling staging-058)"
+  echo "step 0 ================ (powercycling quel1 boxes )"
   pe_switch_powercycle --ipaddr 10.250.0.102 --idx 7  # for 10.1.0.58
-  echo "step 1 ================ (powercycling staging-074)"
   pe_switch_powercycle --ipaddr 10.250.0.102 --idx 6  # for 10.1.0.74
+  pe_switch_powercycle --ipaddr 10.250.0.102 --idx 5  # for 10.1.0.60
   echo "step 2 ================ (get linkstatus of staging-058, should be 'no datalink' for both mxfe)"
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a || true
   echo "step 3 ================ (taking linkup statistics of staging-058:#0, it should link up five times)"
@@ -90,8 +90,9 @@ function test_cli_classic {
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a
   echo "step 8 ================ (link up staging-074)"
   quel1_linkup --ipaddr_wss 10.1.0.74 --boxtype quel1-a --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1,2,3,4,5,6,7 --ignore_lock_failure_of_lmx2594 0,1,2,3,4,5,6,7,8,9
-  echo "step 9 ================ (check the linkstatus of staging-074, both mxfes should be 'healthy')"
+  echo "step 9 ================ (check the linkstatus of staging-074 and staging-060, both mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
   echo "step 10 ================ (dumping the current config of staging-074)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.74 --boxtype quel1-a > artifacts/dump_port_staging-074.txt
   quel1_dump_port_config --ipaddr_wss 10.1.0.58 --boxtype quel1-a > artifacts/dump_port_staging-058.txt
@@ -153,6 +154,34 @@ function test_cli_feedback {
   quel1_dump_port_config --ipaddr_wss 10.1.0.60 --boxtype quel1-b > artifacts/dump_port_staging-060.txt
 }
 
+function test_cli_8 {
+  echo "step 7 ================ (powercycleing staging-094)"
+  ./helpers/powercycle_quel_ci_env.sh 094
+  sleep 15  # waiting for booting up
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 || true
+
+  echo "step 8 ================ (link up first time after reboot)"
+  quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1 --ignore_lock_failure_of_lmx2594 0,1,2,3,4
+
+  echo "step 8.1 ================ (check the linkstatus of staging-094, all the 2 mxfes should be 'healthy')"
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+
+  echo "step 8.2 ================ (link up again)"
+  quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+
+  echo "step 8.3 ================ (check the linkstatus of staging-094, all the 2 mxfes should be 'healthy')"
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+
+  echo "step 9 ================ (link up all in parallel)"
+  quel1_parallel_linkup --conf helpers/quel_ci_env_quel1se-riken8-only.yaml
+
+  echo "step 9.1 ================ (check the linkstatus of staging-xxx, all the mxfes should be 'healthy')"
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+
+  echo "step 10 ================ (dumping the current config of staging-xxx)"
+  quel1_dump_port_config --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 > artifacts/dump_port_staging-094.txt
+}
+
 
 if [ "${testenv_setup}" == "C" ]; then
   testenv_setup_classic
@@ -168,6 +197,8 @@ elif [ "${test_cli}" == "S" ]; then
   test_cli_standard
 elif [ "${test_cli}" == "F" ]; then
   test_cli_feedback
+elif [ "${test_cli}" == "8" ]; then
+  test_cli_8
 fi
 
 if [ "${test_with_device}" == "C" ]; then
@@ -192,10 +223,13 @@ elif [ "${test_with_device}" == "F" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs
 elif [ "${test_with_device}" == "8" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
-  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se_riken8
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8
 elif [ "${test_with_device}" == "8r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
-  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se_riken8 --ignore=tests/with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se_riken8/test_wave_generation_quel1se_riken8_port.py
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawrss.py
+elif [ "${test_with_device}" == "11r" ]; then
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/fujitsu11
 elif [ "${test_with_device}" == "N" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec
 elif [ "${test_with_device}" == "T" ]; then

@@ -39,7 +39,7 @@ OUTPUT_SETTING = {
 }
 
 
-@pytest.fixture(scope="session", params=DEVICE_SETTINGS)
+@pytest.fixture(scope="module", params=DEVICE_SETTINGS)
 def fixtures(request):
     param0 = request.param
 
@@ -54,6 +54,7 @@ def fixtures(request):
     yield make_outdir(param0["label"]), box
 
     box.easy_stop_all()
+    del box
 
 
 def make_outdir(label: str):
@@ -62,7 +63,7 @@ def make_outdir(label: str):
     dirpath = OUTPUT_SETTING["spectrum_image_path"] / label
     if os.path.exists(dirpath):
         shutil.rmtree(dirpath)
-    os.makedirs(dirpath / label)
+    os.makedirs(dirpath)
     return dirpath
 
 

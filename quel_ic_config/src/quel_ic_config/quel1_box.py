@@ -12,13 +12,12 @@ import numpy.typing as npt
 from quel_clock_master import SequencerClient
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyBoxConfigSubsystem
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box_intrinsic import (
     Quel1BoxIntrinsic,
     _complete_ipaddrs,
     _create_css_object,
     _create_wss_object,
-    _is_box_available_for,
 )
 from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, Quel1WaveSubsystem
@@ -223,6 +222,25 @@ class Quel1Box:
         12: {8, 10, 9, 11},
     }
 
+    _PORT2LINE_QuEL1SE_FUJITSU11_TypeB: Dict[Quel1PortType, Tuple[int, Union[int, str]]] = {
+        1: (0, 0),
+        2: (0, 2),
+        3: (0, 1),
+        4: (0, 3),
+        5: (0, "m"),
+        # 6: group-0 monitor-out
+        8: (1, 0),
+        9: (1, 2),
+        10: (1, 1),
+        11: (1, 3),
+        12: (1, "m"),
+        # 13: group-1 monitor-out
+    }
+
+    _LOOPBACK_QuEL1SE_FUJITSU11_TypeB: Dict[Quel1PortType, Set[Quel1PortType]] = {
+        5: {1, 3, 2, 4},
+        12: {8, 10, 9, 11},
+    }
     _PORT2LINE: Final[Dict[Quel1BoxType, Dict[Quel1PortType, Tuple[int, Union[int, str]]]]] = {
         Quel1BoxType.QuBE_OU_TypeA: _PORT2LINE_QuBE_OU_TypeA,
         Quel1BoxType.QuBE_OU_TypeB: _PORT2LINE_QuBE_OU_TypeB,
@@ -234,6 +252,7 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8DBG: _PORT2LINE_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_RIKEN8: _PORT2LINE_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _PORT2LINE_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _PORT2LINE_QuEL1SE_FUJITSU11_TypeB,
     }
 
     _LOOPBACK: Final[Dict[Quel1BoxType, Dict[Quel1PortType, Set[Quel1PortType]]]] = {
@@ -247,6 +266,7 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8DBG: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_RIKEN8: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _LOOPBACK_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _LOOPBACK_QuEL1SE_FUJITSU11_TypeB,
     }
 
     __slots__ = (
@@ -255,17 +275,13 @@ class Quel1Box:
     )
 
     @classmethod
-    def is_applicable_to(cls, boxtype: Quel1BoxType) -> bool:
-        return Quel1BoxIntrinsic.is_applicable_to(boxtype)
-
-    @classmethod
     def create(
         cls,
         *,
         ipaddr_wss: str,
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
-        boxtype: Union[Quel1BoxType, str],
+        boxtype: Quel1BoxType,
         config_root: Union[Path, None] = None,
         config_options: Union[Collection[Quel1ConfigOption], None] = None,
         **options: Collection[int],
@@ -288,23 +304,23 @@ class Quel1Box:
         ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
         if isinstance(boxtype, str):
             boxtype = Quel1BoxType.fromstr(boxtype)
-        if not _is_box_available_for(boxtype):
-            raise ValueError(f"unsupported boxtype: {boxtype}")
+        if boxtype not in cls._PORT2LINE:
+            raise ValueError(f"unsupported boxtype for Quel1Box: {boxtype}")
         if config_options is None:
             config_options = set()
 
         features: Set[Quel1Feature] = set()
         wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyBoxConfigSubsystem = cast(
-            Quel1AnyBoxConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+        css: Quel1AnyConfigSubsystem = cast(
+            Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
         )
         return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(
         self,
         *,
-        css: Quel1AnyBoxConfigSubsystem,
+        css: Quel1AnyConfigSubsystem,
         sss: SequencerClient,
         wss: Quel1WaveSubsystem,
         rmap: Union[Quel1E7ResourceMapper, None] = None,
@@ -312,7 +328,7 @@ class Quel1Box:
         **options: Collection[int],
     ):
         self._dev = Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=rmap, linkupper=linkupper, **options)
-        self._boxtype = css._boxtype
+        self._boxtype = css.boxtype
         if self._boxtype not in self._PORT2LINE:
             raise ValueError(f"unsupported boxtype; {self._boxtype}")
 
@@ -320,7 +336,7 @@ class Quel1Box:
         return f"<{self.__class__.__name__}:{self._dev._wss._wss_addr}:{self.boxtype}>"
 
     @property
-    def css(self) -> Quel1AnyBoxConfigSubsystem:
+    def css(self) -> Quel1AnyConfigSubsystem:
         return self._dev.css
 
     @property
@@ -407,9 +423,6 @@ class Quel1Box:
             ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinary_converter_select_of_mxfe,
             restart_tempctrl=restart_tempctrl,
         )
-
-    def terminate(self):
-        self._dev.terminate()
 
     def link_status(self, ignore_crc_error_of_mxfe: Union[Collection[int], None] = None) -> Dict[int, bool]:
         return self._dev.link_status(ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe)
@@ -1032,7 +1045,7 @@ class Quel1Box:
             if not self.config_validate_box(box_conf):
                 raise ValueError("the provided settings looks to be inconsistent")
 
-    def config_box_from_jsonfile(self, box_conf_filepath: Path, ignore_validation: bool = False):
+    def config_box_from_jsonfile(self, box_conf_filepath: Union[Path, str], ignore_validation: bool = False):
         with open(box_conf_filepath) as f:
             cfg = self._parse_box_conf(json.load(f))
             self.config_box(cfg, ignore_validation)
@@ -1246,7 +1259,7 @@ class Quel1Box:
 
         elif self._dev.is_input_line(group, line):
             if vatt is not None or sideband is not None:
-                raise ValueError(f"no mixer is available for the input {portname}")
+                raise ValueError(f"no configurable mixer is available for the input {portname}")
             if fullscale_current is not None:
                 raise ValueError(f"no DAC is available for the input {portname}")
             if cnco_locked_with is not None:
@@ -1468,7 +1481,7 @@ class Quel1Box:
             cfg1["ports"][str(pidx)] = pcfg1
         return cfg1
 
-    def dump_box_to_jsonfile(self, box_conf_filepath: Path) -> None:
+    def dump_box_to_jsonfile(self, box_conf_filepath: Union[Path, str]) -> None:
         with open(box_conf_filepath, "w") as f:
             json.dump(self._unparse_box_conf(self.dump_box()), f, indent=2)
 

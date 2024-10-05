@@ -1,6 +1,7 @@
 import argparse
 import logging
 from ipaddress import ip_address
+from pathlib import Path
 from typing import Any, Dict, Mapping, Set
 
 import matplotlib
@@ -91,6 +92,16 @@ if __name__ == "__main__":
         type=ip_address,
         required=True,
         help="IP address of clock master",
+    )
+    parser.add_argument(
+        "--png",
+        action="store_true",
+        help="write graphs into a png file",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="don't show graphs on screen",
     )
 
     args = parser.parse_args()
@@ -335,24 +346,32 @@ if __name__ == "__main__":
     boxpool0.init(resync=False)
     pgs0 = PulseGen.create(GEN_VPORT_SETTINGS, boxpool0)
     cps0 = PulseCap.create(CAP_VPORT_SETTINGS, boxpool0)
-    cp_read = cps0["READ"]
-    cp_mon0 = cps0["MON0"]
-    cp_mon1 = cps0["MON1"]
 
-    boxpool0.measure_timediff(cp_mon1)
-    box0 = boxpool0.get_box("BOX0")
+    boxpool0.measure_timediff(cps0["MON1"])
 
     iq0, chunk0 = test_loopback(
-        cp_read, pgs0["GEN00"], {pgs0[f"GEN{idx:02d}"] for idx in (0,)}, boxpool0, power_thr=2000
+        cps0["READ"], pgs0["GEN00"], {pgs0[f"GEN{idx:02d}"] for idx in (0,)}, boxpool0, power_thr=2000
     )
-    plot_iqs({"read-loop: port-#01": iq0})
 
     iq1, chunk1 = test_loopback(
-        cp_mon0, pgs0["GEN01"], {pgs0[f"GEN{idx:02d}"] for idx in (1, 2, 3)}, boxpool0, power_thr=200
+        cps0["MON0"], pgs0["GEN01"], {pgs0[f"GEN{idx:02d}"] for idx in (1, 2, 3)}, boxpool0, power_thr=200
     )
-    plot_iqs({"monitor0-loop: port-#01, port-#02, port-#03": iq1})
 
     iq2, chunk2 = test_loopback(
-        cp_mon1, pgs0["GEN06"], {pgs0[f"GEN{idx:02d}"] for idx in (6, 7, 8, 9)}, boxpool0, power_thr=200
+        cps0["MON1"], pgs0["GEN06"], {pgs0[f"GEN{idx:02d}"] for idx in (6, 7, 8, 9)}, boxpool0, power_thr=200
     )
-    plot_iqs({"monitor1-loop: port-#06, port-#07, port-#08, port-#09": iq2})
+
+    plot_iqs(
+        {
+            "read-loop: port-#01": iq0,
+            "monitor0-loop: port-#01, port-#02, port-#03": iq1,
+            "monitor1-loop: port-#06, port-#07, port-#08, port-#09": iq2,
+        },
+        same_range=False,
+        show_graph=not args.headless,
+        output_filename=Path(str(args.ipaddr_wss) + ".png") if args.png else None,
+    )
+
+    del pgs0
+    del cps0
+    del boxpool0

@@ -175,20 +175,6 @@ def cli_body():
             (1, "r"): {"cnco": 1500_000_000},
             (1, "m"): {"cnco": 1500_000_000},
         },  # 7GHz: may need to reconsider the settings.
-        "2023pseudo": {
-            (0, 0): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (0, 1): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (0, 2): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (0, 3): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (1, 0): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (1, 1): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (1, 2): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (1, 3): {"lo_mult": 105, "cnco": 2500_000_000, "sb": "L"},
-            (0, "r"): {"cnco": 2500_000_000},
-            (0, "m"): {"cnco": 2500_000_000},
-            (1, "r"): {"cnco": 2500_000_000},
-            (1, "m"): {"cnco": 2500_000_000},
-        },  # 8GHz: tentative, should be replaced with 2023
     }
 
     boxtype2freq = {
@@ -199,7 +185,6 @@ def cli_body():
         Quel1BoxType.QuBE_RIKEN_TypeB: "2022b",
         Quel1BoxType.QuEL1_TypeB: "2022b",
         Quel1BoxType.QuEL1_NTT: "ntt",
-        Quel1BoxType.QuEL1SE_Proto8: "2023pseudo",
     }
 
     parser = ArgumentParser(description="a phase fluctuation measurement tool")

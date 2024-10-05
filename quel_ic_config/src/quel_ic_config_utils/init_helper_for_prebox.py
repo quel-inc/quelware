@@ -4,8 +4,8 @@ from typing import Collection, Dict, Sequence, Set, Tuple, Union
 
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
-from quel_ic_config.quel1_anytype import Quel1AnyConfigSubsystem
-from quel_ic_config.quel1_box_intrinsic import _create_css_object, _create_wss_object, _validate_boxtype
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_box_intrinsic import _create_css_object, _create_wss_object
 from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
@@ -138,11 +138,10 @@ def create_box_objects(
     :param config_options: a collection of config options
     :return: QuEL config objects
     """
-    _validate_boxtype(boxtype)
     if config_options is None:
         config_options = set()
     features: Set[Quel1Feature] = set()
-    wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
+    wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)  # Notes: features is updated here.
     css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
     rmap = Quel1E7ResourceMapper(css, wss)
     linkupper = LinkupFpgaMxfe(css, wss, rmap)
@@ -231,7 +230,7 @@ def reconnect_dev(
             if not link_ok[mxfe_idx]:
                 logger.error(f"AD9082-#{mxfe_idx} is not working, check power and link status before retrying")
             else:
-                css.ad9082[mxfe_idx].device_chip_id_get()
+                css.validate_chip_id(mxfe_idx)
 
         except RuntimeError:
             logger.error(f"failed to establish a configuration link with AD9082-#{mxfe_idx}")

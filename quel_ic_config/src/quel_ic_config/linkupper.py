@@ -9,7 +9,7 @@ from typing import Dict, Final, List, Set, Tuple, Union
 import numpy as np
 
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
-from quel_ic_config.quel1_anytype import Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1seTempctrlState
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, Quel1WaveSubsystem
 
@@ -63,6 +63,7 @@ class LinkupStatistic:
 
 class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
+    _SLEEP_BTWN_LINKUP_TRIALS: Final[float] = 0.25
     _DEFAULT_BACKGROUND_NOISE_THRESHOLD: Final[float] = 256.0
     _STAT_HISTORY_MAX_LEN: Final[int] = 1000
 
@@ -77,8 +78,8 @@ class LinkupFpgaMxfe:
         self._statistics: Dict[int, List[LinkupStatistic]] = {}
         self._target_capmods: Dict[int, Set[int]] = {}
 
-    def _validate_mxfe(self, mxfe_idx: int):
-        self._css._validate_mxfe(mxfe_idx)
+    def _validate_mxfe(self, mxfe_idx: int) -> bool:
+        return mxfe_idx in self._css.get_all_mxfes()
 
     def _lookup_capmods_of_mxfe(self, mxfe_idx: int) -> Set[int]:
         rlines = self._rmap.get_active_rlines_of_mxfe(mxfe_idx)
@@ -94,7 +95,7 @@ class LinkupFpgaMxfe:
         valid_capture: bool,
         max_noise_peak: float,
     ):
-        link_status, error_status = self._css.ad9082[mxfe_idx].get_link_status()
+        link_status, error_status = self._css.get_link_status(mxfe_idx)
         if mxfe_idx not in self._statistics:
             self._statistics[mxfe_idx] = []
 
@@ -129,7 +130,7 @@ class LinkupFpgaMxfe:
 
     def init_wss_resources(self, mxfe_idx: int) -> None:
         self._validate_mxfe(mxfe_idx)
-        self._wss.initialize_awgs(self._rmap.get_awgs_of_group(mxfe_idx))
+        self._wss.initialize_awgs(self._rmap.get_awgs_of_mxfe(mxfe_idx))
         capunits: Set[Tuple[int, int]] = set()
         for capmod in self._lookup_capmods_of_mxfe(mxfe_idx):
             capunits.add((capmod, 0))
@@ -156,9 +157,8 @@ class LinkupFpgaMxfe:
         judge_system: bool = False
         for i in range(self._LINKUP_MAX_RETRY):
             if i != 0:
-                sleep_duration = 0.25
-                logger.info(f"waiting {sleep_duration} seconds before retrying linkup")
-                time.sleep(sleep_duration)
+                logger.debug(f"waiting {self._SLEEP_BTWN_LINKUP_TRIALS} seconds before retrying linkup")
+                time.sleep(self._SLEEP_BTWN_LINKUP_TRIALS)
 
             if not self._css.configure_mxfe(
                 mxfe_idx,
@@ -189,12 +189,12 @@ class LinkupFpgaMxfe:
                 judge_adcs &= self.check_adc(mxfe_idx, adc_idx, background_noise_threshold, save_dirpath)
 
             if judge_adcs:
-                logger.info(f"successful system-level link-up of {self._css._css_addr}:mxfe-#{mxfe_idx}")
+                logger.info(f"successful system-level link-up of {self._css.ipaddr_css}:mxfe-#{mxfe_idx}")
                 judge_system = True
                 break
             else:
                 # Notes: info is enough
-                logger.info(f"failed system-level link-up of {self._css._css_addr}:mxfe-#{mxfe_idx}")
+                logger.info(f"failed system-level link-up of {self._css.ipaddr_css}:mxfe-#{mxfe_idx}")
 
         if judge_system:
             if self._css.tempctrl_auto_start_at_linkup:

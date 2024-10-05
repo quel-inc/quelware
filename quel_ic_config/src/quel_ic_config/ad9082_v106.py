@@ -8,7 +8,7 @@ from typing import Any, Collection, Dict, Final, List, Mapping, Sequence, Tuple,
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict, RootModel, ValidationError
+from pydantic import BaseModel, ConfigDict, RootModel, ValidationError, field_validator
 from typing_extensions import Self
 
 import adi_ad9081_v106 as ad9081
@@ -368,6 +368,29 @@ class Ad9082ChannelAssignConfig(NoExtraBaseModel):
             self._as_cpptype_sub(self.dac3),
         ]
 
+    @staticmethod
+    def dac_order(idx: int, v: List[int]) -> List[int]:
+        u = sorted(v, reverse=True)
+        if v != u:
+            logger.warning(f"param.dac.channel_assign[{idx}] is not sorted in reversed order, fix it")
+        return u
+
+    @field_validator("dac0", mode="before")
+    def dac0_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(0, v)
+
+    @field_validator("dac1", mode="before")
+    def dac1_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(1, v)
+
+    @field_validator("dac2", mode="before")
+    def dac2_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(2, v)
+
+    @field_validator("dac3", mode="before")
+    def dac3_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(3, v)
+
 
 class Ad9082InterpolationRateConfig(NoExtraBaseModel):
     channel: _Ad9082FducRateConfigEnum
@@ -590,9 +613,9 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.param: Ad9082Config = self.load_settings(param_in)
         self.device: Final[Device] = Device()
         self.device.callback_set(self._read_reg_cb, self._write_reg_cb, self._delay_us_cb, self._log_write_cb)
-        # for historical reason, use 204b for a while.
-        # the default value will be changed to False if the 204c works well.
-        # it should be removed after the evaluation period, finally.
+        # Notes: caches
+        self._interp_cache: Union[Tuple[int, int], None] = None
+        self._fduc_map_cache: Union[Tuple[Tuple[int, ...], ...], None] = None
 
     def load_settings(self, param_in: Union[str, Dict[str, Any], Ad9082Config]):
         if isinstance(param_in, str):
@@ -710,7 +733,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         param_d.ctle_filter.as_cpptype(self.device.serdes_info.des_settings.ctle_filter)
         param_d.lane_mappings[0].as_cpptype(self.device.serdes_info.des_settings.lane_mapping0)
         param_d.lane_mappings[1].as_cpptype(self.device.serdes_info.des_settings.lane_mapping1)
-        logger.info(f"ctle_filter = {self.device.serdes_info.des_settings.ctle_filter}")
+        logger.debug(f"ctle_filter: {self.device.serdes_info.des_settings.ctle_filter}")
 
     def _set_ser_settings(self, param_s: Ad9082SerConfig) -> None:
         self.device.serdes_info.ser_settings.invert_mask = param_s.invert.as_cpptype()
@@ -739,11 +762,12 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
         self._set_spi_settings(self.param.spi)  # values are set to the device object.
         self._set_serdes_settings(self.param.serdes)  # values are set to a device object.
-        self.device_init()  # the values set above is applied to the device here.
-        time.sleep(wait_after_device_init)
+        if link_init:
+            self.device_init()  # the values set above is applied to the device here.
+            time.sleep(wait_after_device_init)
 
         if use_204b and link_init:
-            # TODO: stop using "FREQ_DISCOUNT" (!)
+            # Notes: "FREQ_DISCOUNT" was deprecated. TODO: will remove it soon.
             dev_ref_clk_hz = int(self.param.clock.ref * self.WORKAROUND_FREQ_DISCOUNT_RATE)
             dac_clk_hz = int(self.param.clock.dac * self.WORKAROUND_FREQ_DISCOUNT_RATE)
             adc_clk_hz = int(self.param.clock.adc * self.WORKAROUND_FREQ_DISCOUNT_RATE)
@@ -752,15 +776,17 @@ class Ad9082V106Mixin(AbstractIcMixin):
             dac_clk_hz = int(self.param.clock.dac)
             adc_clk_hz = int(self.param.clock.adc)
 
-        self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
-
         if link_init:
+            self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
             self._startup_tx(self.param.dac, use_204b, use_bg_cal)
             self._startup_rx(self.param.adc, use_204b)
             self._establish_link()
+        else:
+            self.device.clk_conf_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
+            self.device.dev_info.dev_rev = self.device_chip_id_get().dev_revision
 
         if use_204b and link_init:
-            # TODO: remove it when FREQ_DISCOUNT is removed successfully.
+            # Notes: "FREQ_DISCOUNT" was deprecated. TODO: will remove it soon.
             #       We know this is a completely wrong way. the DISCOUNT_RATE is chosen very carefully to avoid
             #       catastrophy. For the reason of its necessity, ask the senior guys of QuEL.
             self.device.dev_info.dev_freq_hz = self.param.clock.ref
@@ -769,6 +795,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     def _startup_tx(self, param_tx: Ad9082DacConfig, use_204b: bool, use_bg_cal: bool) -> None:
         logger.info("starting-up DACs")
+
+        # Notes: clear it before the modification of its corresponding registers.
+        self._interp_cache = None
+        self._fduc_map_cache = None
 
         if use_204b:
             main_freq: Tuple[int, int, int, int] = cast(
@@ -912,9 +942,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return obj
 
     def calc_dac_fnco_ftw(self, shift_hz: float, fractional_mode=False) -> NcoFtw:
-        obj = NcoFtw.from_frequency(
-            shift_hz, self.device.dev_info.dac_freq_hz // int(self.param.dac.interpolation_rate.main)
-        )
+        obj = NcoFtw.from_frequency(shift_hz, self.device.dev_info.dac_freq_hz // self.get_main_interpolation_rate())
         if not fractional_mode:
             obj.round()
         return obj
@@ -923,7 +951,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return ftw.to_frequency(self.device.dev_info.dac_freq_hz)
 
     def calc_dac_fnco_freq(self, ftw: NcoFtw) -> float:
-        return ftw.to_frequency(self.device.dev_info.dac_freq_hz // int(self.param.dac.interpolation_rate.main))
+        return ftw.to_frequency(self.device.dev_info.dac_freq_hz // self.get_main_interpolation_rate())
 
     def set_dac_cnco(self, dacs: Collection[int], ftw: NcoFtw) -> None:
         # dacs is actually cducs.
@@ -1181,6 +1209,30 @@ class Ad9082V106Mixin(AbstractIcMixin):
         # Notes: one of the given values must be calculated from the actual register values.
         return abs(cur0 - cur1) <= 13
 
+    def _dac_xbar_get(self) -> tuple[tuple[int, ...], ...]:
+        r: list[tuple[int, ...]] = []
+        _, chnl_intrp = self.dac_interpolation_get()
+        for i in range(4):
+            ad9081.dac_select_set(self.device, (1 << i))
+            if chnl_intrp > 1:
+                channels_list: list[int] = []
+                channels = self.hal_reg_get(0x01BA)
+                for j in reversed(range(8)):  # Notes: the order is important!
+                    if channels & (0x01 << j) != 0:
+                        channels_list.append(j)
+                r.append(tuple(channels_list))
+            else:
+                raise NotImplementedError("channel interpolation rate is assumed to be more than 1")
+        return tuple(r)
+
+    def get_fduc_of_dac(self, dac: int) -> Tuple[int, ...]:
+        if not 0 <= dac <= 3:
+            raise ValueError(f"invalid index of dac: {dac}")
+
+        if self._fduc_map_cache is None:
+            self._fduc_map_cache = self._dac_xbar_get()
+        return self._fduc_map_cache[dac]
+
     def get_virtual_adc_select(self) -> List[int]:
         # Notes: 16 comes from the value of JESD M parameter. (see p.68 of UG-1578 rev.A)
         convsel = []
@@ -1192,11 +1244,18 @@ class Ad9082V106Mixin(AbstractIcMixin):
                 convsel.append(v)
         return convsel
 
+    def dac_interpolation_get(self) -> tuple[int, int]:
+        # Notes: (main, channel)
+        if self._interp_cache is None:
+            intrp_mode = self.hal_reg_get(0x01FF)
+            self._interp_cache = (int((intrp_mode >> 4) & 0x0F), int(intrp_mode & 0x0F))
+        return self._interp_cache
+
     def get_main_interpolation_rate(self) -> int:
-        return int(self.param.dac.interpolation_rate.main)
+        return self.dac_interpolation_get()[0]
 
     def get_channel_interpolation_rate(self) -> int:
-        return int(self.param.dac.interpolation_rate.channel)
+        return self.dac_interpolation_get()[1]
 
     def get_temperatures(self) -> Tuple[int, int]:
         temperatures = ChipTemperatures()
