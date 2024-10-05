@@ -1,6 +1,8 @@
 import asyncio
 import hashlib
+import json
 import logging
+import os
 import sys
 from ipaddress import IPv4Address
 from pathlib import Path
@@ -115,9 +117,15 @@ def update_exstickge_zephyr_common(cmd_name: str, bitfile_name: str):
     bitfile: Path = bitfiles[args.firmware]
     elffile: Path = bitfile.parent / "zephyr.elf"
     mmifile: Path = bitfile.parent / "itcm.mmi"
+    pchfile = bitfile.parent / "bin_patch.json"
 
     try:
-        eelfpath: Path = obj.make_embedded_elf(elfpath=elffile, ipaddr=args.ipaddr)
+        if os.path.exists(pchfile):
+            with open(pchfile) as f:
+                pchdict = json.load(f)
+        else:
+            pchdict = {}
+        eelfpath: Path = obj.make_embedded_elf(elfpath=elffile, ipaddr=args.ipaddr, patch_dict=pchdict)
     except Exception as e:
         logger.error("given IP address looks invalid")
         logger.error(e)

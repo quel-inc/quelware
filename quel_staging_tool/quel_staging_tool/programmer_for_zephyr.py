@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Union
+from typing import Dict, Union
 
 from quel_staging_tool.quel_xilinx_fpga_programmer import QuelXilinxFpgaProgrammer
 from quel_staging_tool.run_vivado_batch import run_vivado_batch
@@ -25,25 +25,41 @@ class QuelXilinxFpgaProgrammerZephyr(QuelXilinxFpgaProgrammer):
 
     @classmethod
     def encode_ipaddr(cls, ipaddr: ipaddress.IPv4Address) -> bytes:
-        ipaddr_str = str(ipaddr).split("/")[0]
+        ipaddr_str = str(ipaddr)
         body = ipaddr_str.encode()
         space = b"\x00" * (len(cls._DUMMY_IPADDR) - len(body))
         return body + space
 
-    def make_embedded_elf(self, elfpath: Path, ipaddr: ipaddress.IPv4Address) -> Path:
+    def make_embedded_elf(self, elfpath: Path, ipaddr: ipaddress.IPv4Address, patch_dict: Dict[str, str]) -> Path:
         with open(elfpath, "rb") as f:
-            obj = f.read()
-            pos = obj.find(self._DUMMY_IPADDR)
-            if pos < 0:
-                raise RuntimeError("failed to find IP ADDRESS marker")
+            obj = bytearray(f.read())
 
-        ipaddr_str = str(ipaddr).split("/")[0]
-        outpath = Path(self._tmpdir.name) / f"{ipaddr_str}.elf"
+        # Notes: embedding IP address
+        pos = obj.find(self._DUMMY_IPADDR)
+        if pos < 0:
+            raise RuntimeError("failed to find IP ADDRESS marker")
+        encoded_ipaddr = self.encode_ipaddr(ipaddr)
+        obj[pos : pos + len(encoded_ipaddr)] = encoded_ipaddr
+
+        # Notes: applying replace_dict
+        for orig, mod in patch_dict.items():
+            pos = obj.find(orig.encode())
+            if pos < 0:
+                raise RuntimeError(f"failed to find marker '{orig}', which is supposed to be replaced with '{mod}'")
+            if len(orig) < len(mod):
+                raise RuntimeError(f"it is impossible to fit '{mod}' at the marker '{orig}'")
+            elif len(orig) == len(mod):
+                bmod = mod.encode()
+            else:
+                bmod = mod.encode()
+                bmod += b"\x00" * (len(orig) - len(bmod))
+            obj[pos : pos + len(orig)] = bmod
+
+        # Notes: writing modified elf binary
+        outpath = Path(self._tmpdir.name) / f"{str(ipaddr)}.elf"
         with open(outpath, "wb") as g:
-            g.write(obj[:pos])
-            a = self.encode_ipaddr(ipaddr)
-            g.write(a)
-            g.write(obj[pos + len(a) :])
+            g.write(obj)
+
         return outpath
 
     def make_macaddr_bin(self, macaddr: str) -> Path:
