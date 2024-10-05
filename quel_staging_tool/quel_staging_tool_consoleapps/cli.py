@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -83,9 +84,15 @@ def program_exstickge_zephyr_common(bitfile_name: str):
     bitfile = bitfiles[args.firmware]
     elffile = bitfile.parent / "zephyr.elf"
     mmifile = bitfile.parent / "itcm.mmi"
+    pchfile = bitfile.parent / "bin_patch.json"
 
     try:
-        eelfpath = obj.make_embedded_elf(elfpath=elffile, ipaddr=args.ipaddr)
+        if os.path.exists(pchfile):
+            with open(pchfile) as f:
+                pchdict = json.load(f)
+        else:
+            pchdict = {}
+        eelfpath = obj.make_embedded_elf(elfpath=elffile, ipaddr=args.ipaddr, patch_dict=pchdict)
         macaddrpath = obj.make_macaddr_bin(args.macaddr)
     except Exception as e:
         logger.error("given IP address or MAC address looks invalid")

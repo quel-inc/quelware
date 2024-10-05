@@ -13,6 +13,8 @@ function hs2_color_to_id {
     echo 210249B2B992
   elif [ "$1" == "wht" ]; then
     echo 210249B87FAE
+  elif [ "$1" == "gry" ]; then
+    echo 210249B87F93
   else
     echo xxx
   fi
@@ -20,7 +22,8 @@ function hs2_color_to_id {
 
 R8F=quel1se-riken8_20240731
 R8V="v1.2.1"
-F11F=quel1se-fujitsu11_20240731
+F11FA=quel1se-fujitsu11-a_20240731
+F11FB=quel1se-fujitsu11-b_20240731
 F11V="v1.2.1"
 
 function program {
@@ -28,10 +31,17 @@ function program {
   "R8")
     fwid=${R8F}
     vstr=${R8V}
+    bxtpstr="quel1se-riken8"
     ;;
-  "F11")
-    fwid=${F11F}
+  "F11A")
+    fwid=${F11FA}
     vstr=${F11V}
+    bxtpstr="quel1se-fujitsu11-a"
+    ;;
+  "F11B")
+    fwid=${F11FB}
+    vstr=${F11V}
+    bxtpstr="quel1se-fujitsu11-b"
     ;;
   *)
     echo "invalid type of firmware: $3"
@@ -59,12 +69,18 @@ function program {
     return 1
   fi
 
-  v=$(coap-client -m get "coap://${2}/version/firmware")
-  if [ "$v" != "${vstr}" ]; then
-    echo "ERROR: unexpected version of firmware $v"
+  v=$(coap-client -m get "coap://${2}/conf/boxtype")
+  if [ "$v" != "${bxtpstr}" ]; then
+    echo "ERROR: unexpected boxtype of firmware $v"
+    return 1
+  fi
+
+  u=$(coap-client -m get "coap://${2}/version/firmware")
+  if [ "$u" != "${vstr}" ]; then
+    echo "ERROR: unexpected version of firmware $u"
     return 1
   else
-    echo "INFO: programming firmware $v is finished successfully"
+    echo "INFO: programming firmware $v:$u is finished successfully"
     return 0
   fi
 }
@@ -291,28 +307,28 @@ function select_quel1se {
     program 00-1B-1A-EE-01-DC	10.5.0.156 R8 "$2"
     ;;
   "157")
-    program 00-1B-1A-EE-01-E3 10.5.0.157 F11 "$2"
+    program 00-1B-1A-EE-01-E3 10.5.0.157 F11A "$2"
     ;;
   "158")
-    program 00-1B-1A-EE-01-EF 10.5.0.158 F11 "$2"
+    program 00-1B-1A-EE-01-EF 10.5.0.158 F11A "$2"
     ;;
   "159")
-    program 00-1B-1A-EE-01-E9 10.5.0.159 F11 "$2"
+    program 00-1B-1A-EE-01-E9 10.5.0.159 F11A "$2"
     ;;
   "160")
-    program 00-1B-1A-EE-01-EA 10.5.0.160 F11 "$2"
+    program 00-1B-1A-EE-01-EA 10.5.0.160 F11A "$2"
     ;;
   "161")
-    program 00-1B-1A-EE-01-EB 10.5.0.161 F11 "$2"
+    program 00-1B-1A-EE-01-EB 10.5.0.161 F11A "$2"
     ;;
   "162")
-    program 00-1B-1A-EE-01-EC 10.5.0.162 F11 "$2"
+    program 00-1B-1A-EE-01-EC 10.5.0.162 F11A "$2"
     ;;
   "163")
-    program 00-1B-1A-EE-01-ED 10.5.0.163 F11 "$2"
+    program 00-1B-1A-EE-01-ED 10.5.0.163 F11B "$2"
     ;;
   "164")
-    program 00-1B-1A-EE-01-EE 10.5.0.164 F11 "$2"
+    program 00-1B-1A-EE-01-EE 10.5.0.164 F11B "$2"
     ;;
   "000")
     program 00-1B-1A-EE-01-4A 192.168.192.4 R8 "$2"
@@ -324,7 +340,7 @@ function select_quel1se {
 }
 
 if [ $# -lt 2 ]; then
-  echo "Usage: $0 box_number_in_3_digits red|ylw|grn|blk|wht"
+  echo "Usage: $0 box_number_in_3_digits red|ylw|grn|blk|wht|gry"
   exit 1
 fi
 

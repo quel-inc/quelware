@@ -3,8 +3,8 @@ import time
 from ipaddress import IPv4Address
 
 from ping3 import ping
-from quel_ic_config import ExstickgeCoapClientQuel1seRiken8
 
+from quel_ic_config import ExstickgeCoapClientQuel1seRiken8
 from quel_staging_tool import Au50Programmer, ExstickgeProgrammer, QuelXilinxFpgaProgrammerZephyr
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def test_device_exstickge_zephyr():
     elffile = bitfile.parent / "zephyr.elf"
     mmifile = bitfile.parent / "itcm.mmi"
 
-    eelfpath = obj.make_embedded_elf(elfpath=elffile, ipaddr=ipaddr)
+    eelfpath = obj.make_embedded_elf(elfpath=elffile, ipaddr=ipaddr, patch_dict={})
     macaddrpath = obj.make_macaddr_bin(macaddr)
     ebitpath = obj.make_embedded_bit(bitpath=bitfile, mmipath=mmifile, elfpath=eelfpath)
 
