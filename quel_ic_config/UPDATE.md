@@ -2,13 +2,13 @@
 
 ## v0.8.11rc2 (Public PreRelease)
 - QuEL-1 SE RIKEN8モデルのAWGユニットのポートへの標準配置を変更
-   - Port-#7 の AWGユニット数を3から1に減少
-   - Port-#9 の AWGユニット数を1から3に増加
+   - Port-06, -07, -08, -09  の AWGユニット数のデフォルト値を1, 3, 3, 1 に変更。
+   - リンクアップ時にAWGユニットの割り当てプリセットを選択可能にした。
 - QuEL-1 SE の 11GHz版に試験的対応
-- 装置の初期化パラメタを与える先を `Quel1Box.create()` から、`QuelBox.relinkup()` へ遅延するように変更した。
-   - `create()` クラスメソッドから、`config_root`, `config_options` 引数を除去。
-   - `relinkup()` メソッドに、`config_root`, `config_options` 引数を追加。
-   - `reconnect()`時の設定状態の取得は、ハードウェアレジスタだけを参照するようにしたので、初期化パラメタをファイルから読む必要がなくなった。
+- 装置の初期化パラメタを与える先を `Quel1Box.create()` から、`QuelBox.relinkup()` へ変更し、指定タイミングを遅延させた。
+   - `Quel1Box.create()` クラスメソッドから、`config_root`, `config_options` 引数を除去。
+   - `Quel1Box.relinkup()` メソッドに、`config_root`, `config_options` 引数を追加。
+   - `reconnect()`時の設定状態の取得は、ハードウェアレジスタだけを参照するようにした。
 - いくつかの内部モジュールのリファクタリング（ユーザに非公開のAPIの変更を含む）
    - `Quel1AnyConfigSubsystem` が 全てのConfigSubsystemの標準APIを規定
       - `QuEL1AnyBoxConfigSubsystem` を廃止。 
