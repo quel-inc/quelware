@@ -1,7 +1,6 @@
 import logging
 import time
-from pathlib import Path
-from typing import Any, Collection, Dict, Tuple, Union, cast
+from typing import Any, Collection, Dict, Set, Tuple, Union, cast
 
 from quel_ic_config.exstickge_coap_client import _ExstickgeCoapClientBase, get_exstickge_server_info
 from quel_ic_config.exstickge_proxy import LsiKindId
@@ -14,7 +13,7 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemPathselectorboardGpioMixin,
     Quel1ConfigSubsystemRoot,
 )
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +31,18 @@ class _Quel1seConfigSubsystemBase(
 
     _PROXY_CLASSES: Tuple[type, ...]
 
+    _MXFE_IDXS: Set[int] = {0, 1}
+    _LMX2594_OF_MXFES: Tuple[int, ...] = (0, 1)
+
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        Quel1ConfigSubsystemRoot.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        Quel1ConfigSubsystemRoot.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
         self._construct_ad9082()
         self._construct_lmx2594()
         self._construct_adrf6780()
@@ -73,13 +70,19 @@ class _Quel1seConfigSubsystemBase(
         else:
             raise RuntimeError("no CoAP firmware is running on exstickge")
 
-    def configure_all_mxfe_clocks(self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None) -> None:
+    def configure_all_mxfe_clocks(
+        self, param: dict[str, Any], ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
+    ) -> None:
         if ignore_lock_failure_of_lmx2594 is None:
             ignore_lock_failure_of_lmx2594 = {}
 
         for group in range(2):
             lmx2594_idx = 0 + group
-            self.init_lmx2594(lmx2594_idx, ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594)
+            self.init_lmx2594(
+                lmx2594_idx,
+                param["lmx2594"][lmx2594_idx],
+                ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594,
+            )
 
     def get_ad9082_hard_reset(self, mxfe_idx: int) -> bool:
         # Notes: re-consider better way
@@ -100,15 +103,16 @@ class _Quel1seConfigSubsystemBase(
     def configure_mxfe(
         self,
         mxfe_idx: int,
+        param: Dict[str, Any],
         *,
         hard_reset: bool = False,
         soft_reset: bool = False,
-        mxfe_init: bool = False,
         use_204b: bool = True,
         use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
     ) -> bool:
         self._validate_group(mxfe_idx)
+
         if hard_reset:
             logger.info(f"asserting a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
             self.set_ad9082_hard_reset(mxfe_idx, True)
@@ -118,10 +122,29 @@ class _Quel1seConfigSubsystemBase(
             logger.info(f"negating a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
             self.set_ad9082_hard_reset(mxfe_idx, False)
 
-        self.ad9082[mxfe_idx].initialize(
-            reset=soft_reset, link_init=mxfe_init, use_204b=use_204b, use_bg_cal=use_bg_cal
+        self.ad9082[mxfe_idx].configure(
+            param["ad9082"][mxfe_idx], reset=soft_reset, use_204b=use_204b, use_bg_cal=use_bg_cal
         )
-        return self.check_link_status(mxfe_idx, mxfe_init, ignore_crc_error)
+        return self.check_link_status(mxfe_idx, True, ignore_crc_error)
+
+    def reconnect_mxfe(
+        self,
+        mxfe_idx: int,
+        *,
+        ignore_crc_error: bool = False,
+    ) -> bool:
+        self._validate_mxfe(mxfe_idx)
+        pll = self.lmx2594[self._LMX2594_OF_MXFES[mxfe_idx]]
+        dr = pll.get_divider_ratio()[0]  # Notes: assuming that OUTA is used.
+        se = pll.get_sync_enable()
+        if dr == 0:
+            raise RuntimeError(f"PLL of AD9082-#{mxfe_idx} is not activated")
+        ref_clk = pll.get_lo_multiplier() * 100_000_000 // dr
+        if se:
+            ref_clk *= 4
+
+        self.ad9082[mxfe_idx].reconnect(ref_clk)
+        return self.check_link_status(mxfe_idx, False, ignore_crc_error)
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         """dumping the current configuration of a transmitter channel.

@@ -1,7 +1,7 @@
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Dict, List, Sequence, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Sequence, Set, Tuple, Union, cast
 
 from quel_ic_config.exstickge_coap_tempctrl_client import Quel1seTempctrlState, _ExstickgeCoapClientQuel1seTempctrlBase
 from quel_ic_config.quel1_config_subsystem_common import (
@@ -46,7 +46,7 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
         self._tempctrl_auto_start_at_linkup: bool = self._DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP
         self._tempctrl_watcher = ThreadPoolExecutor(max_workers=1)
 
-    def init_tempctrl(self):
+    def init_tempctrl(self, param: Dict[str, Any]):
         # Notes: currently nothing to do, define it for future.
         pass
 
@@ -261,10 +261,10 @@ class Quel1seConfigSubsystemTempctrlDebugMixin(
         self._construct_ad7490()
         self._construct_powerboard_pwm()
 
-    def init_tempctrl_debug(self) -> None:
-        self.init_tempctrl()
+    def init_tempctrl_debug(self, param: Dict[str, Any]) -> None:
+        self.init_tempctrl(param)
         for idx in range(self._NUM_IC["ad7490"]):
-            self.init_ad7490(idx)
+            self.init_ad7490(idx, param["ad7490"][idx])
 
     def _get_ad7490_readings_direct(self) -> List[List[int]]:
         tll: List[List[int]] = []

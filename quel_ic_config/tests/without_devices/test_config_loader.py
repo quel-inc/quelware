@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 from typing import Any, Dict, Set
@@ -7,6 +6,7 @@ import pytest
 from pydantic.v1.utils import deep_update
 
 from quel_ic_config import QubeConfigSubsystem, Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 
 
 def _remove_comments(settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -199,9 +199,16 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     ],
 )
 def test_config_loader(boxtype: Quel1BoxType, features: Set[Quel1Feature], config_options: Set[Quel1ConfigOption]):
-    qco = QubeConfigSubsystem("241.3.5.6", boxtype, features, Path("src/quel_ic_config/settings"), config_options)
-
-    target = copy.copy(qco._param)
+    qco = QubeConfigSubsystem("241.3.5.6", boxtype)
+    ql = Quel1ConfigLoader(
+        boxtype=boxtype,
+        num_ic=qco.get_num_ics(),
+        config_options=config_options,
+        features=features,
+        config_filename=qco.get_default_config_filename(),
+        config_rootpath=Path("src/quel_ic_config/settings"),
+    )
+    target = ql.load_config()
     del target["meta"]
 
     answer = _load_settings_reference(boxtype, config_options)

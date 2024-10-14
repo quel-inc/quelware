@@ -23,10 +23,10 @@ DEVICE_SETTINGS = (
             "ipaddr_sss": "10.2.0.94",
             "ipaddr_css": "10.5.0.94",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
-            "config_root": None,
-            "config_options": set(),
         },
         "linkup_config": {
+            "config_root": None,
+            "config_options": set(),
             "mxfes_to_linkup": (0, 1),
             "use_204b": False,
         },

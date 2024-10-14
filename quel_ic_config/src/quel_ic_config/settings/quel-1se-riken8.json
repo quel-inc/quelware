@@ -15,7 +15,10 @@
     ],
     [
       "quel-1/ad9082.json",
-      "quel-1se/ad9082_dac_channel_assign_for_riken8_mxfe1.json",
+      "quel-1se/ad9082_dac_channel_assign_for_riken8_mxfe1_1331.json",
+      {"file": "quel-1se/ad9082_dac_channel_assign_for_riken8_mxfe1_3113.json", "option": "se8_mxfe1_awg3113"},
+      {"file": "quel-1se/ad9082_dac_channel_assign_for_riken8_mxfe1_2222.json", "option": "se8_mxfe1_awg2222"},
+      {"file": "quel-1se/ad9082_dac_channel_assign_for_riken8_mxfe1_1331.json", "option": "se8_mxfe1_awg1331"},
       {"file": "quel-1/ad9082_read.json", "feature": "both_adc"},
       {"file": "quel-1/ad9082_monitor.json", "feature": "single_adc"},
       {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe1"},

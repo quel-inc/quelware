@@ -1,4 +1,5 @@
 from collections.abc import Collection
+from pathlib import Path
 from typing import Any, Protocol, Union, runtime_checkable
 
 from quel_ic_config.ad9082_v106 import NcoFtw
@@ -10,6 +11,11 @@ Quel1AnyLineType = Union[int, str]
 
 @runtime_checkable
 class Quel1AnyConfigSubsystem(Protocol):
+    # configuration info
+    def get_default_config_filename(self) -> Path: ...
+
+    def get_num_ics(self) -> dict[str, int]: ...
+
     # introspecting box-info
     @property
     def boxtype(self) -> Quel1BoxType: ...
@@ -26,9 +32,9 @@ class Quel1AnyConfigSubsystem(Protocol):
 
     def get_all_rlines_of_group(self, group: int) -> set[str]: ...
 
-    def get_num_channels_of_line(self, group: int, line: int): ...
+    def get_num_channels_of_line(self, group: int, line: int) -> int: ...
 
-    def get_num_rchannels_of_rline(self, group: int, rline: str): ...
+    def get_num_rchannels_of_rline(self, group: int, rline: str) -> int: ...
 
     # introspecting hardware/firmware info
     def get_num_ic(self, ic_name: str) -> int: ...
@@ -114,11 +120,19 @@ class Quel1AnyConfigSubsystem(Protocol):
         self, group_dac: int, line_dac: int, group_adc: int, rline_adc: str, freq_in_hz: float
     ) -> None: ...
 
+    def get_lo_multiplier(self, group: int, line: Quel1AnyLineType) -> int: ...
+
     def set_lo_multiplier(self, group: int, line: Quel1AnyLineType, freq_multiplier: int) -> bool: ...
+
+    def get_divider_ratio(self, group: int, line: Quel1AnyLineType) -> int: ...
 
     def set_divider_ratio(self, group: int, line: Quel1AnyLineType, divide_ratio: int) -> None: ...
 
+    # def get_vatt(self, group: int, line: int) -> int: ...
+
     def set_vatt(self, group: int, line: int, vatt: int) -> None: ...
+
+    def get_sideband(self, group: int, line: int) -> str: ...
 
     def set_sideband(self, group: int, line: int, sideband: str) -> None: ...
 
@@ -146,18 +160,16 @@ class Quel1AnyConfigSubsystem(Protocol):
 
     # high-level APIs
     def configure_all_mxfe_clocks(
-        self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
+        self, param: dict[str, Any], *, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
     ) -> None: ...
-
-    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool: ...
 
     def configure_mxfe(
         self,
         mxfe_idx: int,
+        param: dict[str, Any],
         *,
         hard_reset: bool = False,
         soft_reset: bool = False,
-        mxfe_init: bool = False,
         use_204b: bool = True,
         use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
@@ -165,9 +177,20 @@ class Quel1AnyConfigSubsystem(Protocol):
 
     def configure_peripherals(
         self,
+        param: dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None: ...
+
+    def reconnect_mxfe(
+        self,
+        mxfe_idx: int,
+        *,
+        ignore_crc_error: bool = False,
+    ) -> bool: ...
+
+    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool: ...
 
     def dump_channel(self, group: int, line: int, channel: int) -> dict[str, Any]: ...
 

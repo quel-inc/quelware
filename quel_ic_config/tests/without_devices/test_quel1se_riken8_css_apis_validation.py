@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from quel_ic_config import ExstickgeCoapClientQuel1seRiken8, Quel1BoxType, Quel1Feature, Quel1seRiken8ConfigSubsystem
+from quel_ic_config import ExstickgeCoapClientQuel1seRiken8, Quel1BoxType, Quel1seRiken8ConfigSubsystem
 from quel_ic_config.quel1se_riken8_config_subsystem import _ExstickgeCoapClientBase
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,6 @@ def test_parameter_validation():
     css = Quel1seRiken8DummyConfigSubsystem(
         css_addr="10.254.253.254",
         boxtype=Quel1BoxType.QuEL1SE_RIKEN8,
-        features={Quel1Feature.BOTH_ADC},
     )
     css.ad9082[0]._fduc_map_cache = (
         (0,),
@@ -29,10 +28,10 @@ def test_parameter_validation():
         (7, 6, 5),
     )
     css.ad9082[1]._fduc_map_cache = (
-        (2, 1, 0),
-        (5,),
-        (4,),
-        (7, 6, 3),
+        (2,),
+        (5, 1, 0),
+        (6, 4, 3),
+        (7,),
     )
 
     bad_group = (-1, 2, 1.5, "r", None)
@@ -49,10 +48,10 @@ def test_parameter_validation():
         (0, 1): (-1, 1, 1.5, "r", None),
         (0, 2): (-1, 3, 1.5, "r", None),
         (0, 3): (-1, 3, 1.5, "r", None),
-        (1, 0): (-1, 3, 1.5, "r", None),
-        (1, 1): (-1, 1, 1.5, "r", None),
-        (1, 2): (-1, 1, 1.5, "r", None),
-        (1, 3): (-1, 3, 1.5, "r", None),
+        (1, 0): (-1, 1, 1.5, "r", None),
+        (1, 1): (-1, 3, 1.5, "r", None),
+        (1, 2): (-1, 3, 1.5, "r", None),
+        (1, 3): (-1, 1, 1.5, "r", None),
     }
     bad_rchannel = {
         (0, "r"): (-1, 1, 1.5, "x", None),
@@ -72,7 +71,7 @@ def test_parameter_validation():
     for g in bad_group:
         logger.info(f"g={g}")
         with pytest.raises(ValueError):
-            css.configure_mxfe(g)  # type: ignore
+            css.configure_mxfe(g, {})  # type: ignore
 
         with pytest.raises(ValueError):
             css.get_link_status(g)  # type: ignore

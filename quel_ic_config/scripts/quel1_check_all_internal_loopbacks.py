@@ -1173,8 +1173,6 @@ if __name__ == "__main__":
             "ipaddr_sss": str(args.ipaddr_sss),
             "ipaddr_css": str(args.ipaddr_css),
             "boxtype": args.boxtype,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         },
     }

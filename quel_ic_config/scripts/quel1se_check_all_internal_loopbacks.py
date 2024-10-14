@@ -117,8 +117,6 @@ if __name__ == "__main__":
             "ipaddr_sss": str(args.ipaddr_sss),
             "ipaddr_css": str(args.ipaddr_css),
             "boxtype": Quel1BoxType.QuEL1SE_RIKEN8,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         },
     }

@@ -18,8 +18,6 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.74",
             "ipaddr_css": "10.5.0.74",
             "boxtype": Quel1BoxType.fromstr("quel1-a"),
-            "config_root": None,
-            "config_options": (),
         },
     },
     {
@@ -28,8 +26,6 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.60",
             "ipaddr_css": "10.5.0.60",
             "boxtype": Quel1BoxType.fromstr("quel1-b"),
-            "config_root": None,
-            "config_options": (),
         },
     },
     # {

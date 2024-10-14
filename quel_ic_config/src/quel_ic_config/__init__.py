@@ -27,6 +27,7 @@ from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box import Quel1Box, Quel1PortType
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic, Quel1LineType
 from quel_ic_config.quel1_box_with_raw_wss import Quel1BoxWithRawWss
+from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 from quel_ic_config.quel1_config_subsystem import (
     ExstickgeSockClientQuel1,
     QubeConfigSubsystem,
@@ -168,6 +169,7 @@ __all__ = (
     "Quel1PortType",
     "Quel1LineType",
     "Quel1BoxIntrinsic",
+    "Quel1ConfigLoader",
     "get_exstickge_server_info",
     "Quel1WaveSubsystem",
     "E7FwType",
