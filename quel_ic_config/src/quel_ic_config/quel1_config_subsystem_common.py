@@ -1,13 +1,9 @@
 import copy
-import json
 import logging
-import os.path as osp
 import time
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import Any, Collection, Dict, Final, List, Mapping, Sequence, Set, Tuple, Union
-
-from pydantic.v1.utils import deep_update
+from typing import Any, Collection, Dict, Final, List, Mapping, Set, Tuple, Union
 
 from quel_ic_config.ad5328 import Ad5328ConfigHelper
 from quel_ic_config.ad9082_v106 import NcoFtw
@@ -18,7 +14,7 @@ from quel_ic_config.lmx2594 import Lmx2594ConfigHelper
 from quel_ic_config.mixerboard_gpio import MixerboardGpioConfigHelper
 from quel_ic_config.pathselectorboard_gpio import PathselectorboardGpioConfigHelper
 from quel_ic_config.powerboard_pwm import PowerboardPwmConfigHelper
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature, Quel1RuntimeOption
+from quel_ic_config.quel_config_common import Quel1BoxType, Quel1RuntimeOption
 from quel_ic_config.quel_ic import (
     Ad5328,
     Ad7490,
@@ -41,11 +37,7 @@ logger = logging.getLogger(__name__)
 class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
     __slots__ = (
         "_css_addr",
-        "_param",
         "_boxtype",
-        "_features",
-        "_config_path",
-        "_config_options",
         "_runtime_options",
         "_proxy",
         "_ad9082",
@@ -95,11 +87,7 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         # variable defined in the importer class
         self._css_addr: str
         self._boxtype: Quel1BoxType
-        self._features: Set[Quel1Feature]
-        self._config_path: Path
-        self._config_options: Set[Quel1ConfigOption]
         self._runtime_options: Set[Quel1RuntimeOption]
-        self._param: Dict[str, List[Dict[str, Any]]]  # TODO: clean up around here!
         self._proxy: _ExstickgeProxyBase
 
         # TODO: types of IC proxy will be reconsidered when controler proxy (e.g. _ExstickgeProxyBase) is generalized.
@@ -204,160 +192,34 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
 
 class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
-    DEFAULT_CONFIG_PATH: Final[Path] = Path(osp.dirname(__file__)) / "settings"
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeProxyBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeProxyBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = 0,
+        timeout: float = 0.0,
         sender_limit_by_binding: bool = False,
     ):
         super(Quel1ConfigSubsystemRoot, self).__init__()
         self._css_addr: str = css_addr
         self._boxtype: Quel1BoxType = boxtype
-        self._features: Set[Quel1Feature] = set(features) if features is not None else {Quel1Feature.SINGLE_ADC}
-        self._config_path: Path = config_path if config_path is not None else self.DEFAULT_CONFIG_PATH
-        self._config_options: Set[Quel1ConfigOption] = set(config_options) if config_options is not None else set()
         self._runtime_options: Set[Quel1RuntimeOption] = set()
-        self._param: Dict[str, Any] = self._load_config()  # TODO: Dict[str, Any] is tentative.
         self._proxy: _ExstickgeProxyBase = self._create_exstickge_proxy(port, timeout, sender_limit_by_binding)
 
     def __del__(self):
         if hasattr(self, "_proxy"):
             self._proxy.terminate()
 
+    def get_default_config_filename(self) -> Path:
+        return Path(self._DEFAULT_CONFIG_JSONFILE)
+
+    def get_num_ics(self) -> Dict[str, int]:
+        return copy.copy(self._NUM_IC)
+
     @abstractmethod
     def _create_exstickge_proxy(self, port: int, timeout: float, sender_limit_by_binding: bool) -> _ExstickgeProxyBase:
         pass
-
-    def _remove_comments(self, settings: Dict[str, Any]) -> Dict[str, Any]:
-        s1: Dict[str, Any] = {}
-        for k, v in settings.items():
-            if not k.startswith("#"):
-                if isinstance(v, dict):
-                    s1[k] = self._remove_comments(v)
-                else:
-                    s1[k] = v
-        return s1
-
-    def _match_conditional_include(self, directive: Mapping[str, Union[str, Sequence[str]]]) -> bool:
-        flag: bool = True
-        file: str = ""
-        for k, v in directive.items():
-            if k == "file":
-                if isinstance(v, str):
-                    file = v
-                else:
-                    raise TypeError(f"invalid type of 'file': {k}")
-            elif k == "boxtype":  # OR
-                if isinstance(v, str):
-                    v = [v]
-                if not isinstance(v, list):
-                    raise TypeError(f"invalid type of 'boxtype': {k}")
-                if self.boxtype.value[1] not in v:
-                    flag = False
-            elif k == "option":  # AND
-                if isinstance(v, str):
-                    v = [v]
-                if not isinstance(v, list):
-                    raise TypeError(f"invalid type of 'option': {k}")
-                for op1 in v:
-                    if Quel1ConfigOption(op1) not in self._config_options:
-                        flag = False
-            elif k == "feature":  # AND
-                if isinstance(v, str):
-                    v = [v]
-                if not isinstance(v, list):
-                    raise TypeError(f"invalid type of 'option': {k}")
-                for ft1 in v:
-                    if Quel1Feature(ft1) not in self._features:
-                        flag = False
-            elif k == "otherwise":
-                if not isinstance(v, str):
-                    raise TypeError(f"invalid type of 'otherwise': {k}")
-            else:
-                raise ValueError(f"invalid key of conditional include: {k}")
-
-        if file == "":
-            raise ValueError(f"no file is specified in conditional include: {directive}")
-        return flag
-
-    def _include_config(
-        self, directive: Union[str, Mapping[str, str], Sequence[Union[str, Mapping[str, str]]]], label_for_log: str
-    ) -> Tuple[Dict[str, Any], Set[Quel1ConfigOption]]:
-        fired_options: Set[Quel1ConfigOption] = set()
-
-        if isinstance(directive, str) or isinstance(directive, dict):
-            directive = [directive]
-
-        config: Dict[str, Any] = {}
-        for d1 in directive:
-            if isinstance(d1, str):
-                with open(self._config_path / d1) as f:
-                    logger.info(f"basic config applied to {label_for_log}: {d1}")
-                    config = deep_update(config, json.load(f))
-            elif isinstance(d1, dict):
-                if self._match_conditional_include(d1):
-                    with open(self._config_path / d1["file"]) as f:
-                        logger.info(f"conditional config applied to {label_for_log}: {d1}")
-                        config = deep_update(config, json.load(f))
-                        if "option" in d1:
-                            option = d1["option"]
-                            if isinstance(option, str):
-                                fired_options.add(Quel1ConfigOption(option))
-                            elif isinstance(option, list):
-                                fired_options.update({Quel1ConfigOption(o) for o in option})
-                            else:
-                                raise AssertionError
-                elif "otherwise" in d1:
-                    with open(self._config_path / d1["otherwise"]) as f:
-                        logger.info(f"'otherwise' part of conditional config applied to {label_for_log}: {d1}")
-                        config = deep_update(config, json.load(f))
-            else:
-                raise TypeError(f"malformed template at {label_for_log}: '{d1}'")
-        if "meta" in config:
-            del config["meta"]
-        return self._remove_comments(config), fired_options
-
-    def _load_config(self) -> Dict[str, Any]:
-        logger.info(f"loading configuration settings from '{self._config_path / self._DEFAULT_CONFIG_JSONFILE}'")
-        logger.info(f"boxtype = {self.boxtype}")
-        logger.info(f"config_options = {self._config_options}")
-        fired_options: Set[Quel1ConfigOption] = set()
-
-        with open(self._config_path / self._DEFAULT_CONFIG_JSONFILE) as f:
-            root: Dict[str, Any] = self._remove_comments(json.load(f))
-
-        config = copy.copy(root)
-        for k0, directive0 in root.items():
-            if k0 == "meta":
-                pass
-            elif k0 in self._NUM_IC.keys():
-                for idx, directive1 in enumerate(directive0):
-                    if idx >= self._NUM_IC[k0]:
-                        raise ValueError(f"too many {k0.upper()}s are found")
-                    config[k0][idx], fired_options_1 = self._include_config(directive1, label_for_log=f"{k0}[{idx}]")
-                    fired_options.update(fired_options_1)
-            else:
-                raise ValueError(f"invalid name of IC: '{k0}'")
-
-        for k1, n1 in self._NUM_IC.items():
-            if len(config[k1]) != n1:
-                raise ValueError(
-                    f"lacking config, there should be {n1} instances of '{k1}', "
-                    f"but actually have {len(config[k1])} ones"
-                )
-
-        for option in self._config_options:
-            if option not in fired_options:
-                logger.warning(f"config option '{str(option)}' is not applicable")
-
-        return config
 
     @property
     def boxtype(self) -> Quel1BoxType:
@@ -372,25 +234,31 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
     @abstractmethod
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         """configure ICs other than MxFEs and PLLs for their reference clock.
 
+        :param param: configuration parameters.
         :param ignore_access_failure_of_adrf6780: a collection of index of ADRF6780 to ignore access failure during the
-                                                  initialization process
+                                                  initialization process.
         :param ignore_lock_failure_of_lmx2594: a collection of index of LMX2594 to ignore PLL lock failure during the
-                                               initialization process
+                                               initialization process.
         :return: None
         """
         pass
 
     @abstractmethod
-    def configure_all_mxfe_clocks(self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None) -> None:
+    def configure_all_mxfe_clocks(
+        self, param: Dict[str, Any], *, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
+    ) -> None:
         """configure PLLs for clocks of MxFEs.
 
+        :param param: configuration parameters.
         :param ignore_lock_failure_of_lmx2594: a collection of index of LMX2594 to ignore PLL lock failure during the
-                                               initialization process
+                                               initialization process.
         :return: None
         """
         pass
@@ -399,10 +267,10 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
     def configure_mxfe(
         self,
         mxfe_idx: int,
+        param: dict[str, Any],
         *,
         hard_reset: bool,
         soft_reset: bool,
-        mxfe_init: bool,
         use_204b: bool,
         use_bg_cal: bool,
         ignore_crc_error: bool,
@@ -410,11 +278,25 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         """configure an MxFE and its related data objects. PLLs for their clock must be set up in advance.
 
         :param mxfe_idx: an index of a group which the target MxFE belongs to.
+        :param param: configuration parameters.
         :param hard_reset: enabling hard reset of the MxFE before the initialization if available.
         :param soft_reset: enabling soft reset of the MxFE before the initialization.
-        :param mxfe_init: enabling the initialization of the MxFE's, not just for initializing the host-side data
-                          objects.
         :param use_204b: using a workaround method to link the MxFE up during the initialization if True.
+        :param ignore_crc_error: ignoring CRC error flag at the validation of the link status if True.
+        :return: True if the target MxFE is available.
+        """
+        pass
+
+    @abstractmethod
+    def reconnect_mxfe(
+        self,
+        mxfe_idx: int,
+        *,
+        ignore_crc_error: bool,
+    ) -> bool:
+        """configure an MxFE and its related data objects. PLLs for their clock must be set up in advance.
+
+        :param mxfe_idx: an index of a group which the target MxFE belongs to.
         :param ignore_crc_error: ignoring CRC error flag at the validation of the link status if True.
         :return: True if the target MxFE is available.
         """
@@ -425,7 +307,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
     def _construct_ad9082(self):
-        self._ad9082 = tuple(Ad9082V106(self._proxy, idx, p) for idx, p in enumerate(self._param["ad9082"]))
+        self._ad9082 = tuple(Ad9082V106(self._proxy, idx) for idx in range(self._NUM_IC["ad9082"]))
         self.allow_dual_modulus_nco = True
 
     def validate_chip_id(self, mxfe_idx: int):
@@ -830,10 +712,14 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
     def lmx2594_helper(self) -> Tuple[Lmx2594ConfigHelper, ...]:
         return self._lmx2594_helper
 
-    def init_lmx2594(self, idx: int, ignore_lock_failure: bool = False) -> bool:
+    def init_lmx2594(
+        self,
+        idx: int,
+        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]],
+        ignore_lock_failure: bool = False,
+    ) -> bool:
         # Notes: ignore_lock_failure is prepared for experimental purposes.
         ic, helper = self._lmx2594[idx], self._lmx2594_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["lmx2594"][idx]
         ic.soft_reset()
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
@@ -943,10 +829,11 @@ class Quel1ConfigSubsystemAd6780Mixin(Quel1ConfigSubsystemBaseSlot):
     def adrf6780_helper(self) -> Tuple[Adrf6780ConfigHelper, ...]:
         return self._adrf6780_helper
 
-    def init_adrf6780(self, idx, ignore_id_mismatch: bool = False) -> bool:
+    def init_adrf6780(
+        self, idx, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]], ignore_id_mismatch: bool = False
+    ) -> bool:
         # Notes: ignore_id_mismatch is a workaround for some ill-designed boards.
         ic, helper = self._adrf6780[idx], self._adrf6780_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["adrf6780"][idx]
         ic.soft_reset(parity_enable=False)
         matched, (chip_id, chip_rev) = ic.check_id()
         if matched:
@@ -1040,9 +927,8 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
     def ad5328_helper(self) -> Tuple[Ad5328ConfigHelper, ...]:
         return self._ad5328_helper
 
-    def init_ad5328(self, idx) -> None:
+    def init_ad5328(self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]) -> None:
         ic, helper = self._ad5328[idx], self._ad5328_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["ad5328"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -1156,9 +1042,9 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
     def rfswitch_helper(self) -> RfSwitchArrayConfigHelper:
         return self._rfswitch_helper
 
-    def init_rfswitch(self) -> None:
+    def init_rfswitch(self, param: Dict[str, Dict[str, Dict[str, Union[int, bool]]]]) -> None:
+        # XXX: = self._param["gpio"][self._rfswitch_gpio_idx]
         helper = self._rfswitch_helper
-        param: Dict[str, Dict[str, Dict[str, Union[int, bool]]]] = self._param["gpio"][self._rfswitch_gpio_idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -1301,9 +1187,9 @@ class Quel1ConfigSubsystemGpioMixin(Quel1ConfigSubsystemBaseSlot):
     def gpio_helper(self) -> Tuple[GenericGpioConfigHelper, ...]:
         return self._gpio_helper
 
-    def init_gpio(self, idx) -> None:
+    def init_gpio(self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]) -> None:
+        # XXX: = self._param["gpio"][idx]
         helper = self.gpio_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["gpio"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -1329,9 +1215,9 @@ class Quel1ConfigSubsystemMixerboardGpioMixin(Quel1ConfigSubsystemBaseSlot):
     def mixerboard_gpio_helper(self) -> Tuple[MixerboardGpioConfigHelper, ...]:
         return self._mixerboard_gpio_helper
 
-    def init_mixerboard_gpio(self, idx) -> None:
+    def init_mixerboard_gpio(self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]) -> None:
+        # XXX: = self._param["mixerboard_gpio"][idx]
         helper = self.mixerboard_gpio_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["mixerboard_gpio"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -1361,9 +1247,11 @@ class Quel1ConfigSubsystemPathselectorboardGpioMixin(Quel1ConfigSubsystemBaseSlo
     def pathselectorboard_gpio_helper(self) -> Tuple[PathselectorboardGpioConfigHelper, ...]:
         return self._pathselectorboard_gpio_helper
 
-    def init_pathselectorboard_gpio(self, idx) -> None:
+    def init_pathselectorboard_gpio(
+        self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]
+    ) -> None:
+        # XXX: = self._param["pathselectorboard_gpio"][idx]
         helper = self.pathselectorboard_gpio_helper[idx]
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["pathselectorboard_gpio"][idx]
         for name, fields in param["registers"].items():
             helper.write_field(name, **fields)
         helper.flush()
@@ -1502,8 +1390,8 @@ class Quel1ConfigSubsystemAd7490Mixin(Quel1ConfigSubsystemBaseSlot):
     def ad7490(self) -> Tuple[Ad7490, ...]:
         return self._ad7490
 
-    def init_ad7490(self, idx) -> None:
-        param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]] = self._param["ad7490"][idx]
+    def init_ad7490(self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]) -> None:
+        # XXX: = self._param["ad7490"][idx]
         self._ad7490[idx].set_default_config(**param["registers"]["Config"])
         # Notes: default_config is not applied to the IC now because it'll be applied just before reading channels.
 

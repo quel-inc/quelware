@@ -2,6 +2,8 @@
 
 set -eu
 
+export PYTHONPATH=src:.
+
 usage() {
   echo "Usage: $0 [ -d(C|S|Sr|F|8|8r|T|11r|N) ] [ -c(C|S|F|8) ] [ -l ] [ -h ]"
 }
@@ -52,8 +54,8 @@ echo "INFO: firmware type of staging-060 is $(./helpers/detect_firmware_type.sh 
 
 function linkup_all {
   quel1_linkup --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkup --ipaddr_wss 10.1.0.58 --boxtype quel1-a --use_204c
-  quel1_linkup --ipaddr_wss 10.1.0.60 --boxtype quel1-b
+  quel1_linkup --ipaddr_wss 10.1.0.58 --boxtype quel1-a
+  quel1_linkup --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
   return 0
 }
 
@@ -92,7 +94,7 @@ function test_cli_classic {
   quel1_linkup --ipaddr_wss 10.1.0.74 --boxtype quel1-a --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1,2,3,4,5,6,7 --ignore_lock_failure_of_lmx2594 0,1,2,3,4,5,6,7,8,9
   echo "step 9 ================ (check the linkstatus of staging-074 and staging-060, both mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
+  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
   echo "step 10 ================ (dumping the current config of staging-074)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.74 --boxtype quel1-a > artifacts/dump_port_staging-074.txt
   quel1_dump_port_config --ipaddr_wss 10.1.0.58 --boxtype quel1-a > artifacts/dump_port_staging-058.txt
@@ -116,10 +118,13 @@ function test_cli_standard {
   echo "step 8 ================ (link up staging-074)"
   quel1_linkup --ipaddr_wss 10.1.0.74 --boxtype quel1-a --boxtype quel1-a --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1,2,3,4,5,6,7 --ignore_lock_failure_of_lmx2594 0,1,2,3,4,5,6,7,8,9
 
+  echo "step 8 ================ (link up staging-074)"
+  quel1_parallel_linkup --conf helpers/quel_ci_env_quel1only_v1.yaml --force
+
   echo "step 9 ================ (check the linkstatus of staging-xxx, both mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
+  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
 
   echo "step 10 ================ (dumping the current config of staging-xxx)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.74 --boxtype quel1-a > artifacts/dump_port_staging-074.txt

@@ -19,8 +19,9 @@ from quel_ic_config.quel1_box_intrinsic import (
     _create_css_object,
     _create_wss_object,
 )
-from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel1_config_subsystem import Quel1BoxType
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, Quel1WaveSubsystem
+from quel_ic_config.quel_config_common import Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
@@ -282,8 +283,7 @@ class Quel1Box:
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
         boxtype: Quel1BoxType,
-        config_root: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1Box":
         """create QuEL box objects
@@ -306,15 +306,10 @@ class Quel1Box:
             boxtype = Quel1BoxType.fromstr(boxtype)
         if boxtype not in cls._PORT2LINE:
             raise ValueError(f"unsupported boxtype for Quel1Box: {boxtype}")
-        if config_options is None:
-            config_options = set()
 
-        features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
+        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyConfigSubsystem = cast(
-            Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
-        )
+        css: Quel1AnyConfigSubsystem = cast(Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype))
         return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(
@@ -375,6 +370,8 @@ class Quel1Box:
         self,
         *,
         mxfe_list: Union[Collection[int], None] = None,
+        skip_capture_check: bool = False,
+        background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
         ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
         ignore_invalid_linkstatus: bool = False,
@@ -383,6 +380,8 @@ class Quel1Box:
         the target box must be linked-up in advance.
 
         :param mxfe_list: a list of target MxFEs (optional).
+        :param skip_capture_check: do not check background noise of input lines if True (optional)
+        :param background_noise_threshold: the largest peak of allowable noise (optional)
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional).
         :param ignore_extraordinary_converter_select_of_mxfe: a list of MxFEs whose unusual converter mapping is
                                                               dismissed. (optional).
@@ -390,14 +389,22 @@ class Quel1Box:
         """
         return self._dev.reconnect(
             mxfe_list=mxfe_list,
+            skip_capture_check=skip_capture_check,
+            background_noise_threshold=background_noise_threshold,
             ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
             ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinary_converter_select_of_mxfe,
             ignore_invalid_linkstatus=ignore_invalid_linkstatus,
         )
 
+    def get_wss_features(self) -> set[Quel1Feature]:
+        return self._dev.get_wss_features()
+
     def relinkup(
         self,
         *,
+        param: Union[Dict[str, Any], None] = None,
+        config_root: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
         mxfes_to_linkup: Union[Collection[int], None] = None,
         hard_reset: Union[bool, None] = None,
         use_204b: bool = False,
@@ -411,6 +418,9 @@ class Quel1Box:
         restart_tempctrl: bool = False,
     ) -> Dict[int, bool]:
         return self._dev.relinkup(
+            param=param,
+            config_root=config_root,
+            config_options=config_options,
             mxfes_to_linkup=mxfes_to_linkup,
             hard_reset=hard_reset,
             use_204b=use_204b,

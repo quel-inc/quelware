@@ -82,6 +82,9 @@ class Quel1ConfigOption(str, Enum):
     X_REFCLK_100MHz_FOR_MXFE1 = "x_refclk_100mhz_for_mxfe1"
     DAC_CNCO_1500MHz_MXFE1 = "dac_cduc_1500mhz_mxfe1"
     DAC_CNCO_2000MHz_MXFE1 = "dac_cduc_2000mhz_mxfe1"
+    SE8_MXFE1_AWG1331 = "se8_mxfe1_awg1331"
+    SE8_MXFE1_AWG2222 = "se8_mxfe1_awg2222"
+    SE8_MXFE1_AWG3113 = "se8_mxfe1_awg3113"
 
 
 class Quel1RuntimeOption(Enum):

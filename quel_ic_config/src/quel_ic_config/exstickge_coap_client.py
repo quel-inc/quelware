@@ -171,8 +171,8 @@ class Quel1seBoard(str, Enum):
 
 
 class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
-    _DEFAULT_RESPONSE_TIMEOUT: float = SyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT
-    _DEFAULT_PORT = 5683
+    DEFAULT_RESPONSE_TIMEOUT: float = SyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT
+    DEFAULT_PORT = 5683
 
     _URI_MAPPINGS: Mapping[Tuple[LsiKindId, int], str]
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]]
@@ -203,8 +203,8 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address: str,
-        target_port: int = _DEFAULT_PORT,
-        timeout: float = _DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = DEFAULT_PORT,
+        timeout: float = DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_address, target_port, timeout)
         self._core = SyncAsyncCoapClient()

@@ -1,6 +1,5 @@
 import logging
 import socket
-from pathlib import Path
 from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
 
 from quel_ic_config.exstickge_sock_client import LsiKindId, _ExstickgeSockClientBase
@@ -14,7 +13,7 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemRoot,
 )
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +65,8 @@ class ExstickgeSockClientQuel1(_ExstickgeSockClientBase):
     def __init__(
         self,
         target_address,
-        target_port=_ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port=_ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
         sock: Union[socket.socket, None] = None,
     ):
@@ -95,23 +94,20 @@ class QuelMeeBoardConfigSubsystem(
         "gpio": 1,
     }
 
-    _GROUPS: Set[int] = {0, 1}
+    _GROUPS: Set[int]
+
     _MXFE_IDXS: Set[int] = {0, 1}
+    _LMX2594_OF_MXFES: Tuple[int, ...] = (8, 9)
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        Quel1ConfigSubsystemRoot.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        Quel1ConfigSubsystemRoot.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
         self._construct_ad9082()
         self._construct_lmx2594()
         self._construct_adrf6780()
@@ -124,6 +120,8 @@ class QuelMeeBoardConfigSubsystem(
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
@@ -133,25 +131,32 @@ class QuelMeeBoardConfigSubsystem(
         if ignore_lock_failure_of_lmx2594 is None:
             ignore_lock_failure_of_lmx2594 = {}
 
-        self.init_ad5328(0)
+        self.init_ad5328(0, param["ad5328"][0])
         for i in range(0, 8):
-            self.init_adrf6780(i, ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
-            self.init_lmx2594(i, ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
+            self.init_adrf6780(i, param["adrf6780"][i], ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
+            self.init_lmx2594(i, param["lmx2594"][i], ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
 
-    def configure_all_mxfe_clocks(self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None) -> None:
+    def configure_all_mxfe_clocks(
+        self, param: Dict[str, Any], *, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
+    ) -> None:
         if ignore_lock_failure_of_lmx2594 is None:
             ignore_lock_failure_of_lmx2594 = {}
 
         for group in range(2):
             lmx2594_idx = 8 + group
-            self.init_lmx2594(lmx2594_idx, ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594)
+            self.init_lmx2594(
+                lmx2594_idx,
+                param["lmx2594"][lmx2594_idx],
+                ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594,
+            )
 
     def configure_mxfe(
         self,
         mxfe_idx: int,
+        param: Dict[str, Any],
+        *,
         hard_reset: bool = False,
         soft_reset: bool = False,
-        mxfe_init: bool = False,
         use_204b: bool = False,
         use_bg_cal: bool = True,
         ignore_crc_error: bool = False,
@@ -165,10 +170,29 @@ class QuelMeeBoardConfigSubsystem(
             )
             soft_reset = True
 
-        self.ad9082[mxfe_idx].initialize(
-            reset=soft_reset, link_init=mxfe_init, use_204b=use_204b, use_bg_cal=use_bg_cal
+        self.ad9082[mxfe_idx].configure(
+            param["ad9082"][mxfe_idx], reset=soft_reset, use_204b=use_204b, use_bg_cal=use_bg_cal
         )
-        return self.check_link_status(mxfe_idx, mxfe_init, ignore_crc_error)
+        return self.check_link_status(mxfe_idx, True, ignore_crc_error)
+
+    def reconnect_mxfe(
+        self,
+        mxfe_idx: int,
+        *,
+        ignore_crc_error: bool = False,
+    ) -> bool:
+        self._validate_mxfe(mxfe_idx)
+        pll = self.lmx2594[self._LMX2594_OF_MXFES[mxfe_idx]]
+        dr = pll.get_divider_ratio()[0]  # Notes: assuming that OUTA is used.
+        se = pll.get_sync_enable()
+        if dr == 0:
+            raise RuntimeError(f"PLL of AD9082-#{mxfe_idx} is not activated")
+        ref_clk = pll.get_lo_multiplier() * 100_000_000 // dr
+        if se:
+            ref_clk *= 4
+
+        self.ad9082[mxfe_idx].reconnect(ref_clk)
+        return self.check_link_status(mxfe_idx, False, ignore_crc_error)
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         """dumping the current configuration of a transmitter channel.
@@ -250,6 +274,8 @@ class QubeConfigSubsystem(
 ):
     __slots__ = ()
 
+    _GROUPS: Set[int] = {0, 1}
+
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
         (0, 1): (0, 1),
@@ -302,16 +328,11 @@ class QubeConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
 
 class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
@@ -321,27 +342,28 @@ class Quel1ConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemRfswitch):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        QubeConfigSubsystem.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        QubeConfigSubsystem.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
         self._construct_rfswitch(0)
 
     def configure_peripherals(
         self,
+        param: dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         # Notes: init_rfswitch() should be called at the head of configure_peripherals() to avoid the leakage of sprious
         #        during the initialization of RF components.
-        self.init_rfswitch()
-        super().configure_peripherals(ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594)
+        self.init_rfswitch(param["gpio"][0])
+        super().configure_peripherals(
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
+        )
 
     def dump_line(self, group: int, line: int) -> Dict[str, Any]:
         r = super().dump_line(group, line)
@@ -374,18 +396,13 @@ class QubeOuTypeAConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfsw
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeA:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
 
 class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfswitch):
@@ -400,18 +417,13 @@ class QubeOuTypeBConfigSubsystem(QubeConfigSubsystem, Quel1ConfigSubsystemNoRfsw
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuBE_OU_TypeB:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
 
 class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
@@ -456,18 +468,13 @@ class Quel1TypeAConfigSubsystem(Quel1ConfigSubsystem):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
 
 class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
@@ -503,18 +510,13 @@ class Quel1TypeBConfigSubsystem(Quel1ConfigSubsystem):
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype not in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
 
 class Quel1NecConfigSubsystem(
@@ -592,15 +594,10 @@ class Quel1NecConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
-        port: int = _ExstickgeSockClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeSockClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeSockClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeSockClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         if boxtype != Quel1BoxType.QuEL1_NEC:
             raise ValueError(f"invalid boxtype: {boxtype} for {self.__class__.__name__}")
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)

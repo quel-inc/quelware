@@ -20,10 +20,10 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.94",
             "ipaddr_css": "10.5.0.94",
             "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
-            "config_root": None,
-            "config_options": [],
         },
         "linkup_config": {
+            "config_root": None,
+            "config_options": [],
             "mxfes_to_linkup": (0, 1),
             "use_204b": False,
         },
@@ -243,11 +243,11 @@ def test_config_box_abnormal(box):
             box.config_validate_box({4: {"runits": {2: {"fnco_freq": 0.0}}}})
         assert not box.config_validate_box({4: {"runits": {0: {"non-existent": 0.0}}}})
 
-        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#08, and channel:1")):
-            box.config_box({8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
-        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#08, and channel:1")):
+        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#06, and channel:1")):
+            box.config_box({6: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
+        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#09, and channel:1")):
             box.config_validate_box(
-                {8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
+                {9: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
             )
         assert not box.config_validate_box({8: {"channels": {0: {"non-existent": 0.0}}}})
 

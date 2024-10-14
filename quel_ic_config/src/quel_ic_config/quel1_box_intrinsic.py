@@ -12,12 +12,11 @@ from quel_clock_master import SequencerClient  # to be replaced
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
+from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 from quel_ic_config.quel1_config_subsystem import (
     QubeOuTypeAConfigSubsystem,
     QubeOuTypeBConfigSubsystem,
     Quel1BoxType,
-    Quel1ConfigOption,
-    Quel1Feature,
     Quel1NecConfigSubsystem,
     Quel1TypeAConfigSubsystem,
     Quel1TypeBConfigSubsystem,
@@ -32,6 +31,7 @@ from quel_ic_config.quel1se_riken8_config_subsystem import (
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
 )
+from quel_ic_config.quel_config_common import Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _complete_ipaddrs(ipaddr_wss: str, ipaddr_sss: Union[str, None], ipaddr_css:
     return ipaddr_sss, ipaddr_css
 
 
-def _create_wss_object(ipaddr_wss: str, features: Set[Quel1Feature]) -> Quel1WaveSubsystem:
+def _create_wss_object(ipaddr_wss: str) -> Quel1WaveSubsystem:
     wss: Quel1WaveSubsystem = Quel1WaveSubsystem(ipaddr_wss)
     if wss.hw_lifestage == E7FwLifeStage.TO_DEPRECATE:
         logger.warning(f"the firmware will deprecate soon, consider to update it as soon as possible: {wss.hw_version}")
@@ -54,13 +54,12 @@ def _create_wss_object(ipaddr_wss: str, features: Set[Quel1Feature]) -> Quel1Wav
         logger.warning(f"be aware that the firmware is still in an experimental stage: {wss.hw_version}")
 
     wss.validate_installed_e7awgsw()
-    if wss.hw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
-        features.add(Quel1Feature.SINGLE_ADC)
-    elif wss.hw_type in {E7FwType.FEEDBACK_VERYEARLY}:
-        features.add(Quel1Feature.BOTH_ADC_EARLY)
-    elif wss.hw_type in {E7FwType.SIMPLEMULTI_STANDARD, E7FwType.FEEDBACK_EARLY}:
-        features.add(Quel1Feature.BOTH_ADC)
-    else:
+    if wss.hw_type not in {
+        E7FwType.SIMPLEMULTI_CLASSIC,
+        E7FwType.FEEDBACK_VERYEARLY,
+        E7FwType.SIMPLEMULTI_STANDARD,
+        E7FwType.FEEDBACK_EARLY,
+    }:
         raise ValueError(f"unsupported firmware is detected: {wss.hw_type}")
     return wss
 
@@ -68,34 +67,29 @@ def _create_wss_object(ipaddr_wss: str, features: Set[Quel1Feature]) -> Quel1Wav
 def _create_css_object(
     ipaddr_css: str,
     boxtype: Quel1BoxType,
-    features: Collection[Quel1Feature],
-    config_root: Union[Path, None],
-    config_options: Collection[Quel1ConfigOption],
 ) -> Quel1AnyConfigSubsystem:
     if boxtype in {Quel1BoxType.QuBE_RIKEN_TypeA, Quel1BoxType.QuEL1_TypeA}:
-        css: Quel1AnyConfigSubsystem = Quel1TypeAConfigSubsystem(
-            ipaddr_css, boxtype, features, config_root, config_options
-        )
+        css: Quel1AnyConfigSubsystem = Quel1TypeAConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype in {Quel1BoxType.QuBE_RIKEN_TypeB, Quel1BoxType.QuEL1_TypeB}:
-        css = Quel1TypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1TypeBConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuBE_OU_TypeA:
-        css = QubeOuTypeAConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = QubeOuTypeAConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuBE_OU_TypeB:
-        css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = QubeOuTypeBConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1_NEC:
-        css = Quel1NecConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1NecConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_Adda:
-        css = Quel1seAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seAddaConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL2_ProtoAdda:
-        css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8:
-        css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8DBG:
-        css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA:
-        css = Quel1seFujitsu11TypeADebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seFujitsu11TypeADebugConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB:
-        css = Quel1seFujitsu11TypeBDebugConfigSubsystem(ipaddr_css, boxtype, features, config_root, config_options)
+        css = Quel1seFujitsu11TypeBDebugConfigSubsystem(ipaddr_css, boxtype)
     else:
         raise ValueError(f"unsupported boxtype: {boxtype}")
 
@@ -131,8 +125,7 @@ class Quel1BoxIntrinsic:
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
         boxtype: Quel1BoxType,
-        config_root: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1BoxIntrinsic":
         """create QuEL intrinsic box objects
@@ -140,8 +133,7 @@ class Quel1BoxIntrinsic:
         :param ipaddr_sss: IP address of the sequencer subsystem of the target box (optional)
         :param ipaddr_css: IP address of the configuration subsystem of the target box (optional)
         :param boxtype: type of the target box
-        :param config_root: root path of config setting files to read (optional)
-        :param config_options: a collection of config options (optional)
+        :param skip_init: skip calling box.initialization(), just for debugging.
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_access_failure_of_adrf6780: a list of ADRF6780 whose communication faiulre via SPI bus is
                                                   dismissed (optional)
@@ -153,12 +145,9 @@ class Quel1BoxIntrinsic:
         ipaddr_sss, ipaddr_css = _complete_ipaddrs(ipaddr_wss, ipaddr_sss, ipaddr_css)
         if isinstance(boxtype, str):
             boxtype = Quel1BoxType.fromstr(boxtype)
-        if config_options is None:
-            config_options = set()
 
-        features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)  # Notes: features is updated here.
-        css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
+        css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype)
         sss = SequencerClient(ipaddr_sss)
 
         return Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
@@ -256,6 +245,8 @@ class Quel1BoxIntrinsic:
         self,
         *,
         mxfe_list: Union[Collection[int], None] = None,
+        skip_capture_check: bool = False,
+        background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
         ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
         ignore_invalid_linkstatus: bool = False,
@@ -264,11 +255,21 @@ class Quel1BoxIntrinsic:
         the target box needs to be linked-up in advance.
 
         :param mxfe_list: a list of MxFEs to reconnect. (optional)
+        :param skip_capture_check: do not check background noise of input lines if True (optional)
+        :param background_noise_threshold: the largest peak of allowable noise (optional)
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_extraordinary_converter_select_of_mxfe: a list of MxFEs whose unusual converter mapping is
                                                               dismissed. (optional)
         :return: True if success
         """
+
+        # Notes: boxi.initialize() is called at BoxIntrinsic.create() unless skip_init is True.
+        #        this means that all AWG units and Capture units are initialized (and should not be working).
+        #        reconnect() is usually called just after boxi.create() and it is reasonable to assume that all the
+        #        components of WSS are quiet.
+        #        theoretically, reconnect() can be called any time in the user's code, but do not initialize WSS here
+        #        to avoid unwanted destruction of configuration settings.
+
         if mxfe_list is None:
             mxfe_list = self._css.get_all_mxfes()
 
@@ -287,7 +288,7 @@ class Quel1BoxIntrinsic:
                 ignore_extraordinary_converter_select=mxfe_idx in ignore_extraordinary_converter_select_of_mxfe,
             )
             try:
-                valid_link: bool = self._css.configure_mxfe(
+                valid_link: bool = self._css.reconnect_mxfe(
                     mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe
                 )
                 self._css.validate_chip_id(mxfe_idx)
@@ -297,14 +298,61 @@ class Quel1BoxIntrinsic:
 
             if not valid_link:
                 if not ignore_invalid_linkstatus:
-                    logger.error(f"AD9082-#{mxfe_idx} is not working. it must be linked up in advance")
+                    logger.error(f"JESD204C link of AD9082-#{mxfe_idx} is not working. it must be linked up")
             link_ok[mxfe_idx] = valid_link
 
+        # Notes: checking so-called chikuchiku problem caused by wss firmware bug.
+        if not skip_capture_check and all(link_ok.values()):
+            rfsw_restore = {k: "open" for k, v in self.dump_rfswitches().items() if v == "open"}
+            rfsw_closed = {k: "loop" for k in rfsw_restore}
+            self.config_rfswitches(rfsw_closed)
+            for mxfe_idx in mxfe_list:
+                if not self.linkupper.check_all_adcs_of_mxfe_at_reconnect(mxfe_idx, background_noise_threshold):
+                    link_ok[mxfe_idx] = False
+                    if not ignore_invalid_linkstatus:
+                        logger.error(
+                            f"JESD204C downlink of AD9082-#{mxfe_idx} is not working properly, it must be linked up"
+                        )
+                    # Notes: do not break here even if here to check all the MxFEs to show information.
+            self.config_rfswitches(rfsw_restore)
+
         return link_ok
+
+    def get_wss_features(self) -> set[Quel1Feature]:
+        features: set[Quel1Feature] = set()
+        if self.wss.hw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
+            features.add(Quel1Feature.SINGLE_ADC)
+        elif self.wss.hw_type in {E7FwType.FEEDBACK_VERYEARLY}:
+            features.add(Quel1Feature.BOTH_ADC_EARLY)
+        elif self.wss.hw_type in {E7FwType.SIMPLEMULTI_STANDARD, E7FwType.FEEDBACK_EARLY}:
+            features.add(Quel1Feature.BOTH_ADC)
+        else:
+            raise ValueError(f"unsupported firmware is detected: {self.wss.hw_type}")
+        return features
+
+    def _load_config_parameter(
+        self,
+        *,
+        config_root: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+    ) -> Dict[str, Any]:
+        config_options = config_options or set()
+        loader = Quel1ConfigLoader(
+            boxtype=self.css.boxtype,
+            num_ic=self.css.get_num_ics(),
+            config_options=config_options,
+            features=self.get_wss_features(),
+            config_filename=self.css.get_default_config_filename(),
+            config_rootpath=config_root,
+        )
+        return loader.load_config()
 
     def relinkup(
         self,
         *,
+        param: Union[Dict[str, Any], None] = None,
+        config_root: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
         mxfes_to_linkup: Union[Collection[int], None] = None,
         hard_reset: Union[bool, None] = None,
         use_204b: bool = False,
@@ -332,12 +380,17 @@ class Quel1BoxIntrinsic:
                 "ignore_extraordinary_converter_select_of_mxfe"
             ]
 
+        # Notes: user can inject a parameter object directly instead of loading it from files.
+        param = param or self._load_config_parameter(config_root=config_root, config_options=config_options)
+
         if not skip_init:
-            self.linkupper._css.configure_peripherals(
+            self.css.configure_peripherals(
+                param,
                 ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
                 ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
             )
-            self.linkupper._css.configure_all_mxfe_clocks(
+            self.css.configure_all_mxfe_clocks(
+                param,
                 ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
             )
 
@@ -345,6 +398,7 @@ class Quel1BoxIntrinsic:
         for mxfe in mxfes_to_linkup:
             linkup_ok[mxfe] = self.linkupper.linkup_and_check(
                 mxfe,
+                param,
                 hard_reset=hard_reset,
                 use_204b=use_204b,
                 use_bg_cal=use_bg_cal,
@@ -995,10 +1049,24 @@ class Quel1BoxIntrinsic:
         return valid
 
     def is_output_line(self, group: int, line: Union[int, str]):
-        return isinstance(line, int)
+        return (group in self.css.get_all_groups()) and isinstance(line, int)
+
+    def is_output_channel(self, group: int, line: Union[int, str], channel: int):
+        return (
+            (group in self.css.get_all_groups())
+            and isinstance(line, int)
+            and (channel in self.get_channels_of_line(group, line))
+        )
 
     def is_input_line(self, group: int, line: Union[int, str]):
-        return isinstance(line, str)
+        return (group in self.css.get_all_groups()) and isinstance(line, str)
+
+    def is_input_runit(self, group: int, rline: Union[int, str], runit: int):
+        return (
+            (group in self.css.get_all_groups())
+            and isinstance(rline, str)
+            and (runit in self.get_runits_of_rline(group, rline))
+        )
 
     def is_read_input_line(self, group: int, line: Union[int, str]):
         return line == "r"

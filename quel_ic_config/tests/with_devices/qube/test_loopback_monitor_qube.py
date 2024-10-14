@@ -23,10 +23,10 @@ DEVICE_SETTINGS = (
             "ipaddr_sss": "10.2.0.17",
             "ipaddr_css": "10.5.0.17",
             "boxtype": Quel1BoxType.fromstr("qube-riken-a"),
-            "config_root": None,
-            "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
         },
         "linkup_config": {
+            "config_root": None,
+            "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
             "mxfes_to_linkup": (0, 1),
             "use_204b": True,
         },
@@ -38,10 +38,10 @@ DEVICE_SETTINGS = (
             "ipaddr_sss": "10.2.0.18",
             "ipaddr_css": "10.5.0.18",
             "boxtype": Quel1BoxType.fromstr("qube-riken-a"),
-            "config_root": None,
-            "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
         },
         "linkup_config": {
+            "config_root": None,
+            "config_options": [Quel1ConfigOption.USE_MONITOR_IN_MXFE0, Quel1ConfigOption.USE_MONITOR_IN_MXFE1],
             "mxfes_to_linkup": (0, 1),
             "use_204b": True,
             "background_noise_threshold": 400.0,
@@ -60,7 +60,8 @@ def fixtures(request):
     param0 = request.param
 
     box = Quel1BoxIntrinsic.create(**param0["box_config"])
-    linkstatus = box.relinkup(**param0["linkup_config"])
+    # linkstatus = box.relinkup(**param0["linkup_config"])
+    linkstatus = box.reconnect()
     assert linkstatus[0]
     assert linkstatus[1]
     yield make_outdir(param0["label"]), box

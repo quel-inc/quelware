@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Final, List, Set, Tuple, Union
+from typing import Any, Dict, Final, List, Set, Tuple, Union
 
 import numpy as np
 
@@ -64,7 +64,8 @@ class LinkupStatistic:
 class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
     _SLEEP_BTWN_LINKUP_TRIALS: Final[float] = 0.25
-    _DEFAULT_BACKGROUND_NOISE_THRESHOLD: Final[float] = 256.0
+    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RELINKUP: Final[float] = 256.0
+    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT: Final[float] = 1536.0
     _STAT_HISTORY_MAX_LEN: Final[int] = 1000
 
     def __init__(
@@ -80,6 +81,17 @@ class LinkupFpgaMxfe:
 
     def _validate_mxfe(self, mxfe_idx: int) -> bool:
         return mxfe_idx in self._css.get_all_mxfes()
+
+    def _get_adcs_of_mxfe(self, mxfe_idx: int) -> Set[int]:
+        # Notes: not supporting multi-rchannel configuration.
+        #        in 0.10.x, fddc replaces adc to support more general configurations.
+        adcs: Set[int] = set()
+        for g in self._css.get_all_groups():
+            for rl in self._css.get_all_rlines_of_group(g):
+                m, d = self._css.get_adc_idx(g, rl)
+                if m == mxfe_idx:
+                    adcs.add(d)
+        return adcs
 
     def _lookup_capmods_of_mxfe(self, mxfe_idx: int) -> Set[int]:
         rlines = self._rmap.get_active_rlines_of_mxfe(mxfe_idx)
@@ -139,6 +151,7 @@ class LinkupFpgaMxfe:
     def linkup_and_check(
         self,
         mxfe_idx: int,
+        param: Dict[str, Any],
         *,
         hard_reset: bool = False,
         soft_reset: bool = True,
@@ -152,7 +165,7 @@ class LinkupFpgaMxfe:
     ) -> bool:
         self._validate_mxfe(mxfe_idx)
         if background_noise_threshold is None:
-            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD
+            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RELINKUP
 
         judge_system: bool = False
         for i in range(self._LINKUP_MAX_RETRY):
@@ -162,9 +175,9 @@ class LinkupFpgaMxfe:
 
             if not self._css.configure_mxfe(
                 mxfe_idx,
+                param,
                 hard_reset=hard_reset,
                 soft_reset=soft_reset,
-                mxfe_init=True,
                 use_204b=use_204b,
                 use_bg_cal=use_bg_cal,
                 ignore_crc_error=ignore_crc_error,
@@ -202,15 +215,45 @@ class LinkupFpgaMxfe:
 
         return judge_system
 
+    def check_all_adcs_of_mxfe_at_relinkup(
+        self,
+        mxfe_idx: int,
+        background_noise_threshold: Union[float, None] = None,
+        save_dirpath: Union[Path, None] = None,
+    ) -> bool:
+        judge_adcs: bool = True
+        for adc_idx in self._get_adcs_of_mxfe(mxfe_idx):
+            judge_adcs &= self.check_adc(
+                mxfe_idx,
+                adc_idx,
+                background_noise_threshold or self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RELINKUP,
+                save_dirpath,
+            )
+        return judge_adcs
+
+    def check_all_adcs_of_mxfe_at_reconnect(
+        self,
+        mxfe_idx: int,
+        background_noise_threshold: Union[float, None] = None,
+        save_dirpath: Union[Path, None] = None,
+    ) -> bool:
+        judge_adcs: bool = True
+        for adc_idx in self._get_adcs_of_mxfe(mxfe_idx):
+            judge_adcs &= self.check_adc(
+                mxfe_idx,
+                adc_idx,
+                background_noise_threshold or self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT,
+                save_dirpath,
+            )
+        return judge_adcs
+
     def check_adc(
         self,
         mxfe_idx: int,
         adc_idx: int,
-        background_noise_threshold: Union[float, None] = None,
+        background_noise_threshold: float,
         save_dirpath: Union[Path, None] = None,
     ) -> bool:
-        if background_noise_threshold is None:
-            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD
         capmod = self._rmap.get_capture_module_of_adc(mxfe_idx, adc_idx)
         status, cap_data = self._wss.simple_capture(capmod, num_words=16384)
         if status == CaptureReturnCode.SUCCESS:

@@ -1,6 +1,5 @@
 import logging
-from pathlib import Path
-from typing import Callable, Collection, Dict, Mapping, Set, Tuple, Union, cast
+from typing import Any, Callable, Collection, Dict, Mapping, Set, Tuple, Union, cast
 
 from packaging.version import Version
 
@@ -12,7 +11,7 @@ from quel_ic_config.quel1_config_subsystem_tempctrl import (
     Quel1seConfigSubsystemTempctrlMixin,
 )
 from quel_ic_config.quel1se_config_subsystem import _Quel1seConfigSubsystemBase
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel_config_common import Quel1BoxType
 from quel_ic_config.thermistor import Quel1seExternalThermistor, Quel1seOnboardThermistor, Thermistor
 
 logger = logging.getLogger(__name__)
@@ -134,8 +133,8 @@ class ExstickgeCoapClientQuel1seFujitsu11(_ExstickgeCoapClientQuel1seFujitsu11Ba
     def __init__(
         self,
         target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_addr, target_port, timeout)
 
@@ -158,8 +157,6 @@ class _Quel1seFujitsu11ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
     _PROXY_CLASSES: Tuple[type, ...] = (ExstickgeCoapClientQuel1seFujitsu11,)
 
     _GROUPS: Set[int] = {0, 1}
-
-    _MXFE_IDXS: Set[int] = {0, 1}
 
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
@@ -211,23 +208,10 @@ class _Quel1seFujitsu11ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
 
     _DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP: bool = False
 
-    def __init__(
-        self,
-        css_addr: str,
-        boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
-        sender_limit_by_binding: bool = False,
-    ):
-        super().__init__(
-            css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
-
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
@@ -238,7 +222,7 @@ class _Quel1seFujitsu11ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
 
         # Notes: close all RF switches at first
         for i in range(self._NUM_IC["pathselectorboard_gpio"]):
-            self.init_pathselectorboard_gpio(i)
+            self.init_pathselectorboard_gpio(i, param["pathselectorboard_gpio"][i])
 
         # Notes: release reset of CPLDs on all the peripheral board
         proxy = cast(_ExstickgeCoapClientBase, self._proxy)
@@ -251,14 +235,14 @@ class _Quel1seFujitsu11ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
 
         # Notes: initialize ICs on mixer board 0 for RF
         for i in range(self._NUM_IC["ad5328"]):
-            self.init_ad5328(i)
+            self.init_ad5328(i, param["ad5328"][i])
 
         for i in range(self._NUM_IC["adrf6780"]):
             proxy.write_reset(LsiKindId.ADRF6780, i, 1)
-            self.init_adrf6780(i, ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
+            self.init_adrf6780(i, param["adrf6780"][i], ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
 
         for i in range(2, self._NUM_IC["lmx2594"]):
-            self.init_lmx2594(i, ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
+            self.init_lmx2594(i, param["lmx2594"][i], ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
 
 
 class _Quel1seFujitsu11TypeAConfigSubsystemBase(_Quel1seFujitsu11ConfigSubsystemBase):
@@ -374,21 +358,6 @@ class _Quel1seFujitsu11TypeAConfigSubsystemBase(_Quel1seFujitsu11ConfigSubsystem
         (7, 15): Quel1seOnboardThermistor("ps1_sw2_path_c"),
     }
 
-    def __init__(
-        self,
-        css_addr: str,
-        boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
-        sender_limit_by_binding: bool = False,
-    ):
-        _Quel1seFujitsu11ConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
-
 
 class _Quel1seFujitsu11TypeBConfigSubsystemBase(_Quel1seFujitsu11ConfigSubsystemBase):
 
@@ -492,21 +461,6 @@ class _Quel1seFujitsu11TypeBConfigSubsystemBase(_Quel1seFujitsu11ConfigSubsystem
         (7, 15): Quel1seOnboardThermistor("ps1_sw2_path_c"),
     }
 
-    def __init__(
-        self,
-        css_addr: str,
-        boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
-        sender_limit_by_binding: bool = False,
-    ):
-        _Quel1seFujitsu11ConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
-
 
 class Quel1seFujitsu11TypeAConfigSubsystem(
     _Quel1seFujitsu11TypeAConfigSubsystemBase,
@@ -520,27 +474,29 @@ class Quel1seFujitsu11TypeAConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         _Quel1seFujitsu11TypeAConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, port, timeout, sender_limit_by_binding
         )
         self._construct_tempctrl()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seFujitsu11TypeAConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl()
+        self.init_tempctrl(param)
 
 
 class Quel1seFujitsu11TypeADebugConfigSubsystem(
@@ -590,27 +546,29 @@ class Quel1seFujitsu11TypeADebugConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         _Quel1seFujitsu11TypeAConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, port, timeout, sender_limit_by_binding
         )
         self._construct_tempctrl_debug()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seFujitsu11TypeAConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl_debug()
+        self.init_tempctrl_debug(param)
 
 
 class Quel1seFujitsu11TypeBConfigSubsystem(
@@ -625,27 +583,29 @@ class Quel1seFujitsu11TypeBConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         _Quel1seFujitsu11TypeBConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, port, timeout, sender_limit_by_binding
         )
         self._construct_tempctrl()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seFujitsu11TypeBConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl()
+        self.init_tempctrl(param)
 
 
 class Quel1seFujitsu11TypeBDebugConfigSubsystem(
@@ -693,24 +653,26 @@ class Quel1seFujitsu11TypeBDebugConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        features: Union[Collection[Quel1Feature], None] = None,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
         _Quel1seFujitsu11TypeBConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, features, config_path, config_options, port, timeout, sender_limit_by_binding
+            self, css_addr, boxtype, port, timeout, sender_limit_by_binding
         )
         self._construct_tempctrl_debug()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seFujitsu11TypeBConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl_debug()
+        self.init_tempctrl_debug(param)

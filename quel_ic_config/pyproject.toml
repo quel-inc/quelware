@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.8.11rc1"
+version = "0.8.11rc2"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -19,7 +19,7 @@ dependencies = [
 [project.scripts]
 quel1_linkup = "quel_ic_config_cli.cli:quel1_linkup"
 quel1_linkstatus = "quel_ic_config_cli.cli:quel1_linkstatus"
-quel1_parallel_linkup = "quel_ic_config_cli.parallel_linkup:main"
+quel1_parallel_linkup = "quel_ic_config_cli.parallel_linkup:parallel_linkup_main"
 quel1_test_linkup = "quel_ic_config_cli.cli:quel1_test_linkup"
 quel1_dump_port_config = "quel_ic_config_cli.cli:quel1_dump_port_config"
 quel1_firmware_version = "quel_ic_config_cli.cli:quel1_firmware_version"

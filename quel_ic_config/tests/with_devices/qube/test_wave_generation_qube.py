@@ -24,17 +24,17 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.17",
             "ipaddr_css": "10.5.0.17",
             "boxtype": Quel1BoxType.fromstr("qube-riken-a"),
+        },
+        "linkup_config": {
             "config_root": None,
             "config_options": [
                 Quel1ConfigOption.USE_READ_IN_MXFE0,
                 Quel1ConfigOption.USE_READ_IN_MXFE1,
                 Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE0,
-                Quel1ConfigOption.DAC_CNCO_1500MHz_MXFE0,
+                Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE0,
                 Quel1ConfigOption.REFCLK_12GHz_FOR_MXFE1,
                 Quel1ConfigOption.DAC_CNCO_2000MHz_MXFE1,
             ],
-        },
-        "linkup_config": {
             "mxfes_to_linkup": (0, 1),
             "use_204b": True,
         },
@@ -66,7 +66,8 @@ def fixtures(request):
     param0 = request.param
 
     box = Quel1BoxIntrinsic.create(**param0["box_config"])
-    linkstatus = box.relinkup(**param0["linkup_config"])
+    # linkstatus = box.relinkup(**param0["linkup_config"])
+    linkstatus = box.reconnect()
     assert linkstatus[0]
     assert linkstatus[1]
 

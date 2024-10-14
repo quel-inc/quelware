@@ -72,7 +72,10 @@ class Ad9082V106Dummy(Ad9082V106Mixin):
         return (True,)
 
 
-x = Ad9082V106Dummy("dummy", cfg_obj)
+x = Ad9082V106Dummy("dummy")
+# Notes: cfg_obj is already validated
+# Notes: usually cfg_obj is passed to x.configure(). in the following test cases, a subtree of cfg_obj is directly
+#        passed to callees of x.configure().
 # x._set_spi_settings(cfg_obj.spi)  # Note: no corresponding data structure exists in x.
 assert cfg_obj.spi.pin.as_cpptype() == ad9081.SPI_SDO
 assert cfg_obj.spi.msb.as_cpptype() == ad9081.SPI_MSB_FIRST

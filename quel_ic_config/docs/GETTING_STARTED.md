@@ -53,11 +53,12 @@ sudo apt install wget
 ```text
 helpers/detect_firmware_type.sh 10.1.0.xxx
 ```
-現状では、ファームウェアの種類の異なる装置を1つの仮想環境から使用することができない。
-この制限は、近い将来に撤廃される予定である。
+quelware-0.8系では、ファームウェアの種類の異なる装置を1つの仮想環境から使用することができない。
+quelware-0.10系ではこの制限は解消する。
 
 #### `SIMPLEMULTI_CLASSIC`の場合
-この文書を執筆している時点で、ほぼ全ての QuBEおよびQuEL-1は、この状態に相当すると思う。
+このファームウェアはもはや、ほとんど使われていないはずだが、quelware-0.8系では念のためサポートを継続している。
+quelware-0.10系ではサポートを廃止するので、早めのファームウェアアップデートをお勧めする。
 
 次のコマンドでパッケージをインストールする。
 ```shell
@@ -70,6 +71,7 @@ pip install -r requirements_simplemulti_classic.txt -r requirements_dev_addon.tx
 ```
 
 #### `SIMPLEMULTI_STANDARD`の場合
+この文書を執筆している時点で、ほぼ全ての QuBEおよびQuEL-1は、この状態に相当すると思う。
 次のコマンドでパッケージをインストールする。
 ```shell
 pip install -r requirements_simplemulti_standard.txt

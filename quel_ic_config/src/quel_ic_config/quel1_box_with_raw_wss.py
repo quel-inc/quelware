@@ -1,6 +1,5 @@
 import logging
-from pathlib import Path
-from typing import Collection, Set, Union, cast
+from typing import Collection, Union, cast
 
 from e7awgsw import CaptureParam, WaveSequence
 
@@ -10,7 +9,7 @@ from quel_ic_config.linkupper import LinkupFpgaMxfe
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box import Quel1Box, Quel1PortType
 from quel_ic_config.quel1_box_intrinsic import _complete_ipaddrs, _create_css_object, _create_wss_object
-from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config.quel1_config_subsystem import Quel1BoxType
 from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 
 logger = logging.getLogger(__name__)
@@ -27,8 +26,7 @@ class Quel1BoxWithRawWss(Quel1Box):
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
         boxtype: Union[Quel1BoxType, str],
-        config_root: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
+        skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1BoxWithRawWss":
         """create QuEL box objects
@@ -36,8 +34,6 @@ class Quel1BoxWithRawWss(Quel1Box):
         :param ipaddr_sss: IP address of the sequencer subsystem of the target box (optional)
         :param ipaddr_css: IP address of the configuration subsystem of the target box (optional)
         :param boxtype: type of the target box
-        :param config_root: root path of config setting files to read (optional)
-        :param config_options: a collection of config options (optional)
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_access_failure_of_adrf6780: a list of ADRF6780 whose communication faiulre via SPI bus is
                                                   dismissed (optional)
@@ -51,15 +47,10 @@ class Quel1BoxWithRawWss(Quel1Box):
             boxtype = Quel1BoxType.fromstr(boxtype)
         if boxtype not in cls._PORT2LINE:
             raise ValueError(f"unsupported boxtype for Quel1Box: {boxtype}")
-        if config_options is None:
-            config_options = set()
 
-        features: Set[Quel1Feature] = set()
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)
+        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyConfigSubsystem = cast(
-            Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
-        )
+        css: Quel1AnyConfigSubsystem = cast(Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype))
         return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(

@@ -1,11 +1,13 @@
 import logging
 from pathlib import Path
-from typing import Collection, Dict, Sequence, Set, Tuple, Union
+from typing import Any, Collection, Dict, Sequence, Tuple, Union
 
 from quel_ic_config.e7resource_mapper import Quel1E7ResourceMapper
+from quel_ic_config.e7workaround import E7FwType
 from quel_ic_config.linkupper import LinkupFpgaMxfe
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box_intrinsic import _create_css_object, _create_wss_object
+from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 from quel_ic_config.quel1_wave_subsystem import Quel1WaveSubsystem
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
 
@@ -55,12 +57,12 @@ def init_box_with_linkup(
         ipaddr_sss=ipaddr_sss,
         ipaddr_css=ipaddr_css,
         boxtype=boxtype,
-        config_root=config_root,
-        config_options=config_options,
     )
 
     linkup_ok = linkup_dev(
         linkupper=linkupper,
+        config_root=config_root,
+        config_options=config_options,
         mxfe_list=mxfes_to_linkup,
         hard_reset=hard_reset,
         use_204b=use_204b,
@@ -96,8 +98,6 @@ def init_box_with_reconnect(
         ipaddr_sss=ipaddr_sss,
         ipaddr_css=ipaddr_css,
         boxtype=boxtype,
-        config_root=None,
-        config_options={},
     )
 
     if mxfes_to_connect is None:
@@ -120,8 +120,7 @@ def create_box_objects(
     ipaddr_sss: str,
     ipaddr_css: str,
     boxtype: Quel1BoxType,
-    config_root: Union[Path, None] = None,
-    config_options: Union[Collection[Quel1ConfigOption], None] = None,
+    skip_init: bool = False,
 ) -> Tuple[
     Quel1AnyConfigSubsystem,
     Quel1WaveSubsystem,
@@ -138,20 +137,33 @@ def create_box_objects(
     :param config_options: a collection of config options
     :return: QuEL config objects
     """
-    if config_options is None:
-        config_options = set()
-    features: Set[Quel1Feature] = set()
-    wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss, features)  # Notes: features is updated here.
-    css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype, features, config_root, config_options)
+    wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
+    css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype)
     rmap = Quel1E7ResourceMapper(css, wss)
     linkupper = LinkupFpgaMxfe(css, wss, rmap)
 
     return css, wss, rmap, linkupper
 
 
+def _get_features_from_wss(wss: Quel1WaveSubsystem) -> set[Quel1Feature]:
+    features: set[Quel1Feature] = set()
+    if wss.hw_type in {E7FwType.SIMPLEMULTI_CLASSIC}:
+        features.add(Quel1Feature.SINGLE_ADC)
+    elif wss.hw_type in {E7FwType.FEEDBACK_VERYEARLY}:
+        features.add(Quel1Feature.BOTH_ADC_EARLY)
+    elif wss.hw_type in {E7FwType.SIMPLEMULTI_STANDARD, E7FwType.FEEDBACK_EARLY}:
+        features.add(Quel1Feature.BOTH_ADC)
+    else:
+        raise ValueError(f"unsupported firmware is detected: {wss.hw_type}")
+    return features
+
+
 def linkup_dev(
     *,
     linkupper: LinkupFpgaMxfe,
+    param: Union[Dict[str, Any], None] = None,
+    config_root: Union[Path, None] = None,
+    config_options: Union[Collection[Quel1ConfigOption], None] = None,
     mxfe_list: Sequence[int],
     hard_reset: bool = False,
     use_204b: bool = True,
@@ -176,12 +188,26 @@ def linkup_dev(
     if ignore_extraordinary_converter_select_of_mxfe is None:
         ignore_extraordinary_converter_select_of_mxfe = {}
 
+    if param is None:
+        config_options = config_options or set()
+        loader = Quel1ConfigLoader(
+            boxtype=linkupper._css.boxtype,
+            num_ic=linkupper._css.get_num_ics(),
+            config_options=config_options,
+            features=_get_features_from_wss(linkupper._wss),
+            config_filename=linkupper._css.get_default_config_filename(),
+            config_rootpath=config_root,
+        )
+        param = loader.load_config()
+
     if not skip_init:
         linkupper._css.configure_peripherals(
+            param,
             ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
             ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
         linkupper._css.configure_all_mxfe_clocks(
+            param,
             ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
 
@@ -189,6 +215,7 @@ def linkup_dev(
     for mxfe in mxfe_list:
         linkup_ok[mxfe] = linkupper.linkup_and_check(
             mxfe,
+            param,
             hard_reset=hard_reset,
             use_204b=use_204b,
             use_bg_cal=use_bg_cal,
@@ -226,7 +253,7 @@ def reconnect_dev(
             ignore_extraordinary_converter_select=mxfe_idx in ignore_extraordinary_converter_select_of_mxfe,
         )
         try:
-            link_ok[mxfe_idx] = css.configure_mxfe(mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe)
+            link_ok[mxfe_idx] = css.reconnect_mxfe(mxfe_idx, ignore_crc_error=mxfe_idx in ignore_crc_error_of_mxfe)
             if not link_ok[mxfe_idx]:
                 logger.error(f"AD9082-#{mxfe_idx} is not working, check power and link status before retrying")
             else:

@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class _ExstickgeSockClientBase(_ExstickgeProxyBase):
-    _DEFAULT_RESPONSE_TIMEOUT: float = 0.5
-    _DEFAULT_PORT: int = 16384
+    DEFAULT_RESPONSE_TIMEOUT: float = 0.5
+    DEFAULT_PORT: int = 16384
 
     _PACKET_FORMAT = "!BBLH"  # MODE, I/F, ADDR, VALUE
 
@@ -28,8 +28,8 @@ class _ExstickgeSockClientBase(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address: str,
-        target_port: int = _DEFAULT_PORT,
-        timeout: float = _DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = DEFAULT_PORT,
+        timeout: float = DEFAULT_RESPONSE_TIMEOUT,
         receiver_limit_by_binding: bool = False,
         sock: Union[socket.socket, None] = None,
     ):
