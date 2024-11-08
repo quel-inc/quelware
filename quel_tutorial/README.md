@@ -6,8 +6,13 @@ quel_tutorial は、キュエル社の制御装置を使用して量子実験を
 
 ## 実行環境の構築
 
-チュートリアルを実行するソフトウェア環境を構築します。
-[quel_tutorial インストールガイド](https://github.com/quel-inc/quel-tutorial/blob/develop/SETUP.md)の内容を実行することで、本チュートリアルを実行するためのソフトウェア環境を構築することができます。
+本チュートリアルを実行する環境を構築します。
+なお、ここでは Ubuntu 20.04 で、OS 付属の Python 3.9 の利用、およびquel_tutorial の実行には Visual Studio (VS) Code を使用することを想定しています。
+以下のコマンドを実行することで、VS Code をインストールできます。
+```
+sudo snap install code --classic
+```
+インストール完了後、VS Code を起動し、Jupyter Extension をインストールすることで実行環境の準備は完了です。
 
 ## 必要となる知識
 
