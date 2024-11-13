@@ -1,10 +1,7 @@
 import logging
 import struct
-from ipaddress import IPv4Address
 from threading import RLock
 from typing import Any, Final
-
-from pydantic import BaseModel, Field
 
 from e7awghal.e7awg_packet import (
     BasePacketAccess,
@@ -16,14 +13,6 @@ from e7awghal.fwtype import E7FwAuxAttr
 from e7awghal.syncdata import _SyncInterface
 
 logger = logging.getLogger(__name__)
-
-
-class SyncInterface(BaseModel):
-    ipaddr: IPv4Address = Field()
-    port: int = Field(default=16385, ge=0, le=65535)
-
-    def __hash__(self) -> int:
-        return (int(self.ipaddr), self.port).__hash__()
 
 
 class ClockmasterCtrl:

@@ -101,14 +101,23 @@ class Quel1Au50HalVersionChecker:
         k = _VERSION_TO_FWTYPE.get((av, cv))
         if k is not None:
             if k[2] == E7FwLifeStage.DEPRECATED:
-                raise RuntimeError(f"deprecate firmware (version = {av}, {cv}), not supported any more")
+                raise RuntimeError(
+                    f"the installed firmware of of box {str(self._ipaddr)} is already deprecated (version = {av}, {cv})"
+                )
             elif k[2] == E7FwLifeStage.TO_DEPRECATE:
-                logger.warning(f"the installed firmware (version = {av}, {cv}) is about to be deprecated")
+                logger.warning(
+                    f"the installed firmware of box {str(self._ipaddr)} is about to be deprecated "
+                    f"(version = {av}, {cv})"
+                )
             elif k[2] == E7FwLifeStage.SUSPENDED:
-                raise RuntimeError(f"the installed firmware (version = {av}, {cv}) is temporarily out of support")
-            logger.info(f"the installed firmware is resolved as {str(k[0])}")
+                raise RuntimeError(
+                    f"the installed firmware of box {str(self._ipaddr)} is temporarily out of support "
+                    f"(version = {av}, {cv})"
+                )
+            logger.info(f"the installed firmware of box {str(self._ipaddr)} is resolved as {str(k[0])}")
             return k
         else:
             raise RuntimeError(
-                f"unknown firmware version (= {av}, {cv}). updating the e7awghal package may resolve this issue"
+                f"the install firmware of box {str(self._ipaddr)} has unknown firmware version (= {av}, {cv}). "
+                f"updating e7awghal package may resolve this issue"
             )

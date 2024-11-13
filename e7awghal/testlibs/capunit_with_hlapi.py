@@ -5,15 +5,24 @@ from typing import Any
 
 from e7awghal.capctrl import AbstractCapCtrl
 from e7awghal.capdata import CapIqDataReader
-from e7awghal.capunit import CapUnitSimplified, AbstractCapParam, CapSection, _CapParamMainRegFile, _CapParamSectionRegFile, _CapParamCfirRegFile, _CapParamRfirsRegFile, _CapParamWindowRegFile, _CapParamClassificationRegFile
-from e7awghal.e7awg_memoryobj import E7awgMemoryObj
+from e7awghal.capunit import (
+    AbstractCapParam,
+    CapSection,
+    CapUnitSimplified,
+    _CapParamCfirRegFile,
+    _CapParamClassificationRegFile,
+    _CapParamMainRegFile,
+    _CapParamRfirsRegFile,
+    _CapParamSectionRegFile,
+    _CapParamWindowRegFile,
+)
 from e7awghal.common_defs import (
     _DEFAULT_POLLING_PERIOD,
     _DEFAULT_TIMEOUT,
     _DEFAULT_TIMEOUT_FOR_CAPTURE_RESERVE,
     E7awgCaptureDataError,
 )
-from e7awghal.e7awg_memoryobj import E7awgAbstractMemoryManager
+from e7awghal.e7awg_memoryobj import E7awgAbstractMemoryManager, E7awgMemoryObj
 from e7awghal.hbmctrl import HbmCtrl
 
 logger = logging.getLogger(__name__)

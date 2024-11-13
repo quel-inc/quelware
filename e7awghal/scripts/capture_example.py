@@ -1,7 +1,7 @@
 import logging
 
 from e7awghal import AbstractQuel1Au50Hal, CapParam, CapSection
-from quel_ic_config import Quel1BoxType, Quel1Feature, Quel1TypeAConfigSubsystem
+from quel_ic_config import Quel1BoxType, Quel1TypeAConfigSubsystem
 from testlibs.capunit_with_hlapi import CapUnitSimplifiedHL
 from testlibs.quel1au50_hal_for_test import create_quel1au50hal_for_test
 
@@ -12,13 +12,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
     boxtype = Quel1BoxType.QuEL1_TypeA
-    features = {Quel1Feature.BOTH_ADC}
 
     # initializing proxy objects
     css = Quel1TypeAConfigSubsystem("10.5.0.58", boxtype)
-    css.initialize(features)
+    css.initialize()
     for mxfe_idx in css.get_all_mxfes():
-        css.configure_mxfe(mxfe_idx)
+        css.configure_mxfe(mxfe_idx, {})
 
     proxy: AbstractQuel1Au50Hal = create_quel1au50hal_for_test(ipaddr_wss="10.1.0.58", auth_callback=lambda: True)
     proxy.initialize()

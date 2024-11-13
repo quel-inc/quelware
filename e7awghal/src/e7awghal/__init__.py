@@ -11,6 +11,7 @@ from e7awghal.clockcounterctrl import ClockcounterCtrl
 from e7awghal.clockmaster_hal import ClockmasterAu200Hal
 from e7awghal.clockmasterctrl import ClockmasterCtrl
 from e7awghal.common_defs import E7awgCaptureDataError, E7awgHardwareError, E7awgMemoryError
+from e7awghal.e7awg_packet import BoxLockDelegationError
 from e7awghal.fwtype import E7FwAuxAttr, E7FwLifeStage, E7FwType
 from e7awghal.quel1au50_hal import (
     AbstractQuel1Au50Hal,
@@ -64,4 +65,5 @@ __all__ = (
     "SimplemultiSequencer",
     "ClockmasterCtrl",
     "ClockmasterAu200Hal",
+    "BoxLockDelegationError",
 )
