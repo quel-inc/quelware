@@ -1,6 +1,5 @@
 import logging
-from pathlib import Path
-from typing import Callable, Collection, Dict, Mapping, Set, Tuple, Union
+from typing import Any, Callable, Collection, Dict, Mapping, Set, Tuple, Union
 
 from packaging.version import Version
 
@@ -8,9 +7,9 @@ from quel_ic_config.exstickge_coap_client import Quel1seBoard, _ExstickgeCoapCli
 from quel_ic_config.exstickge_coap_tempctrl_client import _ExstickgeCoapClientQuel1seTempctrlBase
 from quel_ic_config.exstickge_proxy import LsiKindId
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1seConfigSubsystemTempctrlDebugMixin
+from quel_ic_config.quel1_thermistor import Quel1seOnboardThermistor, Quel1Thermistor
 from quel_ic_config.quel1se_config_subsystem import _Quel1seConfigSubsystemBase
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
-from quel_ic_config.thermistor import Quel1seOnboardThermistor, Thermistor
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +47,8 @@ class ExstickgeCoapClientAdda(_ExstickgeCoapClientQuel1seTempctrlBase):
     def __init__(
         self,
         target_addr: str,
-        target_port: int = _ExstickgeCoapClientQuel1seTempctrlBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientQuel1seTempctrlBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = _ExstickgeCoapClientQuel1seTempctrlBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientQuel1seTempctrlBase.DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_addr, target_port, timeout)
 
@@ -68,8 +67,6 @@ class Quel1seAddaConfigSubsystem(_Quel1seConfigSubsystemBase, Quel1seConfigSubsy
     _PROXY_CLASSES: Tuple[type, ...] = (ExstickgeCoapClientAdda,)
 
     _GROUPS: Set[int] = {0, 1}
-
-    _MXFE_IDXS: Set[int] = {0, 1}
 
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
@@ -104,7 +101,7 @@ class Quel1seAddaConfigSubsystem(_Quel1seConfigSubsystemBase, Quel1seConfigSubsy
 
     _DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP: bool = False
 
-    _THERMISTORS: Dict[Tuple[int, int], Thermistor] = {
+    _THERMISTORS: Dict[Tuple[int, int], Quel1Thermistor] = {
         (0, 0): Quel1seOnboardThermistor("adda_lmx2594_0"),
         (0, 1): Quel1seOnboardThermistor("adda_lmx2594_1"),
     }
@@ -113,24 +110,21 @@ class Quel1seAddaConfigSubsystem(_Quel1seConfigSubsystemBase, Quel1seConfigSubsy
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        _Quel1seConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        _Quel1seConfigSubsystemBase.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
         self._construct_tempctrl_debug()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
-        _ = ignore_access_failure_of_adrf6780  # not used
-        _ = ignore_lock_failure_of_lmx2594  # not used
+        pass
 
 
 class Quel2ProtoAddaConfigSubsystem(Quel1seAddaConfigSubsystem):

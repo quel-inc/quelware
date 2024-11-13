@@ -8,7 +8,10 @@ logger = logging.getLogger()
 def relinkup():
     global box
 
-    link_ok = box.relinkup()
+    link_ok = box.relinkup(
+        config_root=args.config_root,
+        config_options=args.config_options,
+    )
     return link_ok
 
 
@@ -47,8 +50,6 @@ if __name__ == "__main__":
         ipaddr_sss=str(args.ipaddr_sss),
         ipaddr_css=str(args.ipaddr_css),
         boxtype=args.boxtype,
-        config_root=args.config_root,
-        config_options=args.config_options,
         ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
         ignore_access_failure_of_adrf6780=args.ignore_access_failure_of_adrf6780,
     )

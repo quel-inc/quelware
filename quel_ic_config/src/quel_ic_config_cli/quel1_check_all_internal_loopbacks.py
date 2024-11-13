@@ -1033,7 +1033,7 @@ class LoopbackTest:
         self.pgs = set(self.gen_vport_settings.keys())
 
     def initialize(self):
-        self.boxpool.initialize(resync=False)
+        self.boxpool.initialize(allow_resync=False)
 
     def _do_background_check(self, pulse_threshold: Optional[float] = None) -> None:
         bgnoise = self.boxpool.check_background_noise(self.cps)
@@ -1165,12 +1165,6 @@ def main():
 
     parser = argparse.ArgumentParser("observing signals from all the output port via internal loop-back paths")
     parser.add_argument(
-        "--ipaddr_clk",
-        type=ip_address,
-        required=True,
-        help="IP address of clock master",
-    )
-    parser.add_argument(
         "--ipaddr_wss",
         type=ip_address,
         required=True,
@@ -1209,9 +1203,7 @@ def main():
         logger.error(f"boxtype '{Quel1BoxType.tostr(args.boxtype)}' is not supported")
         sys.exit(1)
 
-    CLOCKMASTER_SETTINGS: dict[str, Any] = {
-        "ipaddr": str(args.ipaddr_clk),
-    }
+    CLOCKMASTER_SETTINGS: dict[str, Any] = {}
 
     BOX_SETTINGS: dict[str, BoxSettingType] = {
         "BOX0": {
@@ -1219,8 +1211,6 @@ def main():
             "ipaddr_sss": str(args.ipaddr_sss),
             "ipaddr_css": str(args.ipaddr_css),
             "boxtype": args.boxtype,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         },
     }

@@ -9,18 +9,18 @@ import time
 from abc import ABCMeta, abstractmethod
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Mapping, Set, Tuple, Union
+from typing import Any, Callable, Final, Mapping, Set, Tuple, Union
 from weakref import WeakSet
 
 import aiocoap
 import aiocoap.error
+import flufl.lock as fl
 import ping3
 import ulid
-from filelock import FileLock
 from packaging.version import Version
 
+from quel_ic_config.box_lock import BoxLockError
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
-from quel_ic_config.quel1se_device_lock import DeviceLockException
 from quel_ic_config.quel_config_common import _DEFAULT_LOCK_DIRECTORY
 
 logger = logging.getLogger(__name__)
@@ -60,11 +60,16 @@ class SyncAsyncThunk:
             return self._result
 
 
+class _BoxFailedUnlockError(Exception):
+    pass
+
+
 class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
-    _DEFAULT_LOOPING_TIMEOUT = 0.25
-    DEFAULT_RESPONSE_TIMEOUT: float = 3.0
+    _DEFAULT_LOOPING_TIMEOUT: Final[float] = 0.25
+    DEFAULT_COAP_RESPONSE_TIMEOUT: Final[float] = 3.0
 
     _clients: WeakSet["AbstractSyncAsyncCoapClient"] = WeakSet()
+    _create_lock: threading.Lock = threading.Lock()
 
     class _ProximityTransportTuning:
         # Notes: this tuning parameter is tailored for the default timeout (= 3.0 second).
@@ -75,18 +80,55 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
 
     @classmethod
     def release_lock_all(cls):
-        for c in cls._clients:
-            if c._locked:
-                c._writeout_recovery_key()
+        with cls._create_lock:
+            for c in cls._clients:
+                if c._locked:
+                    c._cleanup()
+            # Notes: reconsider the following check is effective or not.
+            for c in cls._clients:
+                for _ in range(10):
+                    if not c.has_lock:
+                        break
+                    time.sleep(cls._DEFAULT_LOOPING_TIMEOUT)
+                else:
+                    logger.error(f"failed to unlock {c._target[0]} due to timeout")
 
-    def __init__(self, looping_timeout: float = _DEFAULT_LOOPING_TIMEOUT):
+    @classmethod
+    def release_lock_all_at_exit(cls):
+        with cls._create_lock:
+            for c in cls._clients:
+                if c._locked:
+                    c._cleanup_at_exit()
+
+    def __init__(self, target: Tuple[str, int], looping_timeout: float = _DEFAULT_LOOPING_TIMEOUT):
         super().__init__()
-        self.request_queue: queue.SimpleQueue[Union[SyncAsyncThunk, None]] = queue.SimpleQueue()
+        self._target = target
+        self._request_queue: queue.SimpleQueue[Union[SyncAsyncThunk, None]] = queue.SimpleQueue()
         self._looping_timeout: float = looping_timeout
+        self._lock_timestamp: float = 0.0
         self._request_to_init_context: bool = False
         self._locked: bool = False
         self._old_recovery_key: Union[ulid.ULID, None] = None
-        self._clients.add(self)
+
+    def _register_self(self):
+        with self._create_lock:
+            for c in self._clients:
+                if c._target[0] == self._target[0] and c.has_lock:
+                    # Notes: should not happen
+                    raise RuntimeError(f"duplicated proxy object for {self._target[0]}")
+            else:
+                self._clients.add(self)
+
+    def _unregister_self(self):
+        with self._create_lock:
+            if not self.has_lock:
+                try:
+                    self._clients.remove(self)
+                except KeyError:
+                    # Notes: this means already removed automatically
+                    pass
+            else:
+                raise _BoxFailedUnlockError(f"try to delete live lock for {self._target[0]}")
 
     @property
     def has_lock(self) -> bool:
@@ -122,13 +164,13 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
 
     def request(self, **args) -> SyncAsyncThunk:
         req = SyncAsyncThunk(args)
-        self.request_queue.put(req)
+        self._request_queue.put(req)
         return req
 
     def request_and_wait(self, *, timeout: Union[float, None] = None, **args):
         for _ in range(3):
             req = SyncAsyncThunk(args)
-            self.request_queue.put(req)
+            self._request_queue.put(req)
             try:
                 return req.result(timeout=timeout)
             except aiocoap.error.NetworkError as e:
@@ -139,16 +181,13 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
             raise aiocoap.error.NetworkError("connection is refused by server repeatedly")
 
     def terminate(self) -> None:
-        self.request_queue.put(None)
-        for _ in range(5):
-            if not self._locked:
-                try:
-                    self._clients.remove(self)
+        if hasattr(self, "_request_queue"):
+            self._request_queue.put(None)
+            for _ in range(5):
+                if not self._locked:
                     break
-                except KeyError:
-                    # Notes: this means already removed automatically
-                    break
-            time.sleep(0.1)
+                time.sleep(self._looping_timeout / 2)
+            self._unregister_self()  # Notes: raise RuntimeException for ClientWithDeviceLock holding a lock at exit.
 
     @abstractmethod
     async def _take_lock(self, context, with_token: bool) -> None: ...
@@ -170,23 +209,21 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
                 if self._old_recovery_key is not None:
                     _ = await self._release_lock(context, self._old_recovery_key)
                     self._old_recovery_key = None
-                    logger.info("the previous lock is released successfully")
+                    logger.info(f"the previous lock of {self._target[0]} is released successfully")
 
                 if self._request_to_init_context:
                     _ = await context.shutdown()
-                    logger.info("recreating communication context for recovery")
+                    logger.info(f"recreating communication context of {self._target[0]} for recovery")
                     context = await aiocoap.Context.create_client_context()
-                    await self._keep_lock(context)
                     self._request_to_init_context = False
-                else:
-                    await self._keep_lock(context)
+
+                await self._keep_lock(context)
 
                 req = await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: self.request_queue.get(timeout=self._looping_timeout)
+                    None, lambda: self._request_queue.get(timeout=self._looping_timeout)
                 )  # Notes: queue.Empty exception is raised if no requests come.
 
                 if req is None:
-                    logger.info(f"quitting main loop of {self.__class__.__name__}")
                     break
                 else:
                     if self._check_lock_at_host(req._data):
@@ -199,7 +236,7 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
                 pass
 
         # Notes: executed only when Box object is explicitly deleted.
-        logger.info("quitting _async_main()")
+        logger.info(f"quitting main loop of {self.__class__.__name__} of {self._target[0]}")
         _ = await self._release_lock(context)
         _ = await context.shutdown()
 
@@ -224,15 +261,13 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
             req.set_exception(e)
 
     async def _failed_access(self, req: SyncAsyncThunk):
-        try:
-            target_addr = req._data["uri"][7:].split("/")[0]
-        except Exception:
-            # Notes: should not happen
-            target_addr = "device"
-        req.set_exception(DeviceLockException(f"device lock of {target_addr} is not available now"))
+        req.set_exception(BoxLockError(f"device lock of {self._target[0]} is not available now"))
 
     @abstractmethod
-    def _writeout_recovery_key(self): ...
+    def _cleanup(self): ...
+
+    @abstractmethod
+    def _cleanup_at_exit(self): ...
 
 
 # Notes: for bootstrap of CSS and debug. (no lock is required for the bootstrap, actually)
@@ -240,22 +275,26 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
 class SyncAsyncCoapClientWithDummyLock(AbstractSyncAsyncCoapClient):
     async def _take_lock(self, context, with_token: bool) -> None:
         self._locked = True  # Notes: not locked, actually.
+        # Notes: do not invoke self._register_self() here, it is meaningless and harmful.
 
     async def _keep_lock(self, context) -> None:
         if not self._locked:
             await self._take_lock(context, False)
 
-    def _release_lock_body(self) -> None:
-        self._locked = False
-
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         self._release_lock_body()
         return True
 
+    def _release_lock_body(self) -> None:
+        self._locked = False
+
     def _check_lock_at_host(self, data: Any) -> bool:
         return True
 
-    def _writeout_recovery_key(self):
+    def _cleanup(self):
+        self._release_lock_body()
+
+    def _cleanup_at_exit(self):
         pass
 
     def terminate(self) -> None:
@@ -267,48 +306,60 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
     # Notes: no lock mechanism is unavailable in v1.2.1 and former firmware.
     #        the substitute lock mechanism is implemented.
 
+    _DEFAULT_LOCK_EXPIRATION: Final[float] = 15.0  # [s]
+    _FLOCK_TIMEOUT: int = 5  # [s]
+
     def __init__(
         self,
         target: Tuple[str, int],
         lock_directory: Path = _DEFAULT_LOCK_DIRECTORY,
         looping_timeout: float = AbstractSyncAsyncCoapClient._DEFAULT_LOOPING_TIMEOUT,
     ):
-        super().__init__(looping_timeout=looping_timeout)
-        self._target: Tuple[str, int] = target
+        super().__init__(target=target, looping_timeout=looping_timeout)
         if not lock_directory.is_dir():
             raise RuntimeError(f"lock directory '{lock_directory}' is unavailable")
-        self._lockfile = FileLock(lock_directory / (target[0]), mode=lock_directory.stat().st_mode & 0o666)
-        self._lock_tried: bool = False
+        self._lockobj: fl.Lock = fl.Lock(
+            lockfile=str(lock_directory / self._target[0]), lifetime=int(self._DEFAULT_LOCK_EXPIRATION)
+        )
 
     async def _take_lock(self, context, with_token: bool) -> None:
+        self._lock_timestamp = time.perf_counter()  # no next chance to take a lock.
         try:
-            self._lockfile.acquire(blocking=False)
+            self._lockobj.lock(timeout=self._FLOCK_TIMEOUT)
             self._locked = True
+            self._register_self()
             logger.info(f"successfully acquired the lock of {self._target[0]}")
-        except TimeoutError:
-            logger.error(f"device lock of {self._target[0]} is not available now")
+        except fl.TimeOutError:
+            logger.error(f"failed to acquire lock of {self._target[0]}")
 
     async def _keep_lock(self, context) -> None:
-        if not self._lock_tried:
-            self._lock_tried = True
+        if self._lock_timestamp == 0.0:
             await self._take_lock(context, False)
-
-    def _release_lock_body(self) -> None:
-        self._lockfile.release()
-        self._locked = False
+        else:
+            try:
+                self._lockobj.refresh()
+                self._lock_timestamp = time.perf_counter()
+            except fl.NotLockedError:
+                pass
 
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         self._release_lock_body()
         return True
 
+    def _release_lock_body(self) -> None:
+        try:
+            self._lockobj.unlock()
+            self._locked = False
+        except fl.NotLockedError:
+            pass
+
     def _check_lock_at_host(self, data: Any) -> bool:
         return self.has_lock or data["code"] == aiocoap.GET
 
-    def _writeout_recovery_key(self):
-        pass
+    def _cleanup(self):
+        self._release_lock_body()
 
-    def terminate(self) -> None:
-        super().terminate()
+    def _cleanup_at_exit(self):
         self._release_lock_body()
 
 
@@ -324,9 +375,8 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
         target: Tuple[str, int],
         looping_timeout: float = AbstractSyncAsyncCoapClient._DEFAULT_LOOPING_TIMEOUT,
     ):
-        super().__init__(looping_timeout=looping_timeout)
+        super().__init__(target=target, looping_timeout=looping_timeout)
         self._target: Tuple[str, int] = target
-        self._lock_timestamp: float = 0.0
         self._old_recovery_key = self._load_old_recovery_key()
         self._recovery_key: ulid.ULID = ulid.ULID()
 
@@ -364,15 +414,17 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
             res = await context.request(msg).response
             if res.code.is_successful():
                 self._locked = True
+                self._register_self()
                 logger.info(f"successfully acquired the lock of {self._target[0]}")
             elif res.code == aiocoap.FORBIDDEN:
-                raise DeviceLockException(f"device lock of {self._target[0]} is not available now")
+                raise BoxLockError(f"device lock of {self._target[0]} is not available now")
             else:
                 raise RuntimeError(f"failed to acquire the lock of {self._target[0]}")
         else:
             msg = aiocoap.Message(code=aiocoap.GET, uri=f"coap://{self._target[0]}/lock/acquire")
             res = await context.request(msg).response
             if not res.code.is_successful():
+                self._locked = False
                 raise RuntimeError(f"failed to extend the lock of {self._target[0]}")
 
     async def _keep_lock(self, context) -> None:
@@ -403,22 +455,33 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
             res = await context.request(msg).response
             if res.code.is_successful():
                 self._locked = False
-                logger.info("lock is released successfully")
+                logger.info(f"lock of {self._target[0]} is released successfully")
                 return True
             else:
                 # Notes: try to unlock irrespective of has_lock, however, don't show failure log if not has_lock.
                 if self.has_lock:
-                    logger.warning(f"failed to release the lock with code: {res.code}")
+                    logger.warning(f"failed to release the lock of {self._target[0]} with code: {res.code}")
                 return False
         except Exception as e:
-            logger.warning(f"failed to release the lock with exception: {e}")
+            logger.warning(f"failed to release the lock of {self._target[0]} with exception: {e}")
             return False
 
     def _check_lock_at_host(self, data: Any) -> bool:
         # Notes: host check is skipped. firmware is in charge of judging permission.
         return True
 
-    def _writeout_recovery_key(self):
+    def _cleanup(self):
+        if hasattr(self, "_request_queue"):
+            res1 = self.request_and_wait(
+                code=aiocoap.GET,
+                uri=f"coap://{self._target[0]}/lock/release",
+                timeout=self.DEFAULT_COAP_RESPONSE_TIMEOUT,
+            )
+            if res1.code.is_successful():
+                self._locked = False
+                logger.info(f"lock of {self._target[0]} is released successfully")
+
+    def _cleanup_at_exit(self):
         os.makedirs(self._RECOVERY_KEY_DIRECTORY, exist_ok=True)
         filepath = self._RECOVERY_KEY_DIRECTORY / f"{self._target[0]}.txt"
         with open(filepath, "w") as f:
@@ -427,10 +490,16 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
             f.write(f"{str(z)[:10]}{str(self._recovery_key)[10:]}")
             f.flush()
             f.close()
-        logger.info(f"recovery key is written out to {filepath}")
+        logger.info(f"recovery key of {self._target[0]} is written out to {filepath}")
+
+    def terminate(self) -> None:
+        try:
+            super().terminate()
+        except _BoxFailedUnlockError:
+            pass
 
 
-atexit.register(AbstractSyncAsyncCoapClient.release_lock_all)
+atexit.register(AbstractSyncAsyncCoapClient.release_lock_all_at_exit)
 
 
 class Quel1seBoard(str, Enum):
@@ -442,8 +511,8 @@ class Quel1seBoard(str, Enum):
 
 
 class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
-    _DEFAULT_RESPONSE_TIMEOUT: float = AbstractSyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT
-    _DEFAULT_PORT = 5683
+    DEFAULT_RESPONSE_TIMEOUT: float = AbstractSyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT
+    DEFAULT_PORT = 5683
 
     _URI_MAPPINGS: Mapping[Tuple[LsiKindId, int], str]
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]]
@@ -474,8 +543,8 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
     def __init__(
         self,
         target_address: str,
-        target_port: int = _DEFAULT_PORT,
-        timeout: float = _DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = DEFAULT_PORT,
+        timeout: float = DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_address, target_port, timeout)
         self._core: AbstractSyncAsyncCoapClient = self._creating_core()
@@ -486,7 +555,7 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
         return self._core.has_lock
 
     def _creating_core(self) -> AbstractSyncAsyncCoapClient:
-        return SyncAsyncCoapClientWithDummyLock()
+        return SyncAsyncCoapClientWithDummyLock(target=self._target)
 
     def _coap_return_check(self, res: Union[aiocoap.Message, None], uri: str, raise_exception: bool = True) -> bool:
         if res is None:
@@ -498,7 +567,7 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
         if not res.code.is_successful():
             # Notes: DeviceLockException is not subject to be controlled by raise_exception argument.
             if res.code == aiocoap.FORBIDDEN:
-                raise DeviceLockException(f"device lock of {self._target[0]} is not available now")
+                raise BoxLockError(f"device lock of {self._target[0]} is not available now")
             if raise_exception:
                 raise RuntimeError(f"failed access to the end-point '{uri}' with an error code {res.code}")
             else:
@@ -651,7 +720,7 @@ def get_exstickge_server_info(
     ipaddr_css: str,
     port: int = 5683,
     timeout_ping: float = 10.0,
-    timeout_coap: float = AbstractSyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT,
+    timeout_coap: float = AbstractSyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT,
 ) -> Tuple[bool, str, str]:
     # Notes: assuming ipaddr_css is already validated
     # Notes: timeout_ping of 10.0 second comes from the booting duration of the server
@@ -663,7 +732,7 @@ def get_exstickge_server_info(
             f"not reachable to {ipaddr_css}, it looks like a wrong IP address or no connection to the box"
         )
 
-    core = SyncAsyncCoapClientWithDummyLock()
+    core = SyncAsyncCoapClientWithDummyLock(target=(ipaddr_css, port))
     core.start()
     uri1 = f"coap://{ipaddr_css}/version/firmware"
     res1 = core.request_and_wait(code=aiocoap.GET, uri=uri1, timeout=timeout_coap)
@@ -683,11 +752,11 @@ def get_exstickge_server_info(
         raise RuntimeError(f"failed to access to end-point '{uri1}' with error code {res1.code}")
     else:
         v = res1.payload.decode()
-        logger.info(f"CoAP server version is '{v}'")
+        logger.info(f"CoAP server version of {ipaddr_css} is '{v}'")
         if res2.code.is_successful():
             u = res2.payload.decode()
-            logger.info(f"reported boxtype is '{u}'")
+            logger.info(f"reported boxtype of {ipaddr_css} is '{u}'")
             return True, v, u
         else:
-            logger.info("no boxtype information is available")
+            logger.info(f"boxtype information of {ipaddr_css} is not available")
             return True, v, ""

@@ -108,7 +108,7 @@ PYTHONPATH=. python scripts/quel1_monitor_synchronized_output_advanced.py --ipad
 PYTHONPATH=. python scripts/quel1_monitor_synchronized_output_advanced.py --ipaddr_clk 10.3.0.13 \
 --ipaddr_wss_a 10.1.0.58 --boxtype_a quel1-a --input_port 5 --trigger_port 2 \
 --ipaddr_wss_b 10.1.0.60 --boxtype_b quel1-b --output_port 4 \
---delay_output_delta 6 --trigger_offset -3
+--delay_output_delta 8 --trigger_offset -3
 ```
 
 `time_to_start: 0`のグラフが、期待通りのタイミングで波形発生できるオフセットの中央にきていることが見て取れる。

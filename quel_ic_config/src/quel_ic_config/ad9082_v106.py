@@ -8,7 +8,7 @@ from typing import Any, Collection, Dict, Final, List, Mapping, Sequence, Tuple,
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict, RootModel, ValidationError
+from pydantic import BaseModel, ConfigDict, RootModel, ValidationError, field_validator, model_validator
 from typing_extensions import Self
 
 import adi_ad9081_v106 as ad9081
@@ -368,6 +368,29 @@ class Ad9082ChannelAssignConfig(NoExtraBaseModel):
             self._as_cpptype_sub(self.dac3),
         ]
 
+    @staticmethod
+    def dac_order(idx: int, v: List[int]) -> List[int]:
+        u = sorted(v, reverse=True)
+        if v != u:
+            logger.warning(f"param.dac.channel_assign[{idx}] is not sorted in reversed order, fix it")
+        return u
+
+    @field_validator("dac0", mode="before")
+    def dac0_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(0, v)
+
+    @field_validator("dac1", mode="before")
+    def dac1_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(1, v)
+
+    @field_validator("dac2", mode="before")
+    def dac2_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(2, v)
+
+    @field_validator("dac3", mode="before")
+    def dac3_order(cls, v: List[int]) -> List[int]:
+        return cls.dac_order(3, v)
+
 
 class Ad9082InterpolationRateConfig(NoExtraBaseModel):
     channel: _Ad9082FducRateConfigEnum
@@ -471,6 +494,14 @@ class _Ad9082FddcRateConfigEnum(IntEnum):
     def as_cpptype(self) -> ad9081.AdcFineDdcDcm:
         return _Ad9082FddcRateConfigEnum_cpptype_map[self]
 
+    @classmethod
+    def from_cpptype(self, r: int) -> int:
+        for k, v in _Ad9082CddcRateConfigEnum_cpptype_map.items():
+            if v == r:
+                return k
+        else:
+            raise ValueError(f"invalid AdcFineDdcDcm value: {r}")
+
 
 _Ad9082FddcRateConfigEnum_cpptype_map: Dict[int, ad9081.AdcFineDdcDcm] = {
     _Ad9082FddcRateConfigEnum.FDDC1: ad9081.ADC_FDDC_DCM_1,
@@ -496,6 +527,17 @@ class _Ad9082DecimationRateChannelConfig(FrozenSequenceRootModel):
         _Ad9082FddcRateConfigEnum,
     ]
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_rates(cls, sq: Any) -> Sequence:
+        if not isinstance(sq, Sequence):
+            raise ValueError("non-sequence value")
+        if len(sq) != 8:
+            raise ValueError("invalid length")
+        if len(set(sq)) > 1:
+            raise ValueError("all the channel decimation rates are expected to be identical currently")
+        return sq
+
     def as_cpptype(self) -> List[int]:
         return [int(x.as_cpptype()) for x in self.root]
 
@@ -516,6 +558,14 @@ class _Ad9082CddcRateConfigEnum(IntEnum):
 
     def as_cpptype(self) -> ad9081.AdcCoarseDdcDcm:
         return _Ad9082CddcRateConfigEnum_cpptype_map[self]
+
+    @classmethod
+    def from_cpptype(self, r: int) -> int:
+        for k, v in _Ad9082CddcRateConfigEnum_cpptype_map.items():
+            if v == r:
+                return k
+        else:
+            raise ValueError(f"invalid AdcCoarseDdcDcm value: {r}")
 
 
 _Ad9082CddcRateConfigEnum_cpptype_map: Dict[int, ad9081.AdcCoarseDdcDcm] = {
@@ -538,6 +588,17 @@ class _Ad9082DecimationRateMainConfig(FrozenSequenceRootModel):
     root: Tuple[
         _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum, _Ad9082CddcRateConfigEnum
     ]
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_rates(cls, sq: Any) -> Sequence:
+        if not isinstance(sq, Sequence):
+            raise ValueError("non-sequence value")
+        if len(sq) != 4:
+            raise ValueError("invalid length")
+        if len(set(sq)) > 1:
+            raise ValueError("all the main decimation rates are expected to be identical currently")
+        return sq
 
     def as_cpptype(self) -> List[int]:
         return [int(x.as_cpptype()) for x in self.root]
@@ -584,32 +645,14 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     WORKAROUND_FREQ_DISCOUNT_RATE = 0.97
 
-    def __init__(self, name: str, param_in: Union[str, Dict[str, Any], Ad9082Config]):
+    def __init__(self, name: str):
         super().__init__(name)
-        # Notes: self.param is self.loaded into self.device at initialization().
-        self.param: Ad9082Config = self.load_settings(param_in)
         self.device: Final[Device] = Device()
         self.device.callback_set(self._read_reg_cb, self._write_reg_cb, self._delay_us_cb, self._log_write_cb)
-        # for historical reason, use 204b for a while.
-        # the default value will be changed to False if the 204c works well.
-        # it should be removed after the evaluation period, finally.
-
-    def load_settings(self, param_in: Union[str, Dict[str, Any], Ad9082Config]):
-        if isinstance(param_in, str):
-            param: Ad9082Config = Ad9082Config.model_validate(json.loads(param_in))
-        elif isinstance(param_in, dict):
-            param = Ad9082Config.model_validate(param_in)
-        elif isinstance(param_in, Ad9082Config):
-            param = param_in
-        else:
-            raise AssertionError
-        return param
-
-    def update_settings(self, param_update: Dict[str, Any]):
-        # Notes: this method is provided for development purpose. should not be used in nominal operations.
-        p = self.param.model_dump()
-        update_mapping_recursive(p, param_update)
-        self.param = self.load_settings(p)
+        # Notes: caches
+        self._interp_cache: Union[Tuple[int, int], None] = None
+        self._fduc_map_cache: Union[Tuple[Tuple[int, ...], ...], None] = None
+        self._dcm_cache: Union[Tuple[int, int], None] = None
 
     def __del__(self):
         self.device.callback_unset()
@@ -655,7 +698,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
     def device_reset(self) -> None:
         logger.info(f"reset {self.name}")
-        rc = ad9081.device_reset(self.device, ad9081.SOFT_RESET)
+        rc = ad9081.device_reset(self.device, ad9081.SOFT_RESET_AND_INIT)
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
@@ -726,52 +769,81 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self._set_des_settings(param_sd.des)
         self._set_ser_settings(param_sd.ser)
 
-    def initialize(
+    def _validate_settings(self, param_in: Union[str, Dict[str, Any], Ad9082Config]) -> Ad9082Config:
+        if isinstance(param_in, str):
+            param: Ad9082Config = Ad9082Config.model_validate(json.loads(param_in))
+        elif isinstance(param_in, dict):
+            param = Ad9082Config.model_validate(param_in)
+        elif isinstance(param_in, Ad9082Config):
+            # Notes: already validated
+            param = param_in
+        else:
+            raise AssertionError
+        return param
+
+    def configure(
         self,
+        param_in: Union[str, Dict[str, Any], Ad9082Config],
         reset: bool = False,
-        link_init: bool = False,
         use_204b: bool = False,
         use_bg_cal: bool = True,
         wait_after_device_init: float = 0.1,
     ) -> None:
+        param: Ad9082Config = self._validate_settings(param_in)
+
+        self._set_spi_settings(param.spi)  # values are set to the device object.
         if reset:
-            self.device_reset()
+            self.device_reset()  # device_reset() calls device_init().
+        else:
+            self.device_init()
+        time.sleep(wait_after_device_init)
 
-        self._set_spi_settings(self.param.spi)  # values are set to the device object.
-        self._set_serdes_settings(self.param.serdes)  # values are set to a device object.
-        if link_init:
-            self.device_init()  # the values set above is applied to the device here.
-            time.sleep(wait_after_device_init)
-
-        if use_204b and link_init:
+        if use_204b:
             # Notes: "FREQ_DISCOUNT" was deprecated. TODO: will remove it soon.
-            dev_ref_clk_hz = int(self.param.clock.ref * self.WORKAROUND_FREQ_DISCOUNT_RATE)
-            dac_clk_hz = int(self.param.clock.dac * self.WORKAROUND_FREQ_DISCOUNT_RATE)
-            adc_clk_hz = int(self.param.clock.adc * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+            dev_ref_clk_hz = int(param.clock.ref * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+            dac_clk_hz = int(param.clock.dac * self.WORKAROUND_FREQ_DISCOUNT_RATE)
+            adc_clk_hz = int(param.clock.adc * self.WORKAROUND_FREQ_DISCOUNT_RATE)
         else:
-            dev_ref_clk_hz = int(self.param.clock.ref)
-            dac_clk_hz = int(self.param.clock.dac)
-            adc_clk_hz = int(self.param.clock.adc)
+            dev_ref_clk_hz = int(param.clock.ref)
+            dac_clk_hz = int(param.clock.dac)
+            adc_clk_hz = int(param.clock.adc)
+        self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
 
-        if link_init:
-            self.device_clk_config_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
-            self._startup_tx(self.param.dac, use_204b, use_bg_cal)
-            self._startup_rx(self.param.adc, use_204b)
-            self._establish_link()
-        else:
-            self.device.clk_conf_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
-            self.device.dev_info.dev_rev = self.device_chip_id_get().dev_revision
+        # Notes: values are set to device and used in the following startup methods.
+        self._set_serdes_settings(param.serdes)
+        self._startup_tx(param.dac, use_204b, use_bg_cal)
+        self._startup_rx(param.adc, use_204b)
+        self._establish_link()
 
-        if use_204b and link_init:
+        if use_204b:
             # Notes: "FREQ_DISCOUNT" was deprecated. TODO: will remove it soon.
             #       We know this is a completely wrong way. the DISCOUNT_RATE is chosen very carefully to avoid
             #       catastrophy. For the reason of its necessity, ask the senior guys of QuEL.
-            self.device.dev_info.dev_freq_hz = self.param.clock.ref
-            self.device.dev_info.dac_freq_hz = self.param.clock.dac
-            self.device.dev_info.adc_freq_hz = self.param.clock.adc
+            self.device.dev_info.dev_freq_hz = param.clock.ref
+            self.device.dev_info.dac_freq_hz = param.clock.dac
+            self.device.dev_info.adc_freq_hz = param.clock.adc
+
+    def reconnect(self, dev_ref_clk_hz: int) -> None:
+        # Notes: the following two commented out lines are not necessary for reconnect().
+        #        self._set_spi_settings(self.param.spi)
+        #        self._set_serdes_settings(self.param.serdes)
+
+        if dev_ref_clk_hz == 0:
+            raise RuntimeError("PLL is not initialized yet")
+        if self.get_pll_bypassed():
+            dac_clk_hz = dev_ref_clk_hz
+        else:
+            raise RuntimeError("internal PLL is not supported")
+        adc_clk_hz = dev_ref_clk_hz // self.get_adc_clk_div()
+        self.device.clk_conf_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
+        self.device.dev_info.dev_rev = self.device_chip_id_get().dev_revision
 
     def _startup_tx(self, param_tx: Ad9082DacConfig, use_204b: bool, use_bg_cal: bool) -> None:
         logger.info("starting-up DACs")
+
+        # Notes: clear it before the modification of its corresponding registers.
+        self._interp_cache = None
+        self._fduc_map_cache = None
 
         if use_204b:
             main_freq: Tuple[int, int, int, int] = cast(
@@ -871,6 +943,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
+    def clear_crc_error(self):
+        self.write_reg(0x05BB, 0x00)
+        self.write_reg(0x05BB, 0x01)
+
     def _establish_link(self) -> None:
         lid = [0, 0, 0, 0, 0, 0, 0, 0]
         rc = ad9081.jesd_tx_lids_cfg_set(self.device, ad9081.LINK_0, lid)
@@ -881,9 +957,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
-        # clearing CRC IRQ status
-        self.write_reg(0x05BB, 0x00)
-        self.write_reg(0x05BB, 0x01)
+        self.clear_crc_error()
 
     def get_link_status(self) -> Tuple[int, int]:
         link_status: int = self.read_reg(0x055E)
@@ -915,9 +989,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return obj
 
     def calc_dac_fnco_ftw(self, shift_hz: float, fractional_mode=False) -> NcoFtw:
-        obj = NcoFtw.from_frequency(
-            shift_hz, self.device.dev_info.dac_freq_hz // int(self.param.dac.interpolation_rate.main)
-        )
+        obj = NcoFtw.from_frequency(shift_hz, self.device.dev_info.dac_freq_hz // self.get_main_interpolation_rate())
         if not fractional_mode:
             obj.round()
         return obj
@@ -926,7 +998,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return ftw.to_frequency(self.device.dev_info.dac_freq_hz)
 
     def calc_dac_fnco_freq(self, ftw: NcoFtw) -> float:
-        return ftw.to_frequency(self.device.dev_info.dac_freq_hz // int(self.param.dac.interpolation_rate.main))
+        return ftw.to_frequency(self.device.dev_info.dac_freq_hz // self.get_main_interpolation_rate())
 
     def set_dac_cnco(self, dacs: Collection[int], ftw: NcoFtw) -> None:
         # dacs is actually cducs.
@@ -1019,20 +1091,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
             obj.round()
         return obj
 
-    def _check_congruency_of_main_decimation_rate(self) -> None:
-        dr0 = self.param.adc.decimation_rate.main[0]
-        for dr in self.param.adc.decimation_rate.main:
-            if dr != dr0:
-                raise RuntimeError("it is not supported to have different decimation rate among ADCs")
-
     def calc_adc_fnco_ftw(self, shift_hz: float, fractional_mode=False) -> NcoFtw:
-        # TODO: take index of ADC in the case that different decimation rates are used among ADCs.
+        # TODO: take index of ADC in the case that different decimation rates are used among ADCs (low priority).
         # TODO: double shift value when c2r is enabled (low priority).
-        self._check_congruency_of_main_decimation_rate()
-        # Notes: be aware that rounding error may be induced here.
-        obj = NcoFtw.from_frequency(
-            shift_hz, self.device.dev_info.adc_freq_hz // self.param.adc.decimation_rate.main[0]
-        )
+        obj = NcoFtw.from_frequency(shift_hz, self.device.dev_info.adc_freq_hz // self.get_main_decimation_rate())
         if not fractional_mode:
             obj.round()
         return obj
@@ -1041,9 +1103,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         return ftw.to_frequency(self.device.dev_info.adc_freq_hz)
 
     def calc_adc_fnco_freq(self, ftw: NcoFtw) -> float:
-        # TODO: make it possible to eliminate the following check
-        self._check_congruency_of_main_decimation_rate()
-        return ftw.to_frequency(self.device.dev_info.adc_freq_hz // self.param.adc.decimation_rate.main[0])
+        return ftw.to_frequency(self.device.dev_info.adc_freq_hz // self.get_main_decimation_rate())
 
     def set_adc_cnco(self, adcs: Collection[int], ftw: NcoFtw) -> None:
         adc_mask: ad9081.AdcCoarseDdcSelect = ad9081.ADC_CDDC_NONE
@@ -1184,10 +1244,29 @@ class Ad9082V106Mixin(AbstractIcMixin):
         # Notes: one of the given values must be calculated from the actual register values.
         return abs(cur0 - cur1) <= 13
 
+    def _dac_xbar_get(self) -> tuple[tuple[int, ...], ...]:
+        r: list[tuple[int, ...]] = []
+        _, chnl_intrp = self.get_dac_interpolation_rates()
+        for i in range(4):
+            ad9081.dac_select_set(self.device, (1 << i))
+            if chnl_intrp > 1:
+                channels_list: list[int] = []
+                channels = self.hal_reg_get(0x01BA)
+                for j in reversed(range(8)):  # Notes: the order is important!
+                    if channels & (0x01 << j) != 0:
+                        channels_list.append(j)
+                r.append(tuple(channels_list))
+            else:
+                raise NotImplementedError("channel interpolation rate is assumed to be more than 1")
+        return tuple(r)
+
     def get_fduc_of_dac(self, dac: int) -> Tuple[int, ...]:
         if not 0 <= dac <= 3:
             raise ValueError(f"invalid index of dac: {dac}")
-        return tuple(getattr(self.param.dac.channel_assign, f"dac{dac}"))
+
+        if self._fduc_map_cache is None:
+            self._fduc_map_cache = self._dac_xbar_get()
+        return self._fduc_map_cache[dac]
 
     def get_virtual_adc_select(self) -> List[int]:
         # Notes: 16 comes from the value of JESD M parameter. (see p.68 of UG-1578 rev.A)
@@ -1200,11 +1279,52 @@ class Ad9082V106Mixin(AbstractIcMixin):
                 convsel.append(v)
         return convsel
 
+    def get_dac_interpolation_rates(self) -> tuple[int, int]:
+        # Notes: (main, channel)
+        if self._interp_cache is None:
+            intrp_mode = self.hal_reg_get(0x01FF)
+            self._interp_cache = (int((intrp_mode >> 4) & 0x0F), int(intrp_mode & 0x0F))
+        return self._interp_cache
+
     def get_main_interpolation_rate(self) -> int:
-        return int(self.param.dac.interpolation_rate.main)
+        return self.get_dac_interpolation_rates()[0]
 
     def get_channel_interpolation_rate(self) -> int:
-        return int(self.param.dac.interpolation_rate.channel)
+        return self.get_dac_interpolation_rates()[1]
+
+    def get_adc_decimation_rates(self) -> tuple[int, int]:
+        if self._dcm_cache is None:
+            cdcms = []
+            for i in range(4):
+                ad9081.adc_ddc_coarse_select_set(self.device, 1 << i)
+                cdcms.append(int(_Ad9082CddcRateConfigEnum.from_cpptype(self.read_reg(0x0282) & 0x0F)))
+            ad9081.adc_ddc_coarse_select_set(self.device, 0)
+            if len(set(cdcms)) != 1:
+                raise RuntimeError(f"unsupported main decimation settings: {cdcms}")
+
+            fdcms = []
+            for i in range(8):
+                ad9081.adc_ddc_fine_select_set(self.device, 1 << i)
+                fdcms.append(int(_Ad9082FddcRateConfigEnum.from_cpptype(self.read_reg(0x0283) & 0x07)))
+            ad9081.adc_ddc_fine_select_set(self.device, 0)
+            if len(set(fdcms)) != 1:
+                raise RuntimeError(f"unsupported channel decimation settings: {fdcms}")
+
+            self._dcm_cache = cdcms[0], fdcms[0]
+
+        return self._dcm_cache
+
+    def get_main_decimation_rate(self) -> int:
+        return self.get_adc_decimation_rates()[0]
+
+    def get_channel_decimation_rate(self) -> int:
+        return self.get_adc_decimation_rates()[1]
+
+    def get_pll_bypassed(self) -> bool:
+        return (self.read_reg(0x0094) & 0x01) == 0x01
+
+    def get_adc_clk_div(self) -> int:
+        return (self.read_reg(0x0180) & 0x03) + 1
 
     def get_temperatures(self) -> Tuple[int, int]:
         temperatures = ChipTemperatures()

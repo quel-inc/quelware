@@ -17,38 +17,22 @@ NUM_CONNECT_RETRY: Final[int] = 2
 NUM_LINKUP_RETRY: Final[int] = 3
 
 
-def load_conf(filename: pathlib.Path) -> Tuple[bool, Dict[str, Union[None, Quel1Box]]]:
-    objs: Dict[str, Union[Quel1Box, None]] = {}
-
-    try:
-        with open(filename) as f:
-            conf = yaml.safe_load(f)
-    except Exception as e:
-        logger.error(f"failed to load '{filename}' due to exception: '{e}'")
-        return False, objs
-
-    if conf is None:
-        logger.error(f"empty file '{filename}'")
-        return False, objs
-
-    if "version" not in conf:
-        logger.error(f"version is not specified in '{filename}'")
-        return False, objs
-
-    version: int = conf["version"]
-    if version != 1:
-        logger.error(f"wrong version '{version}' (!= 1)")
-        return False, objs
-
-    if "boxes" not in conf:
-        logger.error(f"no 'boxes' key is found in the config file '{filename}'")
-        return False, objs
-
-    specs = conf["boxes"]
+def validate_boxes_conf(box_confs) -> bool:
     valid_conf: bool = True
     box_names: Set[str] = set()  # Notes: for checking duplicated box_names
     ipaddrs: Set[IPv4Address] = set()  # Notes: for checking duplicated addresses
-    for idx, spec in enumerate(specs):
+
+    # Notes: validating box_confs
+    if not isinstance(box_confs, list):
+        logger.error("unexpected format of box descriptions")
+        return False
+
+    for idx, spec in enumerate(box_confs):
+        if not isinstance(spec, dict):
+            logger.error(f"unexpected format of descriptions of the {idx}-th box")
+            valid_conf = False
+            continue
+
         if "name" not in spec:
             logger.error(f"no 'name' found at the {idx}-th box")
             valid_conf = False
@@ -86,23 +70,25 @@ def load_conf(filename: pathlib.Path) -> Tuple[bool, Dict[str, Union[None, Quel1
             continue
 
         try:
-            box_type = Quel1BoxType.fromstr(spec["boxtype"])
+            _ = Quel1BoxType.fromstr(spec["boxtype"])
         except KeyError:
             logger.error(f"invalid boxtype '{spec['boxtype']}' of a box '{box_name}'")
             valid_conf = False
             continue
 
-    if not valid_conf:
-        logger.error(f"broken configuration file '{filename}', quitting")
-        return False, objs
+    return valid_conf
 
-    for idx, spec in enumerate(specs):
+
+def load_boxes(box_conf: list[dict[str, str]]):
+    box_objs: Dict[str, Union[Quel1Box, None]] = {}
+
+    for idx, spec in enumerate(box_conf):
         box_name = spec["name"]
         box_ipaddr = IPv4Address(spec["ipaddr"])
         box_type = Quel1BoxType.fromstr(spec["boxtype"])
         for _ in range(NUM_CONNECT_RETRY):
             try:
-                objs[box_name] = Quel1Box.create(
+                box_objs[box_name] = Quel1Box.create(
                     ipaddr_wss=str(box_ipaddr),
                     ipaddr_sss=str(box_ipaddr + 0x010000),
                     ipaddr_css=str(box_ipaddr + 0x040000),
@@ -112,13 +98,49 @@ def load_conf(filename: pathlib.Path) -> Tuple[bool, Dict[str, Union[None, Quel1
             except Exception as e:
                 logger.warning(f"failed to connect to {box_name} due to exception: '{e}'")
         else:
-            objs[box_name] = None
+            box_objs[box_name] = None
             logger.error(f"give up to connect to {box_name} due to repeated failures")
 
-    return True, objs
+    return box_objs
 
 
-def check_established(name: str, box: Quel1Box) -> bool:
+def load_conf_v1(conf, filename: pathlib.Path) -> tuple[bool, dict[str, Union[None, Quel1Box]]]:
+    if "boxes" not in conf:
+        logger.error(f"no 'boxes' key is found in the config file '{filename}'")
+        return False, {}
+
+    if not validate_boxes_conf(conf["boxes"]):
+        logger.error(f"broken configuration file '{filename}', quitting")
+        return False, {}
+
+    return True, load_boxes(conf["boxes"])
+
+
+def load_conf(filename: pathlib.Path) -> Tuple[bool, Dict[str, Union[None, Quel1Box]]]:
+    try:
+        with open(filename) as f:
+            conf = yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"failed to load '{filename}' due to exception: '{e}'")
+        return False, {}
+
+    if conf is None:
+        logger.error(f"empty file '{filename}'")
+        return False, {}
+
+    if "version" not in conf:
+        logger.error(f"version is not specified in '{filename}'")
+        return False, {}
+
+    version: int = conf["version"]
+    if version == 1:
+        return load_conf_v1(conf, filename)
+    else:
+        logger.error(f"wrong version '{version}' (!= 1)")
+        return False, {}
+
+
+def check_link_validity(name: str, box: Quel1Box) -> bool:
     status = box.reconnect(ignore_crc_error_of_mxfe=box.css.get_all_mxfes(), ignore_invalid_linkstatus=True)
     if not all(status.values()):
         logger.warning("no valid link status, it is subject to be linked up")
@@ -145,9 +167,8 @@ def diff_crc_error_count(cnts0: Dict[int, List[int]], cnts1: Dict[int, List[int]
     return True
 
 
-def check_link_quality(name: str, box: Quel1Box, duration: int) -> bool:
-    # Notes: all the mxfe should be established link
-
+def check_crc_error(name: str, box: Quel1Box, duration: int) -> bool:
+    # Notes: all the mxfe should be linked up in advance.
     step = 0.5
     t = t0 = time.perf_counter()
     e0 = get_crc_error_count(box)
@@ -159,11 +180,14 @@ def check_link_quality(name: str, box: Quel1Box, duration: int) -> bool:
             return False
         step = min(10.0, step * 2)
 
+    # Notes: clear CRC error flag if no CRC error is detected.
+    for mxfe_idx in box.css.get_all_mxfes():
+        box.css.clear_crc_error(mxfe_idx)
     return True
 
 
-def linkup_a_box(name: str, box: Quel1Box, args) -> bool:
-    threading.current_thread().name = name
+def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
+    threading.current_thread().name = name  # Notes: thread name is printed in log messages.
 
     use_bgcal: bool = True
     if args.nouse_bgcal:
@@ -172,51 +196,61 @@ def linkup_a_box(name: str, box: Quel1Box, args) -> bool:
         else:
             use_bgcal = False
 
-    not_bad_link: bool = True
     if args.force:
-        # Notes: force to execute link-up at the first attempt even if the link state is fine
-        not_bad_link = False
+        total_status = False
+    else:
+        total_status = check_link_validity(name, box)
 
     for retry_idx in range(NUM_LINKUP_RETRY):
-        if not check_established(name, box) or not not_bad_link:
+        if not total_status:
+            # Notes: no log messages are shown during the link-up process which can last 30 seconds or so.
             logger.info("link-up is in progress")
-            not_bad_link = True
             try:
-                status = box.relinkup(use_204b=False, use_bg_cal=use_bgcal)
-                if not all(status.values()):
+                status = box.relinkup(
+                    use_204b=False, use_bg_cal=use_bgcal, background_noise_threshold=args.background_noise_threshold
+                )
+                total_status = all(status.values())
+                if not total_status:
                     continue
             except Exception as e:
                 logger.error(e)
                 # Notes: allow to retry anyway.
                 continue
 
+        # Notes: here total_status must be True
         logger.info(f"observing the link stability for {args.check_duration} seconds")
-        not_bad_link = check_link_quality(name, box, args.check_duration)
-        if not_bad_link:
+        if check_crc_error(name, box, args.check_duration):
             logger.info("no CRC error is detected")
             break
+        else:
+            total_status = False
     else:
         return False
 
     return True
 
 
-def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: ({threadName}) {message}", style="{"
-    )
+def _suppressing_noisy_loggers() -> None:
     logging.getLogger("quel_ic_config.ad9082_v106").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.lmx2594").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1_config_subsystem_common").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1_config_subsystem_tempctrl").setLevel(logging.WARNING)
+    logging.getLogger("quel_ic_config.quel1_config_loader").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.exstickge_coap_client").setLevel(logging.WARNING)
+    logging.getLogger("quel_ic_config.quel1se_config_subsystem").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1se_riken8_config_subsystem").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1se_fujitsu11_config_subsystem").setLevel(logging.WARNING)
-    logging.getLogger("quel_ic_config.e7workaround").setLevel(logging.WARNING)
-    # Notes: workaround for preventing e7awgsw from generating unnecessary logs
-    logging.getLogger("nullLibLog").disabled = True
+    logging.getLogger("quel_ic_config.exstickge_sock_client").setLevel(logging.WARNING)
+    logging.getLogger("e7awghal.versionchecker").setLevel(logging.WARNING)
     logging.getLogger("parallel_linkup").disabled = True
     logging.getLogger("quel1_parallel_linkup").disabled = True
+
+
+def parallel_linkup_main() -> int:
+    logging.basicConfig(
+        level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: ({threadName}) {message}", style="{"
+    )
+    _suppressing_noisy_loggers()
 
     parser = argparse.ArgumentParser(description="parallelized link-up of QuEL-1 series control box")
     parser.add_argument("--conf", type=pathlib.Path, required=True, help="path to a configuration file")
@@ -227,6 +261,12 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="force to re-linkup all the boxes")
     parser.add_argument(
         "--check_duration", type=int, default=120, help="duration in seconds for checking the stability of the link"
+    )
+    parser.add_argument(
+        "--background_noise_threshold",
+        type=float,
+        default=None,
+        help="maximum allowable background noise amplitude of the ADCs at relinkup (not at reconnect)",
     )
     args = parser.parse_args()
 
@@ -272,4 +312,4 @@ def main() -> int:
 if __name__ == "__main__":
     import sys
 
-    sys.exit(main())
+    sys.exit(parallel_linkup_main())

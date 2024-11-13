@@ -6,8 +6,13 @@ import numpy as np
 import numpy.typing as npt
 
 from e7awghal import AwgParam, CapIqDataReader, CapParam, CapSection, WaveChunk
-from quel_clock_master import QuBEMasterClient
-from quel_ic_config import AbstractStartAwgunitsTask, BoxStartCapunitsByTriggerTask, Quel1Box, Quel1PortType
+from quel_ic_config import (
+    AbstractStartAwgunitsTask,
+    BoxStartCapunitsByTriggerTask,
+    Quel1Box,
+    Quel1PortType,
+    QuelClockMasterV1,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +35,12 @@ class BoxPool:
         cap_settings: Mapping[str, Mapping[str, VportSettingType]],
         gen_settings: Mapping[str, Mapping[str, VportSettingType]],
     ):
+        self._cm_settings: Mapping[str, Any] = cm_settings
         self._box_settings: Mapping[str, Mapping[str, Any]] = box_settings
         self._cap_settings: Mapping[str, Mapping[str, VportSettingType]] = cap_settings
         self._gen_settings: Mapping[str, Mapping[str, VportSettingType]] = gen_settings
 
-        self._clock_master = QuBEMasterClient(cm_settings["ipaddr"])
+        self._clock_master: Union[QuelClockMasterV1, None] = None
 
         self._boxes: dict[str, Quel1Box] = {}
         self._channels: dict[str, tuple[str, Quel1PortType, int]] = {}  # Notes: genname -> (boxname, port, channel)
@@ -44,22 +50,42 @@ class BoxPool:
         self._estimated_timediff: dict[str, int] = {boxname: 0 for boxname in self._boxes}
         self._cap_sysref_time_offset: int = 0
 
-    def initialize(self, recreate_box=False, reconnect: bool = True, config_css: bool = True, resync: bool = True):
+    def initialize(
+        self, recreate_box=False, reconnect: bool = True, config_css: bool = True, allow_resync: bool = True
+    ):
         if recreate_box or len(self._boxes) == 0:
             self.create_box(self._box_settings)
+        if len(self._cm_settings) > 0:
+            self._clock_master = QuelClockMasterV1(**self._cm_settings)
         self.scan_link_status(reconnect=reconnect)
         self.reset_wss()
         self.config_channels(config_css, True)
         self.config_runits(config_css, True)
-        if resync:
-            self.resync()
-        if not self.check_clock():
-            raise RuntimeError("failed to acquire time count from some clocks")
+        sync_status = self.check_synchronization()
+        if not sync_status:
+            if allow_resync:
+                self.resync()
+                sync_status = self.check_synchronization()
+        if not sync_status:
+            raise RuntimeError("synchronization error")
 
     def create_box(self, settings: Mapping[str, Mapping[str, Any]]):
         for k, v in settings.items():
             self._boxes[k] = Quel1Box.create(**v)
             self._linkstatus[k] = False
+
+    def check_synchronization(self) -> bool:
+        if len(self._boxes) < 2:
+            return True
+
+        fsync_ok = True
+        sysref_counters = {name: box.get_averaged_sysref_offset() for name, box in self._boxes.items()}
+        diff = max(sysref_counters.values()) - min(sysref_counters.values())
+        if diff > 1000:
+            diff = 2000 - diff  # Notes: abs(diff - 2000)
+        fsync_ok &= diff < 100
+        logger.info(f"synchronization status: {fsync_ok}, max_delta = {diff}")
+        return fsync_ok
 
     def scan_link_status(self, reconnect=False):
         for name, box in self._boxes.items():
@@ -215,25 +241,8 @@ class BoxPool:
             box.config_runit(port=port, runit=runit, capture_param=self._make_cwparam_simple(**v))
 
     def resync(self):
-        # self._clock_master.reset()
-        self._clock_master.kick_clock_synch([box.wss.ipaddr_sss for _, box in self._boxes.items()])
-
-    def check_clock(self) -> bool:
-        valid_m, cntr_m = self._clock_master.read_clock()
-        t = {}
-        for name, box in self._boxes.items():
-            t[name] = box.get_current_timecounter(), box.get_latest_sysref_timecounter()
-
-        flag = True
-        if valid_m:
-            logger.info(f"master: {cntr_m:d}")
-        else:
-            flag = False
-            logger.info("master: not found")
-
-        for name, (cntr, cntr_last_sysref) in t.items():
-            logger.info(f"{name:s}: {cntr:d} {cntr_last_sysref:d}")
-        return flag
+        if self._clock_master:
+            self._clock_master.sync_boxes()
 
     def get_boxes(self) -> dict[str, Quel1Box]:
         return dict(self._boxes)

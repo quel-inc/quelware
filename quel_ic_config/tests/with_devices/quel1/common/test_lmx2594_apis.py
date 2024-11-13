@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 def test_lo_mult(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
@@ -33,7 +33,7 @@ def test_lo_mult(fixtures1):
 
 def test_divider(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):

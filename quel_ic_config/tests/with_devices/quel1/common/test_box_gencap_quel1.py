@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 def test_awg_normal(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -53,7 +53,7 @@ def test_awg_normal(fixtures1):
 )
 def test_awgtimed_normal(delta_second: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -94,7 +94,7 @@ def test_awgtimed_normal(delta_second: float, fixtures1):
 )
 def test_captimed_normal_and_timeout(schedule_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)

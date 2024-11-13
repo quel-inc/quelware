@@ -1,6 +1,5 @@
 import logging
-from pathlib import Path
-from typing import Callable, Collection, Dict, Mapping, Optional, Set, Tuple, Union, cast
+from typing import Any, Callable, Collection, Dict, Mapping, Set, Tuple, Union, cast
 
 from packaging.version import Version
 
@@ -17,9 +16,9 @@ from quel_ic_config.quel1_config_subsystem_tempctrl import (
     Quel1seConfigSubsystemTempctrlDebugMixin,
     Quel1seConfigSubsystemTempctrlMixin,
 )
+from quel_ic_config.quel1_thermistor import Quel1seExternalThermistor, Quel1seOnboardThermistor, Quel1Thermistor
 from quel_ic_config.quel1se_config_subsystem import _Quel1seConfigSubsystemBase
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption, Quel1Feature
-from quel_ic_config.thermistor import Quel1seExternalThermistor, Quel1seOnboardThermistor, Thermistor
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +121,8 @@ class ExstickgeCoapClientQuel1seRiken8Dev1(_ExstickgeCoapClientQuel1seRiken8Base
     def __init__(
         self,
         target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_addr, target_port, timeout)
 
@@ -169,8 +168,8 @@ class ExstickgeCoapClientQuel1seRiken8Dev2(_ExstickgeCoapClientQuel1seRiken8Base
     def __init__(
         self,
         target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_addr, target_port, timeout)
 
@@ -216,8 +215,8 @@ class ExstickgeCoapClientQuel1seRiken8(_ExstickgeCoapClientQuel1seRiken8Base):
     def __init__(
         self,
         target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
     ):
         super().__init__(target_addr, target_port, timeout)
 
@@ -255,8 +254,6 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
     )
 
     _GROUPS: Set[int] = {0, 1}
-
-    _MXFE_IDXS: Set[int] = {0, 1}
 
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),
@@ -319,7 +316,7 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
 
     _DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP: bool = False
 
-    _THERMISTORS: Dict[Tuple[int, int], Thermistor] = {
+    _THERMISTORS: Dict[Tuple[int, int], Quel1Thermistor] = {
         (0, 0): Quel1seOnboardThermistor("adda_lmx2594_1"),
         (0, 1): Quel1seOnboardThermistor("adda_lmx2594_0"),
         (1, 5): Quel1seExternalThermistor("front_panel"),
@@ -388,20 +385,51 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
         (7, 15): Quel1seOnboardThermistor("ps1_sw2_path_c"),
     }
 
+    _ACTUATORS: Dict[str, tuple[str, int]] = {
+        "adda_lmx2594_0": ("fan", 0),  # Notes: both fan-#0 and fan-#1 are driven with the same value.
+        "adda_lmx2594_1": ("fan", 1),  # Notes: so, this mapping shows proximal pair of thermistor and actuator.
+        "mx0_adrf6780_0": ("heater", 0),
+        "mx0_amp_1": ("heater", 1),
+        "mx0_adrf6780_2": ("heater", 2),
+        "mx0_amp_3": ("heater", 3),
+        "mx0_lmx2594_0": ("heater", 4),
+        "mx0_lmx2594_2": ("heater", 6),
+        "ps0_lna_readin": ("heater", 10),
+        "ps0_lna_readout": ("heater", 11),
+        "ps0_lna_path_b": ("heater", 12),
+        "ps0_lna_path_c": ("heater", 13),
+        "ps0_lna_path_d": ("heater", 14),
+        "ps0_sw_monitorloop": ("heater", 15),
+        "mx0_hmc8193_r": ("heater", 16),
+        "mx0_hmc8193_m0": ("heater", 17),
+        "mx0_hmc8193_m1": ("heater", 18),
+        "mx0_lmx2594_4": ("heater", 19),
+        "mx1_amp_0": ("heater", 20),
+        "mx1_amp_1": ("heater", 21),
+        "mx1_amp_2": ("heater", 22),
+        "mx1_amp_3": ("heater", 23),
+        "ps1_lna_readin": ("heater", 30),
+        "ps1_lna_readout": ("heater", 31),
+        "ps1_lna_path_b": ("heater", 32),
+        "ps1_lna_path_c": ("heater", 33),
+        "ps1_lna_path_d": ("heater", 34),
+        "ps1_sw_monitorloop": ("heater", 35),
+    }
+
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        super().__init__(css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding)
+        super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
@@ -412,7 +440,7 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
 
         # Notes: close all RF switches at first
         for i in (0, 1):
-            self.init_pathselectorboard_gpio(i)
+            self.init_pathselectorboard_gpio(i, param["pathselectorboard_gpio"][i])
 
         # Notes: release reset of CPLDs on all the peripheral board
         proxy = cast(_ExstickgeCoapClientBase, self._proxy)
@@ -424,14 +452,14 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
                 logger.info(f"board '{board.value}' is already activated")
 
         # Notes: initialize ICs on mixer board 0 for RF
-        self.init_ad5328(0)
+        self.init_ad5328(0, param["ad5328"][0])
 
         for i in (0, 1):
             proxy.write_reset(LsiKindId.ADRF6780, i, 1)
-            self.init_adrf6780(i, ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
+            self.init_adrf6780(i, param["adrf6780"][i], ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
 
         for i in (2, 3, 4):
-            self.init_lmx2594(i, ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
+            self.init_lmx2594(i, param["lmx2594"][i], ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
 
 
 class Quel1seRiken8ConfigSubsystem(
@@ -446,92 +474,63 @@ class Quel1seRiken8ConfigSubsystem(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        _Quel1seRiken8ConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        _Quel1seRiken8ConfigSubsystemBase.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
-    def initialize(self, features: Optional[Collection[Quel1Feature]] = None) -> None:
-        super().initialize(features)
+    def initialize(self) -> None:
+        super().initialize()
         self._construct_tempctrl()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seRiken8ConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl()
+        self.init_tempctrl(param)
 
 
 class Quel1seRiken8DebugConfigSubsystem(
     _Quel1seRiken8ConfigSubsystemBase,
     Quel1seConfigSubsystemTempctrlDebugMixin,
 ):
-    _HEATER_MAP: Dict[int, str] = {
-        0: "mx0_adrf6780_0",
-        1: "mx0_amp_1",
-        2: "mx0_adrf6780_2",
-        3: "mx0_amp_3",
-        4: "mx0_lmx2594_0",
-        6: "mx0_lmx2594_2",
-        10: "ps0_lna_readin",
-        11: "ps0_lna_readout",
-        12: "ps0_lna_path_b",
-        13: "ps0_lna_path_c",
-        14: "ps0_lna_path_d",
-        15: "ps0_sw_monitorloop",
-        16: "mx0_hmc8193_r",
-        17: "mx0_hmc8193_m0",
-        18: "mx0_hmc8193_m1",
-        19: "mx0_lmx2594_4",
-        20: "mx1_amp_0",
-        21: "mx1_amp_1",
-        22: "mx1_amp_2",
-        23: "mx1_amp_3",
-        30: "ps1_lna_readin",
-        31: "ps1_lna_readout",
-        32: "ps1_lna_path_b",
-        33: "ps1_lna_path_c",
-        34: "ps1_lna_path_d",
-        35: "ps1_sw_monitorloop",
-    }
-    _HEADTER_RVMAP: Dict[str, int] = {v: k for k, v in _HEATER_MAP.items()}
-    _HEATERS: Set[int] = set(_HEATER_MAP.keys())
-
     __slots__ = ()
 
     def __init__(
         self,
         css_addr: str,
         boxtype: Quel1BoxType,
-        config_path: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,  # TODO: should be elaborated.
-        port: int = _ExstickgeCoapClientBase._DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase._DEFAULT_RESPONSE_TIMEOUT,
+        port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
+        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
         sender_limit_by_binding: bool = False,
     ):
-        _Quel1seRiken8ConfigSubsystemBase.__init__(
-            self, css_addr, boxtype, config_path, config_options, port, timeout, sender_limit_by_binding
-        )
+        _Quel1seRiken8ConfigSubsystemBase.__init__(self, css_addr, boxtype, port, timeout, sender_limit_by_binding)
 
-    def initialize(self, features: Optional[Collection[Quel1Feature]] = None) -> None:
-        super().initialize(features)
+    def initialize(self) -> None:
+        super().initialize()
         self._construct_tempctrl_debug()
 
     def configure_peripherals(
         self,
+        param: Dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None:
         _Quel1seRiken8ConfigSubsystemBase.configure_peripherals(
-            self, ignore_access_failure_of_adrf6780, ignore_lock_failure_of_lmx2594
+            self,
+            param,
+            ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,
+            ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
         )
-        self.init_tempctrl_debug()
+        self.init_tempctrl_debug(param)

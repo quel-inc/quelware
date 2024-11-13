@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Final, List, Set, Tuple, Union
+from typing import Any, Dict, Final, List, Set, Tuple, Union
 
 import numpy as np
 
@@ -65,7 +65,8 @@ class LinkupStatistic:
 class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
     _SLEEP_BTWN_LINKUP_TRIALS: Final[float] = 0.25
-    _DEFAULT_BACKGROUND_NOISE_THRESHOLD: Final[float] = 256.0
+    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_RELINKUP: Final[float] = 256.0
+    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT: Final[float] = 1536.0
     _STAT_HISTORY_MAX_LEN: Final[int] = 1000
 
     def __init__(self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem, rmap: AbstractQuel1E7ResourceMapper):
@@ -142,6 +143,7 @@ class LinkupFpgaMxfe:
     def linkup_and_check(
         self,
         mxfe_idx: int,
+        param: Dict[str, Any],
         *,
         hard_reset: bool = False,
         soft_reset: bool = True,
@@ -155,19 +157,19 @@ class LinkupFpgaMxfe:
     ) -> bool:
         self._validate_mxfe(mxfe_idx)
         if background_noise_threshold is None:
-            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD
+            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_RELINKUP
 
         judge_system: bool = False
         for i in range(self._LINKUP_MAX_RETRY):
             if i != 0:
-                logger.info(f"waiting {self._SLEEP_BTWN_LINKUP_TRIALS} seconds before retrying linkup")
+                logger.debug(f"waiting {self._SLEEP_BTWN_LINKUP_TRIALS} seconds before retrying linkup")
                 time.sleep(self._SLEEP_BTWN_LINKUP_TRIALS)
 
             if not self._css.configure_mxfe(
                 mxfe_idx,
+                param,
                 hard_reset=hard_reset,
                 soft_reset=soft_reset,
-                mxfe_init=True,
                 use_204b=use_204b,
                 use_bg_cal=use_bg_cal,
                 ignore_crc_error=ignore_crc_error,
@@ -186,11 +188,7 @@ class LinkupFpgaMxfe:
             self.init_wss_resources(mxfe_idx)
 
             # Notes: it is fine to check all the available adcs of the target mxfe.
-            judge_fddcs: bool = True
-            for fddc_idx in self._get_fddcs_of_mxfe(mxfe_idx):
-                judge_fddcs &= self.check_fddc(mxfe_idx, fddc_idx, background_noise_threshold, save_dirpath)
-
-            if judge_fddcs:
+            if self.check_all_fddcs_of_mxfe_at_relinkup(mxfe_idx, background_noise_threshold, save_dirpath):
                 logger.info(f"successful system-level link-up of {self._css.ipaddr_css}:mxfe-#{mxfe_idx}")
                 judge_system = True
                 break
@@ -204,15 +202,45 @@ class LinkupFpgaMxfe:
 
         return judge_system
 
+    def check_all_fddcs_of_mxfe_at_relinkup(
+        self,
+        mxfe_idx: int,
+        background_noise_threshold: Union[float, None] = None,
+        save_dirpath: Union[Path, None] = None,
+    ) -> bool:
+        judge_fddcs: bool = True
+        for fddc_idx in self._get_fddcs_of_mxfe(mxfe_idx):
+            judge_fddcs &= self.check_fddc(
+                mxfe_idx,
+                fddc_idx,
+                background_noise_threshold or self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_RELINKUP,
+                save_dirpath,
+            )
+        return judge_fddcs
+
+    def check_all_fddcs_of_mxfe_at_reconnect(
+        self,
+        mxfe_idx: int,
+        background_noise_threshold: Union[float, None] = None,
+        save_dirpath: Union[Path, None] = None,
+    ) -> bool:
+        judge_fddcs: bool = True
+        for fddc_idx in self._get_fddcs_of_mxfe(mxfe_idx):
+            judge_fddcs &= self.check_fddc(
+                mxfe_idx,
+                fddc_idx,
+                background_noise_threshold or self._DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT,
+                save_dirpath,
+            )
+        return judge_fddcs
+
     def check_fddc(
         self,
         mxfe_idx: int,
         fddc_idx: int,
-        background_noise_threshold: Union[float, None] = None,
+        background_noise_threshold: float,
         save_dirpath: Union[Path, None] = None,
     ) -> bool:
-        if background_noise_threshold is None:
-            background_noise_threshold = self._DEFAULT_BACKGROUND_NOISE_THRESHOLD
         capmod = self._rmap.get_capmod_from_fddc(mxfe_idx, fddc_idx)
         capunit = (capmod, 0)
         param = CapParam(num_repeat=1)
@@ -255,7 +283,8 @@ class LinkupFpgaMxfe:
         if max_backgroud_amplitude < background_noise_threshold:
             logger.info(
                 f"successful establishment of capture link of fddc-#{fddc_idx} of mxfe-#{mxfe_idx}, "
-                f"max amplitude of the capture data is {max_backgroud_amplitude:.1f}"
+                f"max amplitude of the capture data is "
+                f"{max_backgroud_amplitude:.1f} (< {background_noise_threshold:.1f})"
             )
             self._add_linkup_statistics(
                 mxfe_idx=mxfe_idx,

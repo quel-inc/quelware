@@ -113,8 +113,6 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
             boxtype=args.boxtype,
-            config_root=args.config_root,
-            config_options=args.config_options,
             ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
             ignore_access_failure_of_adrf6780=args.ignore_access_failure_of_adrf6780,
             ignore_lock_failure_of_lmx2594=args.ignore_lock_failure_of_lmx2594,
@@ -140,6 +138,8 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
     cli_retcode: int = 0
     linkup_ok: Dict[int, bool] = box.relinkup(
         mxfes_to_linkup=mxfe_list,
+        config_root=args.config_root,
+        config_options=args.config_options,
         hard_reset=args.boxtype.is_quel1se(),
         use_204b=use_204b,
         use_bg_cal=use_bgcal,
@@ -204,8 +204,6 @@ def quel1_linkstatus_body(args: argparse.Namespace) -> int:
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
             boxtype=args.boxtype,
-            config_root=args.config_root,
-            config_options=args.config_options,
         )
     except socket.timeout:
         logger.error(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
@@ -325,8 +323,6 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
             ipaddr_sss=str(args.ipaddr_sss),
             ipaddr_css=str(args.ipaddr_css),
             boxtype=args.boxtype,
-            config_root=args.config_root,
-            config_options=args.config_options,
             ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
             ignore_access_failure_of_adrf6780=args.ignore_access_failure_of_adrf6780,
             ignore_lock_failure_of_lmx2594=args.ignore_lock_failure_of_lmx2594,
@@ -361,6 +357,8 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
     for _ in range(args.count):
         linkup_ok: Dict[int, bool] = box.relinkup(
             mxfes_to_linkup=mxfe_list,
+            config_root=args.config_root,
+            config_options=args.config_options,
             hard_reset=args.hard_reset,
             use_204b=use_204b,
             use_bg_cal=use_bgcal,
@@ -374,7 +372,7 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
                 n_failure[mxfe_idx] += 1
 
     if args.background_noise_threshold is None:
-        background_noise_threshold: float = LinkupFpgaMxfe._DEFAULT_BACKGROUND_NOISE_THRESHOLD
+        background_noise_threshold: float = LinkupFpgaMxfe._DEFAULT_BACKGROUND_NOISE_THRESHOLD_RELINKUP
     else:
         background_noise_threshold = args.background_noise_threshold
 

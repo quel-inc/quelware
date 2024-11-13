@@ -766,6 +766,9 @@ class Lmx2594Mixin(AbstractIcMixin):
                         )
             elif out_mux[i] == 1:
                 ratio[i] = 1
+            elif out_mux[i] == 2:
+                # SYSREF output, considered as ration = 0
+                pass
             elif out_mux[i] == 3:
                 # high_impedance output, equivalent to ratio = 0
                 pass
@@ -856,6 +859,10 @@ class Lmx2594Mixin(AbstractIcMixin):
         enable_seg1: bool = reg31.chdiv_div2
         chdiv: int = reg75.chdiv
         return self._parse_divide_ratio(out_mux, pwdn, enable_seg1, chdiv)
+
+    def get_sync_enable(self) -> bool:
+        addr0, reg0 = cast(Tuple[int, Lmx2594R0], self._read_and_parse_reg("R0"))
+        return reg0.vco_phase_sync_en
 
 
 class Lmx2594ConfigHelper(AbstractIcConfigHelper):

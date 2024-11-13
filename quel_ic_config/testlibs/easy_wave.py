@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Collection
 from typing import Final, Union
 
@@ -55,8 +56,16 @@ def wss_easy_start_cw(
     p.chunks.append(WaveChunk(name_of_wavedata=wname, num_blank_word=0, num_repeat=num_repeats[1]))
     wss.config_awgunit(awg_idx, p)
 
-    u = wss.hal.awgunit(awg_idx)
-    u.start_now().result()  # Notes: just waiting for successful start of the awg
+    fut = wss.start_awgunits_now(awgunit_idxs={awg_idx})
+    try:
+        print(f"Ctrl+C to stop wave generation from awgunit-#{awg_idx}: ", end="", flush=True)
+        while True:
+            print(".", end="", flush=True)
+            time.sleep(2.5)
+    except KeyboardInterrupt:
+        print()
+        fut.cancel()
+        fut.exception()
 
 
 def box_easy_stop(box: Quel1Box, port: Quel1PortType, channel: Union[int, None] = None) -> None:

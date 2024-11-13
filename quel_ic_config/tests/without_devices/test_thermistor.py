@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from quel_ic_config.thermistor import Quel1NormalThermistor, Quel1PathSelectorThermistor, _TfpltConv
+from quel_ic_config.quel1_thermistor import Quel1NormalThermistor, Quel1PathSelectorThermistor, _TfpltConv
 
 
 def test_table():

@@ -58,12 +58,6 @@ def main():
         help="IP address of the configuration subsystem of the target box",
     )
     parser.add_argument(
-        "--ipaddr_clk",
-        type=ip_address,
-        required=True,
-        help="IP address of clock master",
-    )
-    parser.add_argument(
         "--png",
         action="store_true",
         help="write graphs into a png file",
@@ -77,10 +71,7 @@ def main():
     args = parser.parse_args()
     complete_ipaddrs(args)
 
-    CLOCKMASTER_SETTINGS: dict[str, Any] = {
-        "ipaddr": str(args.ipaddr_clk),
-        "reset": True,
-    }
+    CLOCKMASTER_SETTINGS: dict[str, Any] = {}
 
     BOX_SETTINGS: dict[str, BoxSettingType] = {
         "BOX0": {
@@ -88,8 +79,6 @@ def main():
             "ipaddr_sss": str(args.ipaddr_sss),
             "ipaddr_css": str(args.ipaddr_css),
             "boxtype": Quel1BoxType.QuEL1SE_RIKEN8,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         },
     }
@@ -314,7 +303,7 @@ def main():
     }
 
     boxpool0 = BoxPool(CLOCKMASTER_SETTINGS, BOX_SETTINGS, CAP_VPORT_SETTINGS, GEN_VPORT_SETTINGS)
-    boxpool0.initialize(resync=False)
+    boxpool0.initialize(allow_resync=False)
 
     bgnoise = boxpool0.check_background_noise({"READ", "MON0", "MON1"})
     bgnoise_thr = {

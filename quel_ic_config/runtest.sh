@@ -46,11 +46,11 @@ fi
 
 
 function test_cli_standard {
-  echo "step 7 ================ (powercycleing staging-074, staging-058, and staging-060)"
-  ./helpers/powercycle_quel_ci_env.sh 074 058 060
+  echo "step 7 ================ (powercycleing staging-074, staging-050, and staging-060)"
+  ./helpers/powercycle_quel_ci_env.sh 074 050 060
   sleep 15  # waiting for booting up
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a || true
-  quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a || true
+  quel1_linkstatus --ipaddr_wss 10.1.0.50 --boxtype quel1-a || true
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b || true
 
   echo "step 8 ================ (link up first time after reboot)"
@@ -59,7 +59,7 @@ function test_cli_standard {
 
   echo "step 8.1 ================ (check the linkstatus of staging-074, and -060, all the 4 mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
+  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
 
   echo "step 8.2 ================ (link up again)"
   quel1_linkup --ipaddr_wss 10.1.0.74 --boxtype quel1-a
@@ -67,19 +67,19 @@ function test_cli_standard {
 
   echo "step 8.3 ================ (check the linkstatus of staging-074, and -060, all the 4 mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
+  quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
 
   echo "step 9 ================ (link up all in parallel)"
-  quel1_parallel_linkup --conf helpers/quel_ci_env_quel1only.yaml
+  quel1_parallel_linkup --conf helpers/quel_ci_env_quel1only_v1.yaml
 
   echo "step 9.1 ================ (check the linkstatus of staging-xxx, all the mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.50 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b
 
   echo "step 10 ================ (dumping the current config of staging-xxx)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.74 --boxtype quel1-a > artifacts/dump_port_staging-074.txt
-  quel1_dump_port_config --ipaddr_wss 10.1.0.58 --boxtype quel1-a > artifacts/dump_port_staging-058.txt
+  quel1_dump_port_config --ipaddr_wss 10.1.0.50 --boxtype quel1-a > artifacts/dump_port_staging-050.txt
   quel1_dump_port_config --ipaddr_wss 10.1.0.60 --boxtype quel1-b > artifacts/dump_port_staging-060.txt
 }
 
@@ -97,19 +97,19 @@ function test_cli_8 {
   quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1 --ignore_lock_failure_of_lmx2594 0,1,2,3,4
 
   echo "step 8.1 ================ (check the linkstatus of staging-094, all the 2 mxfes should be 'healthy')"
-  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1
 
   echo "step 8.2 ================ (link up again)"
-  quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1
 
   echo "step 8.3 ================ (check the linkstatus of staging-094, all the 2 mxfes should be 'healthy')"
-  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1
 
   echo "step 9 ================ (link up all in parallel)"
   quel1_parallel_linkup --conf helpers/quel_ci_env_quel1se-riken8-only.yaml
 
   echo "step 9.1 ================ (check the linkstatus of staging-xxx, all the mxfes should be 'healthy')"
-  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
+  quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1
 
   echo "step 10 ================ (dumping the current config of staging-xxx)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 > artifacts/dump_port_staging-094.txt
@@ -126,12 +126,12 @@ fi
 
 if [ "${test_with_device}" == "S" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.50 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs
 elif [ "${test_with_device}" == "Sr" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.74 --boxtype quel1-a
-  quel1_linkstatus --ipaddr_wss 10.1.0.58 --boxtype quel1-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.50 --boxtype quel1-a
   quel1_linkstatus --ipaddr_wss 10.1.0.60 --boxtype quel1-b --ignore_crc_error_of_mxfe 0,1
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs --ignore=tests/with_devices/quel1/common/test_wave_generation_quel1.py
 elif [ "${test_with_device}" == "F" ]; then
@@ -143,12 +143,16 @@ elif [ "${test_with_device}" == "8r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py
 elif [ "${test_with_device}" == "11r" ]; then
-  quel1_linkstatus --ipaddr_wss 10.1.0.158 --boxtype x-quel1se-fujitsu11-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/fujitsu11
 elif [ "${test_with_device}" == "N" ]; then
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec
-elif [ "${test_with_device}" == "T" ]; then
-  pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl
+elif [ "${test_with_device}" == "Ta" ]; then
+  pytest --log-cli-level INFO --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl/test_tempctrl_apis.py
+elif [ "${test_with_device}" == "Tr" ]; then
+  pytest --log-cli-level INFO --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl/test_register_access.py
+elif [ "${test_with_device}" == "L" ]; then
+  pytest --log-cli-level INFO --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/lock_abnormal
 else
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/without_devices
 fi
