@@ -10,14 +10,14 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 def test_all_temperatures(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False
 
     for group in range(2):
-        temp_max, temp_min = css.get_ad9082_temperatures(group)
+        temp_max, temp_min = css.get_mxfe_temperature_range(group)
         logger.info(f"temperature min = {temp_min}, max = {temp_max}")
         assert 10 < temp_min < 120
         assert 10 < temp_max < 120
@@ -39,7 +39,7 @@ def _is_near_enough(x, y):
 )
 def test_nco_set_get(mxfe, fractional_mode, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
@@ -117,7 +117,7 @@ def test_nco_set_get(mxfe, fractional_mode, fixtures1):
 )
 def test_fsc_get(mxfe, fsc, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
@@ -150,7 +150,7 @@ def test_fsc_get(mxfe, fsc, fixtures1):
 )
 def test_get_interpolation_rate(mxfe, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):

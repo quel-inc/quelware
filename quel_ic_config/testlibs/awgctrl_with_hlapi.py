@@ -1,0 +1,1 @@
+../../e7awghal/testlibs/awgctrl_with_hlapi.py

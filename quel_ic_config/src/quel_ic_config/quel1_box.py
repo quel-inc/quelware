@@ -9,11 +9,12 @@ import numpy as np
 import numpy.typing as npt
 
 from e7awghal import AwgParam, CapIqDataReader, CapParam
+from quel_ic_config.box_lock import guarded_by_box_lock
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper
 from quel_ic_config.linkupper import LinkupFpgaMxfe
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic, create_css_wss_rmap
-from quel_ic_config.quel1_config_subsystem import Quel1BoxType, Quel1ConfigOption
+from quel_ic_config.quel1_config_subsystem import Quel1BoxType
 from quel_ic_config.quel1_wave_subsystem import (
     AbstractCancellableTaskWrapper,
     AbstractStartAwgunitsTask,
@@ -21,7 +22,7 @@ from quel_ic_config.quel1_wave_subsystem import (
     StartCapunitsByTriggerTask,
     StartCapunitsNowTask,
 )
-from quel_ic_config.quel1se_device_lock import guarded_by_device_lock
+from quel_ic_config.quel_config_common import Quel1ConfigOption, Quel1Feature
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,7 @@ class Quel1Box:
     )
 
     @classmethod
+    @guarded_by_box_lock
     def create(
         cls,
         *,
@@ -313,8 +315,6 @@ class Quel1Box:
         ipaddr_sss: Union[str, None] = None,
         ipaddr_css: Union[str, None] = None,
         boxtype: Quel1BoxType,
-        config_root: Union[Path, None] = None,
-        config_options: Union[Collection[Quel1ConfigOption], None] = None,
         skip_init: bool = False,
         **options: Collection[int],
     ) -> "Quel1Box":
@@ -339,8 +339,6 @@ class Quel1Box:
             ipaddr_sss=ipaddr_sss,
             ipaddr_css=ipaddr_css,
             boxtype=boxtype,
-            config_root=config_root,
-            config_options=config_options,
         )
         box = Quel1Box(css=css, wss=wss, rmap=rmap, linkupper=None, **options)
         if not skip_init:
@@ -400,15 +398,17 @@ class Quel1Box:
     def allow_dual_modulus_nco(self, v) -> None:
         self.css.allow_dual_modulus_nco = v
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def initialize(self):
         self._dev.initialize()
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def reconnect(
         self,
         *,
         mxfe_list: Union[Collection[int], None] = None,
+        skip_capture_check: bool = False,
+        background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
         ignore_extraordinary_converter_select_of_mxfe: Union[Collection[int], None] = None,
         ignore_invalid_linkstatus: bool = False,
@@ -417,6 +417,8 @@ class Quel1Box:
         the target box must be linked-up in advance.
 
         :param mxfe_list: a list of target MxFEs (optional).
+        :param skip_capture_check: do not check background noise of input lines if True (optional)
+        :param background_noise_threshold: the largest peak of allowable noise (optional)
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional).
         :param ignore_extraordinary_converter_select_of_mxfe: a list of MxFEs whose unusual converter mapping is
                                                               dismissed. (optional).
@@ -424,14 +426,23 @@ class Quel1Box:
         """
         return self._dev.reconnect(
             mxfe_list=mxfe_list,
+            skip_capture_check=skip_capture_check,
+            background_noise_threshold=background_noise_threshold,
             ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
             ignore_extraordinary_converter_select_of_mxfe=ignore_extraordinary_converter_select_of_mxfe,
             ignore_invalid_linkstatus=ignore_invalid_linkstatus,
         )
 
+    def get_wss_features(self) -> set[Quel1Feature]:
+        return self._dev.get_wss_features()
+
+    @guarded_by_box_lock
     def relinkup(
         self,
         *,
+        param: Union[Dict[str, Any], None] = None,
+        config_root: Union[Path, None] = None,
+        config_options: Union[Collection[Quel1ConfigOption], None] = None,
         mxfes_to_linkup: Union[Collection[int], None] = None,
         hard_reset: Union[bool, None] = None,
         use_204b: bool = False,
@@ -445,6 +456,9 @@ class Quel1Box:
         restart_tempctrl: bool = False,
     ) -> Dict[int, bool]:
         return self._dev.relinkup(
+            param=param,
+            config_root=config_root,
+            config_options=config_options,
             mxfes_to_linkup=mxfes_to_linkup,
             hard_reset=hard_reset,
             use_204b=use_204b,
@@ -458,6 +472,7 @@ class Quel1Box:
             restart_tempctrl=restart_tempctrl,
         )
 
+    @guarded_by_box_lock
     def link_status(self, ignore_crc_error_of_mxfe: Union[Collection[int], None] = None) -> Dict[int, bool]:
         return self._dev.link_status(ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe)
 
@@ -647,7 +662,7 @@ class Quel1Box:
             if not self._config_validate_box(box_conf):
                 raise ValueError("the provided settings looks to be inconsistent")
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_box(
         self,
         box_conf: Union[Dict[str, Dict[Quel1PortType, Dict[str, Any]]], Dict[Quel1PortType, Dict[str, Any]]],
@@ -655,13 +670,13 @@ class Quel1Box:
     ):
         self._config_box(box_conf, ignore_validation)
 
-    @guarded_by_device_lock
-    def config_box_from_jsonfile(self, box_conf_filepath: Path, ignore_validation: bool = False):
+    @guarded_by_box_lock
+    def config_box_from_jsonfile(self, box_conf_filepath: Union[Path, str], ignore_validation: bool = False):
         with open(box_conf_filepath) as f:
             cfg = self._parse_box_conf(json.load(f))
             self._config_box(cfg, ignore_validation)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_box_from_jsonstr(self, box_conf_str: str, ignore_validation: bool = False):
         cfg = self._parse_box_conf(json.loads(box_conf_str))
         self._config_box(cfg, ignore_validation)
@@ -782,7 +797,7 @@ class Quel1Box:
 
         return valid
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_validate_box(
         self,
         box_conf: Union[
@@ -827,7 +842,7 @@ class Quel1Box:
         group, line = self._convert_any_port(port)
         return self._dev.is_read_input_line(group, line)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_port(
         self,
         port: Quel1PortType,
@@ -905,7 +920,7 @@ class Quel1Box:
         else:
             raise AssertionError
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_channel(
         self,
         port: Quel1PortType,
@@ -937,7 +952,7 @@ class Quel1Box:
         else:
             raise ValueError(f"{portname} is not an output port, not applicable")
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_runit(
         self,
         port: Quel1PortType,
@@ -970,7 +985,7 @@ class Quel1Box:
         else:
             raise ValueError(f"{portname} is not an input port, not applicable")
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def block_all_output_ports(self) -> None:
         """set RF switch of all output ports to block.
 
@@ -978,7 +993,7 @@ class Quel1Box:
         """
         self._dev.block_all_output_lines()
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def pass_all_output_ports(self):
         """set RF switch of all output ports to pass.
 
@@ -986,7 +1001,7 @@ class Quel1Box:
         """
         self._dev.pass_all_output_lines()
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_rfswitches(self, rfswitch_confs: Dict[Quel1PortType, str], ignore_validation: bool = False) -> None:
         for port, rc in rfswitch_confs.items():
             p, sp = self._decode_port(port)
@@ -1007,11 +1022,11 @@ class Quel1Box:
         group, line = self._convert_any_port(port)
         self._dev.config_rfswitch(group, line, rfswitch=rfswitch)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def config_rfswitch(self, port: Quel1PortType, *, rfswitch: str):
         self._config_rfswitch(port, rfswitch=rfswitch)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def activate_monitor_loop(self, group: int) -> None:
         """enabling an internal monitor loop-back path from a monitor-out port to a monitor-in port.
 
@@ -1020,7 +1035,7 @@ class Quel1Box:
         """
         self._dev.activate_monitor_loop(group)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def deactivate_monitor_loop(self, group: int) -> None:
         """disabling an internal monitor loop-back path.
 
@@ -1049,6 +1064,7 @@ class Quel1Box:
             raise AssertionError
         return retval
 
+    @guarded_by_box_lock
     def dump_rfswitch(self, port: Quel1PortType) -> str:
         """dumping the current configuration of an RF switch
         :param port: an index of the target port
@@ -1058,6 +1074,7 @@ class Quel1Box:
         group, line = self._convert_any_port(port)
         return self._dev.dump_rfswitch(group, line)
 
+    @guarded_by_box_lock
     def dump_rfswitches(self, exclude_subordinate: bool = True) -> Dict[Quel1PortType, str]:
         """dumping the current configuration of all RF switches
 
@@ -1073,7 +1090,7 @@ class Quel1Box:
                 retval[port] = retval_intrinsic[group, line]
         return retval
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def dump_port(self, port: Quel1PortType) -> Dict[str, Any]:
         """dumping the current configuration of a port
         :param port: an index of the target port
@@ -1111,7 +1128,7 @@ class Quel1Box:
             cfg1["ports"][str(pidx)] = pcfg1
         return cfg1
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def dump_box(self) -> Dict[str, Dict[Union[int, Quel1PortType], Dict[str, Any]]]:
         """dumping the current configuration of the ports
 
@@ -1119,12 +1136,12 @@ class Quel1Box:
         """
         return self._dump_box()
 
-    @guarded_by_device_lock
-    def dump_box_to_jsonfile(self, box_conf_filepath: Path) -> None:
+    @guarded_by_box_lock
+    def dump_box_to_jsonfile(self, box_conf_filepath: Union[Path, str]) -> None:
         with open(box_conf_filepath, "w") as f:
             json.dump(self._unparse_box_conf(self._dump_box()), f, indent=2)
 
-    @guarded_by_device_lock
+    @guarded_by_box_lock
     def dump_box_to_jsonstr(self) -> str:
         return json.dumps(self._unparse_box_conf(self._dump_box()))
 
@@ -1171,6 +1188,7 @@ class Quel1Box:
         else:
             raise ValueError(f"port-{self._portname(port)} is not an input port")
 
+    @guarded_by_box_lock
     def get_channels_of_port(self, port: Quel1PortType) -> Set[int]:
         """show a set of channels of the specified output port
 
@@ -1181,6 +1199,7 @@ class Quel1Box:
         group, line = self._convert_output_port(port)
         return self._dev.get_channels_of_line(group, line)
 
+    @guarded_by_box_lock
     def get_runits_of_port(self, port: Quel1PortType) -> Set[int]:
         """show a set of channels of the specified output port
 
@@ -1190,10 +1209,12 @@ class Quel1Box:
         group, rline = self._convert_input_port(port)
         return self._dev.get_runits_of_rline(group, rline)
 
+    @guarded_by_box_lock
     def get_names_of_wavedata(self, port: Quel1PortType, channel: int) -> set[str]:
         group, line, channel = self._convert_output_channel((port, channel))
         return self._dev.get_names_of_wavedata(group, line, channel)
 
+    @guarded_by_box_lock
     def register_wavedata(
         self,
         port: Quel1PortType,
@@ -1214,18 +1235,27 @@ class Quel1Box:
         group, line, channel = self._convert_output_channel((port, channel))
         self._dev.delete_wavedata(group, line, channel, name)
 
+    @guarded_by_box_lock
     def initialize_all_awgunits(self):
         self._dev.initialize_all_awgunits()
 
+    @guarded_by_box_lock
     def initialize_all_capunits(self):
         self._dev.initialize_all_capunits()
 
+    @guarded_by_box_lock
     def get_current_timecounter(self) -> int:
         return self._dev.get_current_timecounter()
 
+    @guarded_by_box_lock
     def get_latest_sysref_timecounter(self) -> int:
         return self._dev.get_latest_sysref_timecounter()
 
+    @guarded_by_box_lock
+    def get_averaged_sysref_offset(self, num_iteration: int = 100) -> float:
+        return self._dev.get_averaged_sysref_offset(num_iteration)
+
+    @guarded_by_box_lock
     def start_wavegen(
         self,
         channels: Collection[Tuple[Quel1PortType, int]],
@@ -1245,6 +1275,7 @@ class Quel1Box:
             return_after_start_emission=return_after_start_emission,
         )
 
+    @guarded_by_box_lock
     def start_capture_now(
         self,
         runits: Collection[Tuple[Quel1PortType, int]],
@@ -1268,6 +1299,7 @@ class Quel1Box:
             mapping,
         )
 
+    @guarded_by_box_lock
     def start_capture_by_awg_trigger(
         self,
         runits: Collection[Tuple[Quel1PortType, int]],

@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 def test_awg_normal(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -61,7 +61,7 @@ def test_awg_normal(fixtures1):
 )
 def test_awg_timeout(timeout, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -94,7 +94,7 @@ def test_awg_timeout(timeout, fixtures1):
 )
 def test_awg_cancelled(sleep_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -122,7 +122,7 @@ def test_awg_cancelled(sleep_time: float, fixtures1):
 )
 def test_awg_busy(sleep_time, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -154,7 +154,7 @@ def test_awg_busy(sleep_time, fixtures1):
 )
 def test_awg_busy_no_wait_starting(sleep_time, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -175,7 +175,7 @@ def test_awg_busy_no_wait_starting(sleep_time, fixtures1):
 
 def test_cap_normal(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -223,7 +223,7 @@ def test_cap_normal(fixtures1):
 )
 def test_cap_timeout(timeout, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -260,7 +260,7 @@ def test_cap_timeout(timeout, fixtures1):
 )
 def test_cap_cancelled(sleep_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -294,7 +294,7 @@ def test_cap_cancelled(sleep_time: float, fixtures1):
 )
 def test_captrig_normal_and_timeout(sleep_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -364,7 +364,7 @@ def test_captrig_normal_and_timeout(sleep_time: float, fixtures1):
 )
 def test_captrig_cancel_before_and_after_trigger(sleep_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -419,7 +419,7 @@ def test_captrig_cancel_before_and_after_trigger(sleep_time: float, fixtures1):
 )
 def test_captrig_partial_trigger_failure(connect: list[tuple[int, str, int]], fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -467,7 +467,7 @@ def test_captrig_partial_trigger_failure(connect: list[tuple[int, str, int]], fi
 )
 def test_awgtimed_normal(delta_second: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -507,7 +507,7 @@ def test_awgtimed_normal(delta_second: float, fixtures1):
 )
 def test_awgtimed_cancel(sleep_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -545,7 +545,7 @@ def test_awgtimed_cancel(sleep_time: float, fixtures1):
 )
 def test_awgtimed_cancel_far(scheduled_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -588,7 +588,7 @@ def test_awgtimed_cancel_far(scheduled_time: float, fixtures1):
 )
 def test_awgtimed_busy(schedule_time, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -618,7 +618,7 @@ def test_awgtimed_busy(schedule_time, fixtures1):
 )
 def test_awgtimed_past(schedule_time, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)
@@ -640,7 +640,7 @@ def test_awgtimed_past(schedule_time, fixtures1):
 )
 def test_captimed_normal_and_timeout(schedule_time: float, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058"}:
+    if params["label"] not in {"staging-050"}:
         pytest.skip()
     boxi = box._dev
     config_lines(boxi)

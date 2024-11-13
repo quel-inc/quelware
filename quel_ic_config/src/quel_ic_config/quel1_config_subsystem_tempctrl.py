@@ -1,7 +1,7 @@
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Dict, List, Sequence, Set, Tuple, Union, cast
+from typing import Any, Dict, List, Sequence, Set, Tuple, Union, cast
 
 from quel_ic_config.exstickge_coap_tempctrl_client import Quel1seTempctrlState, _ExstickgeCoapClientQuel1seTempctrlBase
 from quel_ic_config.quel1_config_subsystem_common import (
@@ -9,7 +9,7 @@ from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemBaseSlot,
     Quel1ConfigSubsystemPowerboardPwmMixin,
 )
-from quel_ic_config.thermistor import Thermistor
+from quel_ic_config.quel1_thermistor import Quel1Thermistor
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +37,25 @@ class Quel1ConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemBaseSlot):
 class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
     __slots__ = ()
 
-    _THERMISTORS: Dict[Tuple[int, int], Thermistor]
+    _THERMISTORS: dict[tuple[int, int], Quel1Thermistor]
+    _ACTUATORS: dict[str, tuple[str, int]]
     _DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP: bool
     _TEMPCTRL_POLLING_PERIOD: float = 0.5  # second
     _TEMPCTRL_POLLING_MAX_RETRY: int = 3  # times
+
+    @classmethod
+    def get_thermistor_desc(cls) -> dict[tuple[int, int], Quel1Thermistor]:
+        return cls._THERMISTORS
+
+    @classmethod
+    def get_actuator_desc(cls) -> dict[str, tuple[str, int]]:
+        return cls._ACTUATORS
 
     def _construct_tempctrl(self):
         self._tempctrl_auto_start_at_linkup: bool = self._DEFAULT_TEMPCTRL_AUTO_START_AT_LINKUP
         self._tempctrl_watcher = ThreadPoolExecutor(max_workers=1)
 
-    def init_tempctrl(self):
+    def init_tempctrl(self, param: Dict[str, Any]):
         # Notes: currently nothing to do, define it for future.
         pass
 
@@ -83,7 +92,7 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
         }
         return retval
 
-    def _convert_temperatures(self, tll: List[List[int]]) -> Dict[Tuple[int, int], float]:
+    def _convert_temperatures_index(self, tll: List[List[int]]) -> Dict[Tuple[int, int], float]:
         temperatures: Dict[Tuple[int, int], float] = {}
 
         for i in range(self._NUM_IC["ad7490"]):
@@ -91,6 +100,20 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
                 if (i, j) in self._THERMISTORS:
                     try:
                         temperatures[i, j] = self._THERMISTORS[i, j].convert(t)
+                    except ValueError:
+                        logger.error(f"unexpected reading {t} at AD7490[{i}], {j}-th input")
+
+        return temperatures
+
+    def _convert_temperatures_name(self, tll: List[List[int]]) -> Dict[str, float]:
+        temperatures: Dict[str, float] = {}
+
+        for i in range(self._NUM_IC["ad7490"]):
+            for j, t in enumerate(tll[i]):
+                if (i, j) in self._THERMISTORS:
+                    try:
+                        th = self._THERMISTORS[i, j]
+                        temperatures[th.name] = th.convert(t)
                     except ValueError:
                         logger.error(f"unexpected reading {t} at AD7490[{i}], {j}-th input")
 
@@ -135,12 +158,12 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
             )
         return tll
 
-    def get_tempctrl_temperature(self) -> Future[Dict[Tuple[int, int], float]]:
+    def get_tempctrl_temperature(self) -> Future[Dict[str, float]]:
         return self._tempctrl_watcher.submit(
-            lambda: self._convert_temperatures(self._get_ad7490_readings_thread_main())
+            lambda: self._convert_temperatures_name(self._get_ad7490_readings_thread_main())
         )
 
-    def get_tempctrl_temperature_now(self) -> Dict[Tuple[int, int], float]:
+    def get_tempctrl_temperature_now(self) -> Dict[str, float]:
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
 
         tll: List[List[int]] = []
@@ -160,7 +183,7 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
         else:
             raise RuntimeError(f"temperature data with an unexpected loop count {cnt2} (!= {cnt0}) is received")
 
-        return self._convert_temperatures(tll)
+        return self._convert_temperatures_name(tll)
 
     def start_tempctrl(self, new_count: Union[int, None] = None) -> None:
         cur_state = self.get_tempctrl_state()
@@ -214,10 +237,12 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         return proxy.write_tempctrl_state_count(new_count)
 
+    # TODO: fix it to return name-temp dictionary
     def get_tempctrl_setpoint(self) -> Dict[str, List[float]]:
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         return proxy.read_tempctrl_feedback_setpoint()
 
+    # TODO: fix it to take name-temp dictionary
     def set_tempctrl_setpoint(self, fan: Sequence[float], heater: Sequence[float]):
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         proxy.write_tempctrl_feedback_setpoint(fan, heater)
@@ -232,17 +257,33 @@ class Quel1seConfigSubsystemTempctrlMixin(Quel1ConfigSubsystemTempctrlMixin):
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         proxy.write_tempctrl_feedback_coeffcient(fan, heater)
 
-    def get_tempctrl_actuator_output(self) -> Dict[str, List[float]]:
+    def get_tempctrl_actuator_output(self) -> Dict[str, Dict[str, float]]:
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         outputs = proxy.read_tempctrl_rawdata_pwrpwm_current()
+        fans: Dict[str, float] = {}
+        heaters: Dict[str, float] = {}
+        for name, (atype, aidx) in self.get_actuator_desc().items():
+            if atype == "fan":
+                fans[name] = outputs["fan"][aidx] / 1000
+            elif atype == "heater":
+                heaters[name] = outputs["heater"][aidx] / 1000
+            else:
+                raise AssertionError("never happens")
         return {
-            "fan": [x / 1000 for x in outputs["fan"]],
-            "heater": [x / 1000 for x in outputs["heater"]],
+            "fan": fans,
+            "heater": heaters,
         }
 
-    def set_tempctrl_actuator_output(self, fan: Sequence[float], heater: Sequence[float]) -> None:
-        fan_i = [round(x * 1000) for x in fan]
-        heater_i = [round(x * 1000) for x in heater]
+    def set_tempctrl_actuator_output(self, fan: Dict[str, float], heater: Dict[str, float]) -> None:
+        fan_i: list[int] = [0 for _ in range(2)]
+        heater_i: list[int] = [0 for _ in range(40)]
+        for name, (atype, aidx) in self.get_actuator_desc().items():
+            if atype == "fan":
+                fan_i[aidx] = round(fan[name] * 1000)
+            elif atype == "heater":
+                heater_i[aidx] = round(heater[name] * 1000)
+            else:
+                raise AssertionError("never happens")
         proxy = cast(_ExstickgeCoapClientQuel1seTempctrlBase, self._proxy)
         proxy.write_tempctrl_rawdata_pwrpwm_next(fan_i, heater_i)
 
@@ -252,19 +293,15 @@ class Quel1seConfigSubsystemTempctrlDebugMixin(
 ):
     __slots__ = ()
 
-    _HEATER_MAP: Dict[int, str]
-    _HEADTER_RVMAP: Dict[str, int]
-    _HEATERS: Set[int]
-
     def _construct_tempctrl_debug(self):
         self._construct_tempctrl()
         self._construct_ad7490()
         self._construct_powerboard_pwm()
 
-    def init_tempctrl_debug(self) -> None:
-        self.init_tempctrl()
+    def init_tempctrl_debug(self, param: Dict[str, Any]) -> None:
+        self.init_tempctrl(param)
         for idx in range(self._NUM_IC["ad7490"]):
-            self.init_ad7490(idx)
+            self.init_ad7490(idx, param["ad7490"][idx])
 
     def _get_ad7490_readings_direct(self) -> List[List[int]]:
         tll: List[List[int]] = []
@@ -281,7 +318,7 @@ class Quel1seConfigSubsystemTempctrlDebugMixin(
         return tll
 
     def get_temperatures(self) -> Dict[Tuple[int, int], float]:
-        return self._convert_temperatures(self._get_ad7490_readings_direct())
+        return self._convert_temperatures_index(self._get_ad7490_readings_direct())
 
     def get_heater_master(self) -> bool:
         return self.powerboard_pwm[0].get_heater_master()
@@ -292,15 +329,16 @@ class Quel1seConfigSubsystemTempctrlDebugMixin(
     def get_heater_outputs(self, indices: Union[Set[int], None] = None) -> Dict[int, float]:
         ratios: Dict[int, float] = {}
         if indices is None:
-            indices = self._HEATERS
+            indices = {aidx for at, aidx in self.get_actuator_desc().values() if at == "heater"}
         for idx in range(self.powerboard_pwm[0].NUM_HEATER):
             if idx in indices:
                 ratios[idx] = self.powerboard_pwm[0].get_heater_settings(idx)["high_ratio"]
         return ratios
 
     def set_heater_outputs(self, ratios: Dict[int, float]):
+        indices = {aidx for at, aidx in self.get_actuator_desc().values() if at == "heater"}
         for idx, ratio in ratios.items():
-            if idx not in self._HEATERS:
+            if idx not in indices:
                 logger.warning(f"trying to configure an unavailable heater: {idx}")
             self.powerboard_pwm[0].set_heater_settings(idx, high_ratio=ratio)
 

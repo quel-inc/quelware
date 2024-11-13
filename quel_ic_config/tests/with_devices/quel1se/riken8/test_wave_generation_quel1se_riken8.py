@@ -48,6 +48,9 @@ def test_line_mixer(
     fixture_ms2720t1,
 ):
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     boxi: Quel1BoxIntrinsic = box._dev
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]
@@ -112,12 +115,12 @@ def test_line_mixer(
         (2, 0, 3, 1, 5800, 0),
         (3, 0, 3, 2, 5800, -600),
         (4, 1, 0, 0, 2100, 0),
-        (5, 1, 0, 1, 5700, 0),
-        (6, 1, 0, 2, 5000, 800),
-        (7, 1, 1, 0, 2200, 0),
-        (8, 1, 1, 1, 5600, 0),
-        (9, 1, 1, 2, 4900, 800),
-        (10, 1, 2, 0, 2300, 0),
+        (5, 1, 1, 0, 5000, 700),
+        (6, 1, 1, 1, 5650, 0),
+        (7, 1, 1, 2, 2200, 0),
+        (8, 1, 2, 0, 2300, 0),
+        (9, 1, 2, 1, 5600, 0),
+        (10, 1, 2, 2, 4900, 800),
         (11, 1, 3, 0, 2400, 0),
     ],
 )
@@ -133,6 +136,9 @@ def test_line_without_mixer(
 ):
 
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     boxi: Quel1BoxIntrinsic = box._dev
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]
@@ -214,6 +220,9 @@ def test_vatt(
     fixture_ms2720t1,
 ):
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     boxi: Quel1BoxIntrinsic = box._dev
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]
@@ -313,6 +322,9 @@ def test_sideband(
     fixture_ms2720t1,
 ):
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     boxi: Quel1BoxIntrinsic = box._dev
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]

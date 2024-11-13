@@ -240,8 +240,6 @@ if __name__ == "__main__":
             "ipaddr_sss": str(args.ipaddr_sss_a),
             "ipaddr_css": str(args.ipaddr_css_a),
             "boxtype": args.boxtype_a,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         },
     }
@@ -252,8 +250,6 @@ if __name__ == "__main__":
             "ipaddr_sss": str(args.ipaddr_sss_b),
             "ipaddr_css": str(args.ipaddr_css_b),
             "boxtype": args.boxtype_b,
-            "config_root": None,
-            "config_options": [],
             "ignore_crc_error_of_mxfe": {0, 1},
         }
 
@@ -334,7 +330,7 @@ if __name__ == "__main__":
         }
 
     boxpool0 = BoxPool(CLOCKMASTER_SETTINGS, BOX_SETTINGS, CAP_VPORT_SETTINGS, GEN_VPORT_SETTINGS)
-    boxpool0.initialize(resync=not args.noresync, config_css=not args.noreconfig)
+    boxpool0.initialize(allow_resync=not args.noresync, config_css=not args.noreconfig)
 
     box_a = boxpool0.get_box("BOX_A")
     box_b = boxpool0.get_box("BOX_A") if same_box else boxpool0.get_box("BOX_B")

@@ -7,7 +7,7 @@ from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from enum import Enum
 from functools import cached_property
 from threading import RLock
-from typing import Callable, Final, Generic, Optional, TypeVar, Union
+from typing import Callable, Final, Generic, Optional, TypeVar, Union, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -228,14 +228,19 @@ class AbstractStartAwgunitsTask(AbstractCancellableTask[None]):
     def has_started_emission(self) -> bool:
         return self._has_started_emission
 
-    def wait_for_staring_emission(self) -> None:
+    def wait_for_starting_emission(self) -> None:
         # Notes: usually you don't have to use this method. possible use cases is taking spectrum snapshot with
         #        a spectrum analyzer after confirming RF signal is actually generating.
         #        so, blocking API is enough.
-        while not self._has_started_emission:
+        # Notes: this API should not raise exception since any failures in the main task should be noticed when
+        #        either of task.result() or task.exception() is invoked.
+        # Notes: this loop should exit in 0.5 (= _PRELOAD_TIMEOUT + _START_TIMEOUT) second or so for TaskNow.
+        while not (self._has_started_emission or self.cancelled()):
+            if self.done() and not self._has_started_emission:
+                # Notes: it should not happen, basically.
+                logger.error("emission has not been started due to failures in the task thread")
+                break
             time.sleep(self._polling_period)
-            if self.cancelled() or self.done():
-                raise RuntimeError("task has stopped, never start emission")
 
     @cached_property
     def _hwidxs(self) -> set[int]:
@@ -776,6 +781,16 @@ class Quel1WaveSubsystem:
         else:
             raise RuntimeError("installed wss firmware doesn't support SYSREF timecounter")
 
+    def get_averaged_sysref_offset(self, num_iteration: int = 100) -> float:
+        cntr = self.hal.clkcntr.read_counter()[1]
+        if cntr is None:
+            raise RuntimeError("installed wss firmware doesn't support SYSREF timecounter")
+
+        cntr %= 2000
+        for _ in range(num_iteration - 1):
+            cntr += cast(int, self.hal.clkcntr.read_counter()[1]) % 2000
+        return cntr / num_iteration
+
     def timecounter_to_second(self, tctr: int) -> float:
         return tctr / self.hal.clkcntr.CLOCK_FREQUENCY
 
@@ -824,7 +839,7 @@ class Quel1WaveSubsystem:
         )
         task.start()
         if return_after_start_emission:
-            task.wait_for_staring_emission()
+            task.wait_for_starting_emission()
         return task
 
     def start_awgunits_timed(
@@ -851,7 +866,7 @@ class Quel1WaveSubsystem:
         )
         task.start()
         if return_after_start_emission:
-            task.wait_for_staring_emission()
+            task.wait_for_starting_emission()
         return task
 
     def initialize_capunits(self, capunit_idxs: Collection[tuple[int, int]]):

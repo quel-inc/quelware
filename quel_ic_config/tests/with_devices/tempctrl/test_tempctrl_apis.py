@@ -1,7 +1,7 @@
 import copy
 import logging
 import time
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Union
 
 import pytest
 
@@ -28,14 +28,14 @@ TEST_SETTINGS = (
 
 def diff_temperatures(
     css: Quel1seRiken8DebugConfigSubsystem,
-    t0: Dict[Tuple[int, int], float],
-    t1: Union[Dict[Tuple[int, int], float], None] = None,
+    t0: Dict[str, float],
+    t1: Union[Dict[str, float], None] = None,
     threshold: float = 0.4,
 ):
     if t1 is None:
-        t1 = css.get_temperatures()
+        t1 = css.get_tempctrl_temperature_now()
 
-    diff: Dict[Tuple[int, int], float] = {}
+    diff: Dict[str, float] = {}
     for k in t0:
         d = t1[k] - t0[k]
         if threshold <= abs(d):
@@ -50,22 +50,19 @@ def fixtures_local(request):
     box = Quel1BoxIntrinsic.create(**param0["box_config"])
     css = box.css
     assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
-    css.start_tempctrl_external()
+    css.start_tempctrl_external()  # Notes: enter into test mode, normal thermal control is halted.
     time.sleep(15)
     _ = css.get_tempctrl_temperature().result()
     css.stop_tempctrl()
     _ = css.get_tempctrl_temperature().result()
     yield box
 
-    hh: List[float] = css.get_tempctrl_actuator_output()["heater"]
-    for idx in range(len(hh)):
-        if hh[idx] != 0.0:
-            logger.error(
-                f"heater-{idx} is not turned-off (h[{idx}] = {hh[idx]} after the completion of the test, "
-                "fix it right now!"
-            )
-            hh[idx] = 0.0
-    css.set_tempctrl_actuator_output(fan=[0.5, 0.5], heater=hh)
+    hh: Dict[str, float] = css.get_tempctrl_actuator_output()["heater"]
+    for name, hhh in hh.items():
+        if hhh != 0.0:
+            logger.error(f"heater['{name}'] is not turned-off ({hhh}) after the completion of the test, fixing...")
+            hh[name] = 0.0
+    css.set_tempctrl_actuator_output(fan={"adda_lmx2594_0": 0.5, "adda_lmx2594_1": 0.5}, heater=hh)
 
 
 def test_fan_settings(fixtures_local):
@@ -94,16 +91,17 @@ def test_fan_settings(fixtures_local):
         h = a0["fan"]
 
         for i in range(num_fan):
+            name = f"adda_lmx2594_{i}"
             if i == fan_idx - 1:
-                assert h[i] == 1.0, f"unexpected setting of fan[{i}]: {h[i]} (!= 1.0)"
+                assert h[name] == 1.0, f"unexpected setting of fan[{name}]: {h[name]} (!= 1.0)"
             else:
-                assert h[i] == 0.5, f"unexpected setting of fan[{i}]: {h[i]} (!= 0.5)"
+                assert h[name] == 0.5, f"unexpected setting of fan[{name}]: {h[name]} (!= 0.5)"
 
         # update heater settings
         if fan_idx > 0:
-            a0["fan"][fan_idx - 1] = 0.5
+            a0["fan"][f"adda_lmx2594_{fan_idx - 1}"] = 0.5
         if fan_idx < num_fan:
-            a0["fan"][fan_idx] = 1.0
+            a0["fan"][f"adda_lmx2594_{fan_idx}"] = 1.0
         css.set_tempctrl_actuator_output(**a0)
 
         fan_idx += 1
@@ -123,10 +121,19 @@ def test_heater_settings(fixtures_local):
     a0 = css.get_tempctrl_actuator_output()
     logger.info(f"current actuator settings: {a0}")
 
-    num_heater = 40
-    heater_prev_idx = -1
+    heater_prev_name = ""
     # Notes: choose heater index randomly to reduce time.
-    for heater_idx in (0, 1, 10, 11, 20, 21, 30, 31, 39, 40):
+    for heater_name in (
+        "mx0_adrf6780_0",
+        "mx0_amp_1",
+        "ps0_lna_readin",
+        "ps0_lna_readout",
+        "mx1_amp_0",
+        "mx1_amp_1",
+        "ps1_lna_readin",
+        "ps1_lna_readout",
+        "",
+    ):
         # wait for the next loop count
         t1 = css.get_tempctrl_temperature().result()
         logger.info(f"temperature acquired at loop {proxy.read_tempctrl_loop_count()}")
@@ -137,26 +144,28 @@ def test_heater_settings(fixtures_local):
         a0 = css.get_tempctrl_actuator_output()
         logger.info(f"current actuator settings: {a0}")
         h = a0["heater"]
+        hmap = css.get_actuator_desc()
         hh = css.get_heater_outputs()  # Notes: this API is only for test.
 
-        for i in range(num_heater):
-            if i == heater_prev_idx:
-                assert h[i] == 0.3, f"unexpected setting of heater[{i}]: {h[i]} (!= 0.3)"
-                if i in hh:
-                    assert hh[i] == 0.3, f"unexpected register value of heater[{i}]: {hh[i]} (!= 0.3)"
+        for hn, hv in h.items():
+            atype, aidx = hmap[hn]
+            if hn == heater_prev_name:
+                assert hv == 0.3, f"unexpected setting of heater['{hn}']: {hv} (!= 0.3)"
+                if atype == "heater" and aidx in hh:
+                    assert hh[aidx] == 0.3, f"unexpected register value of heater[{aidx}]: {hh[aidx]} (!= 0.3)"
             else:
-                assert h[i] == 0, f"unexpected setting of heater[{i}]: {h[i]} (!= 0.0)"
-                if i in hh:
-                    assert hh[i] == 0.0, f"unexpected register value of heater[{i}]: {hh[i]} (!= 0.0)"
+                assert hv == 0.0, f"unexpected setting of heater['{hn}']: {hv} (!= 0.0)"
+                if atype == "heater" and aidx in hh:
+                    assert hh[aidx] == 0.0, f"unexpected register value of heater[{aidx}]: {hh[aidx]} (!= 0.0)"
 
         # update heater settings
-        if heater_prev_idx >= 0:
-            a0["heater"][heater_prev_idx] = 0
-        if heater_idx < num_heater:
-            a0["heater"][heater_idx] = 0.3
+        if heater_prev_name != "":
+            a0["heater"][heater_prev_name] = 0.0
+        if heater_name != "":
+            a0["heater"][heater_name] = 0.3
         css.set_tempctrl_actuator_output(**a0)
 
-        heater_prev_idx = heater_idx
+        heater_prev_name = heater_name
 
     # Notes: to ensure the last set_thermal_actuator_output() becomes effective.
     _ = css.get_tempctrl_temperature().result()

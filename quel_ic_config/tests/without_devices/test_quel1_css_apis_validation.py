@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from quel_ic_config import Quel1BoxType, Quel1Feature, Quel1TypeAConfigSubsystem, Quel1TypeBConfigSubsystem
+from quel_ic_config import Quel1BoxType, Quel1TypeAConfigSubsystem, Quel1TypeBConfigSubsystem
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,19 @@ def test_parameter_validation_a():
         css_addr="10.254.253.252",
         boxtype=Quel1BoxType.QuEL1_TypeA,
     )
-    css.initialize(features={Quel1Feature.SINGLE_ADC})
+    css.initialize()
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2, 1, 0),
+        (5, 4, 3),
+        (6,),
+        (7,),
+    )
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {
@@ -47,13 +59,13 @@ def test_parameter_validation_a():
     for g in bad_group:
         logger.info(f"g={g}")
         with pytest.raises(ValueError):
-            css.configure_mxfe(g)  # type: ignore
+            css.configure_mxfe(g, {})  # type: ignore
 
         with pytest.raises(ValueError):
             css.get_link_status(g)  # type: ignore
 
         with pytest.raises(ValueError):
-            css.get_ad9082_temperatures(g)  # type: ignore
+            css.get_mxfe_temperature_range(g)  # type: ignore
 
         with pytest.raises(ValueError):
             css.activate_monitor_loop(g)  # type: ignore
@@ -152,15 +164,28 @@ def test_parameter_validation_a():
 
                 with pytest.raises(ValueError):
                     css.get_adc_fnco(g, rl, rc)  # type: ignore
+    del css
 
 
 # TODO: make it dry.
 def test_parameter_validation_b():
     css = Quel1TypeBConfigSubsystem(
-        css_addr="10.254.253.252",
+        css_addr="10.254.253.253",
         boxtype=Quel1BoxType.QuEL1_TypeB,
     )
-    css.initialize(features={Quel1Feature.SINGLE_ADC})
+    css.initialize()
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2, 1, 0),
+        (5, 4, 3),
+        (6,),
+        (7,),
+    )
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {
@@ -195,13 +220,13 @@ def test_parameter_validation_b():
     for g in bad_group:
         logger.info(f"g={g}")
         with pytest.raises(ValueError):
-            css.configure_mxfe(g)  # type: ignore
+            css.configure_mxfe(g, {})  # type: ignore
 
         with pytest.raises(ValueError):
             css.get_link_status(g)  # type: ignore
 
         with pytest.raises(ValueError):
-            css.get_ad9082_temperatures(g)  # type: ignore
+            css.get_mxfe_temperature_range(g)  # type: ignore
 
         with pytest.raises(ValueError):
             css.activate_monitor_loop(g)  # type: ignore
@@ -300,3 +325,4 @@ def test_parameter_validation_b():
 
                 with pytest.raises(ValueError):
                     css.get_adc_fnco(g, rl, rc)  # type: ignore
+    del css

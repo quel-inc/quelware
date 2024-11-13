@@ -1,10 +1,10 @@
 import logging
 from abc import ABCMeta
-from typing import Any, Dict, Tuple, Union
+from typing import Tuple, Union
 
 from quel_ic_config.ad5328 import Ad5328Mixin
 from quel_ic_config.ad7490 import Ad7490Mixin
-from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
+from quel_ic_config.ad9082_v106 import Ad9082V106Mixin
 from quel_ic_config.adrf6780 import Adrf6780Mixin
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
 from quel_ic_config.generic_gpio import GenericGpioMixin
@@ -125,8 +125,8 @@ class Lmx2594(Lmx2594Mixin, Quel1Ic):
 
 
 class Ad9082V106(Ad9082V106Mixin, Quel1Ic):
-    def __init__(self, proxy: _ExstickgeProxyBase, idx: int, param_in: Union[str, Dict[str, Any], Ad9082Config]):
-        Ad9082V106Mixin.__init__(self, f"AD9082[{idx}]", param_in)
+    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
+        Ad9082V106Mixin.__init__(self, f"AD9082[{idx}]")
         Quel1Ic.__init__(self, proxy, LsiKindId.AD9082, idx)
 
     def _read_reg_cb(self, addr: int) -> Tuple[bool, int]:

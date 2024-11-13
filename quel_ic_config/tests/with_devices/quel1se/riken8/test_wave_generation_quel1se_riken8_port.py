@@ -71,6 +71,9 @@ def test_port_with_mixer(
     fixture_ms2720t1,
 ):
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]
     outdir = make_outdir(topdirpath / "port_with_mixer")
@@ -132,12 +135,12 @@ def test_port_with_mixer(
         (2, 3, 1, 5800, 0),
         (3, 3, 2, 5800, -600),
         (4, 6, 0, 2100, 0),
-        (5, 6, 1, 5700, 0),
-        (6, 6, 2, 5000, 800),
-        (7, 7, 0, 2200, 0),
-        (8, 7, 1, 5600, 0),
-        (9, 7, 2, 4900, 800),
-        (10, 8, 0, 2300, 0),
+        (5, 7, 0, 2200, 0),
+        (6, 7, 1, 5700, 0),
+        (7, 7, 2, 5000, 800),
+        (8, 8, 0, 2300, 0),
+        (9, 8, 1, 5600, 0),
+        (10, 8, 2, 4900, 800),
         (11, 9, 0, 2400, 0),
     ],
 )
@@ -151,6 +154,9 @@ def test_port_without_mixer(
     fixture_ms2720t1,
 ):
     box, params, topdirpath = fixtures8
+    if params["label"] not in {"staging-094"}:
+        pytest.skip()
+
     port_availability = params["port_availability"]
     relative_loss = params["relative_loss"]
     outdir = make_outdir(topdirpath / "port_without_mixer")

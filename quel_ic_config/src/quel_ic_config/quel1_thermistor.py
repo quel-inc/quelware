@@ -22,7 +22,7 @@ class _TfpltConv:
         return ((28.54 * r - 158.5) * r + 474.8) * r - 319.85
 
 
-class Thermistor(metaclass=ABCMeta):
+class Quel1Thermistor(metaclass=ABCMeta):
     def __init__(self, name: str):
         self.name = name
 
@@ -32,19 +32,19 @@ class Thermistor(metaclass=ABCMeta):
 
 
 # the following two classws will be moved to the right place.
-class Quel1NormalThermistor(Thermistor):
+class Quel1NormalThermistor(Quel1Thermistor):
     def convert(self, v: int) -> float:
         # Notes: 7303 comes from strange Vdd of 4.45V.
         return _TfpltConv.convert(v / (7307 - v))
 
 
-class Quel1PathSelectorThermistor(Thermistor):
+class Quel1PathSelectorThermistor(Quel1Thermistor):
     def convert(self, v: int) -> float:
         # Notes: thermistor is read by AD7490 on power board v13.
         return _TfpltConv.convert(v / (7307 - v) * 3.0303)
 
 
-class Quel1seOnboardThermistor(Thermistor):
+class Quel1seOnboardThermistor(Quel1Thermistor):
     """330Ohm thermistor + 1kOhm resistor"""
 
     def convert(self, v: int) -> float:
@@ -53,7 +53,7 @@ class Quel1seOnboardThermistor(Thermistor):
         return _TfpltConv.convert(v / (8192 - v) * 3.0303)
 
 
-class Quel1seExternalThermistor(Thermistor):
+class Quel1seExternalThermistor(Quel1Thermistor):
     """1.00kOhm thermistor + 4.70kOhm resistor"""
 
     def convert(self, v: int) -> float:

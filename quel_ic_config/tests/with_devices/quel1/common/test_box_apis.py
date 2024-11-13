@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 def test_config_box_intrinsic_read_and_write(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box._dev.dump_box()["lines"]
@@ -21,7 +21,7 @@ def test_config_box_intrinsic_read_and_write(fixtures1):
 
 def test_config_box_intrinsic_mismatch(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box._dev.dump_box()["lines"]
@@ -35,7 +35,7 @@ def test_config_box_intrinsic_mismatch(fixtures1):
 
 def test_config_box_intrinsic_inconsistent(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box._dev.dump_box()["lines"]
@@ -49,7 +49,7 @@ def test_config_box_intrinsic_inconsistent(fixtures1):
 
 def test_config_box_validation(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box.dump_box()["ports"]
@@ -60,7 +60,7 @@ def test_config_box_validation(fixtures1):
 
 def test_config_box_mismatch(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box.dump_box()["ports"]
@@ -73,7 +73,7 @@ def test_config_box_mismatch(fixtures1):
 
 def test_config_box_inconsistent(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     config = box.dump_box()["ports"]
@@ -94,7 +94,7 @@ def test_config_box_inconsistent(fixtures1):
 
 def test_invalid_port(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     if box.boxtype == "quel1-b":
@@ -153,7 +153,7 @@ def test_invalid_port(fixtures1):
 )
 def test_config_box_basic(boxtypes: Collection[str], for_box: bool, dual_modulus_nco: bool, config, fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     if box.boxtype in boxtypes:
@@ -169,7 +169,7 @@ def test_config_box_basic(boxtypes: Collection[str], for_box: bool, dual_modulus
 
 def test_config_rfswitch_basic(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     rc = box.dump_rfswitches()
@@ -178,7 +178,7 @@ def test_config_rfswitch_basic(fixtures1):
 
 def test_config_rfswitch_invalid(fixtures1):
     box, params, dpath = fixtures1
-    if params["label"] not in {"staging-058", "staging-060"}:
+    if params["label"] not in {"staging-050", "staging-060"}:
         pytest.skip()
 
     if box.boxtype == "quel1-a":

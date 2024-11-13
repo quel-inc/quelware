@@ -1,16 +1,24 @@
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
+from concurrent.futures import Future
+from pathlib import Path
 from typing import Any, Protocol, Union, runtime_checkable
 
 from quel_ic_config.ad9082_v106 import NcoFtw
 from quel_ic_config.exstickge_coap_tempctrl_client import Quel1seTempctrlState
-from quel_ic_config.quel_config_common import Quel1BoxType, Quel1Feature
+from quel_ic_config.quel1_thermistor import Quel1Thermistor
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 Quel1AnyLineType = Union[int, str]
 
 
 @runtime_checkable
 class Quel1AnyConfigSubsystem(Protocol):
-    def initialize(self, features: set[Quel1Feature]): ...
+    def initialize(self) -> None: ...
+
+    # configuration info
+    def get_default_config_filename(self) -> Path: ...
+
+    def get_num_ics(self) -> dict[str, int]: ...
 
     # introspecting box-info
     @property
@@ -161,18 +169,16 @@ class Quel1AnyConfigSubsystem(Protocol):
 
     # high-level APIs
     def configure_all_mxfe_clocks(
-        self, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
+        self, param: dict[str, Any], *, ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None
     ) -> None: ...
-
-    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool: ...
 
     def configure_mxfe(
         self,
         mxfe_idx: int,
+        param: dict[str, Any],
         *,
         hard_reset: bool = False,
         soft_reset: bool = False,
-        mxfe_init: bool = False,
         use_204b: bool = True,
         use_bg_cal: bool = False,
         ignore_crc_error: bool = False,
@@ -180,9 +186,22 @@ class Quel1AnyConfigSubsystem(Protocol):
 
     def configure_peripherals(
         self,
+        param: dict[str, Any],
+        *,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
         ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
     ) -> None: ...
+
+    def reconnect_mxfe(
+        self,
+        mxfe_idx: int,
+        *,
+        ignore_crc_error: bool = False,
+    ) -> bool: ...
+
+    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool: ...
+
+    def clear_crc_error(self, mxfe_idx: int) -> None: ...
 
     def dump_channel(self, group: int, line: int, channel: int) -> dict[str, Any]: ...
 
@@ -201,3 +220,22 @@ class Quel1AnyConfigSubsystem(Protocol):
     def get_tempctrl_state_count(self) -> int: ...
 
     def start_tempctrl(self, new_count: Union[int, None] = None) -> None: ...
+
+    def get_mxfe_temperature_range(self, mxfe_idx: int) -> tuple[int, int]: ...
+
+
+@runtime_checkable
+class Quel1seAnyConfigSubsystem(Quel1AnyConfigSubsystem, Protocol):
+    @classmethod
+    def get_thermistor_desc(cls) -> dict[tuple[int, int], Quel1Thermistor]: ...
+
+    @classmethod
+    def get_actuator_desc(cls) -> dict[str, tuple[str, int]]: ...
+
+    def get_tempctrl_temperature(self) -> Future[dict[str, float]]: ...
+
+    def get_tempctrl_actuator_output(self) -> dict[str, dict[str, float]]: ...
+
+    def get_tempctrl_setpoint(self) -> dict[str, list[float]]: ...
+
+    def set_tempctrl_setpoint(self, fan: Sequence[float], heater: Sequence[float]): ...

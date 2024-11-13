@@ -1,7 +1,7 @@
 import copy
 import json
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Union
 
 import pytest
 from pydantic.v1.utils import deep_update
@@ -18,17 +18,29 @@ class Ad9082V106Dummy(Ad9082V106Mixin):
     def _write_reg_cb(self, address: int, value: int) -> Tuple[bool]:
         return (True,)
 
-    def initialize(
+    def configure(
         self,
+        param_in: Union[str, Dict[str, Any], Ad9082Config],
         reset: bool = False,
-        link_init: bool = False,
         use_204b: bool = False,
         use_bg_cal: bool = True,
         wait_after_device_init: float = 0.1,
     ):
-        self.device.dev_info.dev_freq_hz = self.param.clock.ref
-        self.device.dev_info.dac_freq_hz = self.param.clock.dac
-        self.device.dev_info.adc_freq_hz = self.param.clock.adc
+        param = self._validate_settings(param_in)
+        self.device.dev_info.dev_freq_hz = param.clock.ref
+        self.device.dev_info.dac_freq_hz = param.clock.dac
+        self.device.dev_info.adc_freq_hz = param.clock.adc
+
+        self._interp_cache = (
+            int(param.dac.interpolation_rate.main),
+            int(param.dac.interpolation_rate.channel),
+        )
+        self._fduc_map_cache: Union[Tuple[Tuple[int, ...], ...], None] = (
+            tuple([int(i) for i in param.dac.channel_assign.dac0]),
+            tuple([int(i) for i in param.dac.channel_assign.dac1]),
+            tuple([int(i) for i in param.dac.channel_assign.dac2]),
+            tuple([int(i) for i in param.dac.channel_assign.dac3]),
+        )
 
 
 @pytest.fixture(scope="session")
@@ -44,8 +56,8 @@ def ad9082_obj_4x6():
     setting = deep_update(setting, additional_setting)
     del setting["meta"]
     cfg_obj = Ad9082Config.model_validate(setting)
-    ic_obj = Ad9082V106Dummy("dummy", cfg_obj)
-    ic_obj.initialize()
+    ic_obj = Ad9082V106Dummy("dummy")
+    ic_obj.configure(cfg_obj)
     return ic_obj
 
 

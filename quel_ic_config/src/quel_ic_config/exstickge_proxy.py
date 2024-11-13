@@ -25,9 +25,6 @@ class LsiKindId(IntEnum):
 
 
 class _ExstickgeProxyBase(metaclass=ABCMeta):
-    _DEFAULT_PORT: int = 0  # dummy value
-    _DEFAULT_RESPONSE_TIMEOUT: float = 0.0  # dummy value
-
     _ADDR_MASKS: Final[Mapping[LsiKindId, int]] = {
         LsiKindId.AD9082: 0x7FFF,
         LsiKindId.ADRF6780: 0x003F,

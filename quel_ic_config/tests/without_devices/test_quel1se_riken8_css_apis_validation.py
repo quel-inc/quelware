@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from quel_ic_config import ExstickgeCoapClientQuel1seRiken8, Quel1BoxType, Quel1Feature, Quel1seRiken8ConfigSubsystem
+from quel_ic_config import ExstickgeCoapClientQuel1seRiken8, Quel1BoxType, Quel1seRiken8ConfigSubsystem
 from quel_ic_config.quel1se_riken8_config_subsystem import _ExstickgeCoapClientBase
 
 logger = logging.getLogger(__name__)
@@ -18,10 +18,22 @@ class Quel1seRiken8DummyConfigSubsystem(Quel1seRiken8ConfigSubsystem):
 
 def test_parameter_validation():
     css = Quel1seRiken8DummyConfigSubsystem(
-        css_addr="10.254.253.252",
+        css_addr="10.254.253.254",
         boxtype=Quel1BoxType.QuEL1SE_RIKEN8,
     )
-    css.initialize(features={Quel1Feature.BOTH_ADC})
+    css.initialize()
+    css.ad9082[0]._fduc_map_cache = (
+        (0,),
+        (1,),
+        (4, 3, 2),
+        (7, 6, 5),
+    )
+    css.ad9082[1]._fduc_map_cache = (
+        (2,),
+        (5, 1, 0),
+        (6, 4, 3),
+        (7,),
+    )
 
     bad_group = (-1, 2, 1.5, "r", None)
     bad_line = {
@@ -37,9 +49,9 @@ def test_parameter_validation():
         (0, 1): (-1, 1, 1.5, "r", None),
         (0, 2): (-1, 3, 1.5, "r", None),
         (0, 3): (-1, 3, 1.5, "r", None),
-        (1, 0): (-1, 3, 1.5, "r", None),
+        (1, 0): (-1, 1, 1.5, "r", None),
         (1, 1): (-1, 3, 1.5, "r", None),
-        (1, 2): (-1, 1, 1.5, "r", None),
+        (1, 2): (-1, 3, 1.5, "r", None),
         (1, 3): (-1, 1, 1.5, "r", None),
     }
     bad_rchannel = {
@@ -60,13 +72,13 @@ def test_parameter_validation():
     for g in bad_group:
         logger.info(f"g={g}")
         with pytest.raises(ValueError):
-            css.configure_mxfe(g)  # type: ignore
+            css.configure_mxfe(g, {})  # type: ignore
 
         with pytest.raises(ValueError):
             css.get_link_status(g)  # type: ignore
 
         with pytest.raises(ValueError):
-            css.get_ad9082_temperatures(g)  # type: ignore
+            css.get_mxfe_temperature_range(g)  # type: ignore
 
     for g in (0, 1):
         for tl in bad_line[g]:

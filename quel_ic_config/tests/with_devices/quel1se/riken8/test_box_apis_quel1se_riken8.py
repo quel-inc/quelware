@@ -198,11 +198,11 @@ def test_config_box_abnormal(fixtures8):
             box.config_validate_box({4: {"runits": {2: {"fnco_freq": 0.0}}}})
         assert not box.config_validate_box({4: {"runits": {0: {"non-existent": 0.0}}}})
 
-        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#08, and channel:1")):
-            box.config_box({8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
-        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#08, and channel:1")):
+        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#06, and channel:1")):
+            box.config_box({6: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
+        with pytest.raises(ValueError, match=re.escape("an invalid combination of port-#09, and channel:1")):
             box.config_validate_box(
-                {8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
+                {9: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
             )
         assert not box.config_validate_box({8: {"channels": {0: {"non-existent": 0.0}}}})
 

@@ -36,11 +36,11 @@ TEST_SETTINGS_QUEL1 = (
         "linkup": False,
     },
     {
-        "label": "staging-058",
+        "label": "staging-050",
         "box_config": {
-            "ipaddr_wss": "10.1.0.58",
-            "ipaddr_sss": "10.2.0.58",
-            "ipaddr_css": "10.5.0.58",
+            "ipaddr_wss": "10.1.0.50",
+            "ipaddr_sss": "10.2.0.50",
+            "ipaddr_css": "10.5.0.50",
             "boxtype": Quel1BoxType.fromstr("quel1-a"),
         },
         "linkup_config": {
@@ -112,6 +112,26 @@ TEST_SETTINGS_RIKEN8 = (
         "relative_loss": 0,
         "linkup": False,
     },
+    {
+        "label": "staging-146",
+        "box_config": {
+            "ipaddr_wss": "10.1.0.146",
+            "ipaddr_sss": "10.2.0.146",
+            "ipaddr_css": "10.5.0.146",
+            "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
+        },
+        "linkup_config": {
+            "mxfes_to_linkup": (0, 1),
+            "use_204b": False,
+        },
+        "port_availability": {
+            "unavailable": [],
+            "via_monitor_out": [],
+        },
+        "image_path": "./artifacts",
+        "relative_loss": 0,
+        "linkup": False,
+    },
 )
 
 
@@ -130,11 +150,11 @@ TEST_SETTINGS_MS2720T1 = (
 
 TEST_SETTINGS_FUJITSU11A = (
     {
-        "label": "staging-158",
+        "label": "staging-157",
         "box_config": {
-            "ipaddr_wss": "10.1.0.158",
-            "ipaddr_sss": "10.2.0.158",
-            "ipaddr_css": "10.5.0.158",
+            "ipaddr_wss": "10.1.0.157",
+            "ipaddr_sss": "10.2.0.157",
+            "ipaddr_css": "10.5.0.157",
             "boxtype": Quel1BoxType.fromstr("x-quel1se-fujitsu11-a"),
         },
         "linkup_config": {
