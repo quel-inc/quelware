@@ -489,7 +489,7 @@ class CapUnitSimplified(AbstractCapUnit):
                     self._capctrl.remove_triggerable_unit(self._unit_idx)
             self.unload_parameter()
             self._waiting_for_capture = False
-            self.terminate()
+            self.terminate().result()
             if self.is_busy():
                 raise RuntimeError(f"cap_unit-#{self.unit_index:02d} is still busy after sending a termination request")
             self.clear_done()
@@ -651,22 +651,23 @@ class CapUnitSimplified(AbstractCapUnit):
             self._set_ctrl(v1)
 
     def _wait_free(self, timeout: float, polling_period: float, timeout_msg: str) -> Future[None]:
+        # Notes: lock should be acquired by caller.
+
         def _wait_free_unit_loop() -> None:
             # Notes: the timing of check_error() is considered carefully with respect to the efficiency (less register
             #        access is better) and the priority (more important for the users than TimeoutError).
-            with self._unit_lock:
-                t1 = time.perf_counter() + timeout
-                while time.perf_counter() < t1:
-                    time.sleep(polling_period)
-                    with self._master_lock:
-                        if not self.is_busy():
-                            if self.is_done():
-                                self.clear_done()
-                            self.check_error()
-                            break
-                else:
-                    self.check_error()
-                    raise TimeoutError(timeout_msg)
+            t1 = time.perf_counter() + timeout
+            while time.perf_counter() < t1:
+                time.sleep(polling_period)
+                with self._master_lock:
+                    if not self.is_busy():
+                        if self.is_done():
+                            self.clear_done()
+                        self.check_error()
+                        break
+            else:
+                self.check_error()
+                raise TimeoutError(timeout_msg)
 
         return self._pool.submit(_wait_free_unit_loop)
 

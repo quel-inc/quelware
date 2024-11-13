@@ -1,9 +1,9 @@
-from concurrent.futures import Future
 import time
+from concurrent.futures import Future
 
 from e7awghal.awgctrl import AwgCtrl
 from e7awghal.awgunit import AwgUnit, AwgUnitCtrlReg
-from e7awghal.common_defs import _DEFAULT_TIMEOUT, _DEFAULT_POLLING_PERIOD
+from e7awghal.common_defs import _DEFAULT_POLLING_PERIOD, _DEFAULT_TIMEOUT
 
 
 class AwgUnitHL(AwgUnit):

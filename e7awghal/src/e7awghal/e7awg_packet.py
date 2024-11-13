@@ -11,7 +11,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-class DeviceLockDelegationError(Exception):
+class BoxLockDelegationError(Exception):
     pass
 
 
@@ -248,7 +248,7 @@ class E7awgPacketAccess(BasePacketAccess):
                 # Notes: all types of the packets are subject to access controls. (not only packet with side effect due
                 #        to wrong design of e7awghw)
                 if not self._auth_callback():
-                    raise DeviceLockDelegationError("no device lock is available")
+                    raise BoxLockDelegationError(f"device lock of {self._dest_addrport[0]} is not available now")
                 self._sock.sendto(pkt._buffer, self._dest_addrport)
                 while True:
                     # TODO: timeout doesn't work well if many bogus packet come periodically.
@@ -262,6 +262,9 @@ class E7awgPacketAccess(BasePacketAccess):
         except socket.timeout as e:
             if not expect_no_reply:
                 logger.error(e)
+            raise
+        except BoxLockDelegationError:
+            # Notes: no log message
             raise
         except Exception as e:
             logger.error(e)
@@ -391,9 +394,10 @@ class E7awgSimple32PacketAccess(BasePacketAccess):
     def send_command(self, pkt: E7awgSimple32OutgoingPacket, is_network_endian: bool) -> E7awgSimple32IncomingPacket:
         try:
             with self._lock:
-                if pkt.has_side_effect:
-                    if not self._auth_callback():
-                        raise DeviceLockDelegationError("no device lock is available")
+                # Notes: all types of the packets are subject to access controls. (not only packet with side effect due
+                #        to wrong design of e7awghw)
+                if not self._auth_callback():
+                    raise BoxLockDelegationError(f"device lock of {self._dest_addrport[0]} is not available now")
                 self._sock.sendto(pkt._buffer, self._dest_addrport)
                 # TODO: implement timeout (!)
                 while True:
@@ -403,10 +407,11 @@ class E7awgSimple32PacketAccess(BasePacketAccess):
             rpl = E7awgSimple32IncomingPacket(recv_data, is_network_endian)
             if not rpl.is_valid_for(pkt.mode):
                 raise ValueError(f"unexpected reply: mode = {pkt.mode} -> {rpl.mode} from {recv_addr}")
-        except socket.timeout as e:
-            logger.error(e)
+        except BoxLockDelegationError:
+            # Notes: no log message
             raise
         except Exception as e:
+            # Notes: sock.timeout is typical.
             logger.error(e)
             raise
 
@@ -524,9 +529,10 @@ class E7awgSimple64PacketAccess(BasePacketAccess):
     def send_command(self, pkt: E7awgSimple64OutgoingPacket) -> E7awgSimple64IncomingPacket:
         try:
             with self._lock:
-                if pkt.has_side_effect:
-                    if not self._auth_callback():
-                        raise DeviceLockDelegationError("no device lock is available")
+                # Notes: all types of the packets are subject to access controls. (not only packet with side effect due
+                #        to wrong design of e7awghw)
+                if not self._auth_callback():
+                    raise BoxLockDelegationError(f"device lock of {self._dest_addrport[0]} is not available now")
                 self._sock.sendto(pkt._buffer, self._dest_addrport)
                 # TODO: implement timeout (!)
                 while True:
@@ -536,10 +542,11 @@ class E7awgSimple64PacketAccess(BasePacketAccess):
             rpl = E7awgSimple64IncomingPacket(recv_data)
             if not rpl.is_valid_for(pkt.mode):
                 raise ValueError(f"unexpected reply: mode = {pkt.mode} -> {rpl.mode} from {recv_addr}")
-        except socket.timeout as e:
-            logger.error(e)
+        except BoxLockDelegationError:
+            # Notes: no log message
             raise
         except Exception as e:
+            # Notes: sock.timeout is typical.
             logger.error(e)
             raise
 

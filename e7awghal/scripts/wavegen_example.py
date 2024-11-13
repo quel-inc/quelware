@@ -7,7 +7,6 @@ from e7awghal import AbstractQuel1Au50Hal, AwgParam, AwgUnit, E7FwType, WaveChun
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper, create_rmap_object
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_box_intrinsic import _create_css_object
-from quel_ic_config.quel_config_common import Quel1Feature
 from testlibs.awgctrl_with_hlapi import AwgUnitHL
 from testlibs.quel1au50_hal_for_test import create_quel1au50hal_for_test
 
@@ -34,11 +33,11 @@ if __name__ == "__main__":
     )
     # Notes: configuration settings are hard coded here instead of retrieving it from the device.
     assert proxy.fw_type() == E7FwType.SIMPLEMULTI_STANDARD
-    css.initialize({Quel1Feature.BOTH_ADC})
+    css.initialize()
     rmap: AbstractQuel1E7ResourceMapper = create_rmap_object(str(args.ipaddr_wss), E7FwType.SIMPLEMULTI_STANDARD)
 
     for mxfe_idx in css.get_all_mxfes():
-        css.configure_mxfe(mxfe_idx)
+        css.configure_mxfe(mxfe_idx, {})
     proxy.initialize()
 
     # configure channel
