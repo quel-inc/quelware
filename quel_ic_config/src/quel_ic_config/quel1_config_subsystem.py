@@ -1,6 +1,7 @@
 import logging
+import time
 from pathlib import Path
-from typing import Any, Collection, Dict, Mapping, Set, Tuple, Union
+from typing import Any, Collection, Dict, Final, Mapping, Set, Tuple, Union
 
 from quel_ic_config.exstickge_sock_client import (
     AbstractLockKeeper,
@@ -20,6 +21,8 @@ from quel_ic_config.quel1_config_subsystem_common import (
 )
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
 from quel_ic_config.quel_config_common import _DEFAULT_LOCK_DIRECTORY, Quel1BoxType
+
+_DEFAULT_SOCKET_SERVER_DETECTION_TIMEOUT: Final[float] = 15.0  # [s]
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +152,27 @@ class QuelMeeBoardConfigSubsystem(
     def _create_exstickge_proxy(
         self, port: int, timeout: float, sender_limit_by_binding: bool
     ) -> _ExstickgeSockClientBase:
-        # TODO: update to accept user defined lock directory
+        # TODO: consider to accept user defined lock directory or not
+
         proxy = ExstickgeSockClientQuel1WithFileLock(
             self._css_addr, port, _DEFAULT_LOCK_DIRECTORY, timeout, sender_limit_by_binding
         )
         proxy.initialize()
+        # Notes: check the availablity of some end-points of the server after taking the lock.
+        #        MEE board has LMX2594[0] definitely.
+        # Notes: lock should be acquired at the end of ExstickgeSockClientQuel1WithFileLock.__init__() if available.
+        if proxy.has_lock:
+            t0 = time.perf_counter()
+            while time.perf_counter() < t0 + _DEFAULT_SOCKET_SERVER_DETECTION_TIMEOUT:
+                if proxy.read_reg(LsiKindId.LMX2594, 0, 0x0000) is not None:
+                    break
+                time.sleep(3.0)
+            else:
+                raise RuntimeError(f"socket server is not available on {self._css_addr}")
+        else:
+            # Notes: BoxLockError will raise at _create_css_object()
+            pass
+
         return proxy
 
     def configure_peripherals(

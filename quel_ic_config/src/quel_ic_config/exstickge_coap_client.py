@@ -1,7 +1,6 @@
 import asyncio
 import atexit
 import logging
-import math
 import os
 import queue
 import threading
@@ -15,13 +14,14 @@ from weakref import WeakSet
 import aiocoap
 import aiocoap.error
 import flufl.lock as fl
-import ping3
 import ulid
 from packaging.version import Version
 
 from quel_ic_config.box_lock import BoxLockError
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
 from quel_ic_config.quel_config_common import _DEFAULT_LOCK_DIRECTORY
+
+_DEFAULT_COAP_SERVER_DETECTION_TIMEOUT: Final[float] = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,10 @@ class _BoxFailedUnlockError(Exception):
 
 
 class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
-    _DEFAULT_LOOPING_TIMEOUT: Final[float] = 0.25
+    DEFAULT_COAP_PORT = 5683
     DEFAULT_COAP_RESPONSE_TIMEOUT: Final[float] = 3.0
+
+    _DEFAULT_LOOPING_TIMEOUT: Final[float] = 0.25
 
     _clients: WeakSet["AbstractSyncAsyncCoapClient"] = WeakSet()
     _create_lock: threading.Lock = threading.Lock()
@@ -511,8 +513,8 @@ class Quel1seBoard(str, Enum):
 
 
 class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
+    DEFAULT_PORT: int = AbstractSyncAsyncCoapClient.DEFAULT_COAP_PORT
     DEFAULT_RESPONSE_TIMEOUT: float = AbstractSyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT
-    DEFAULT_PORT = 5683
 
     _URI_MAPPINGS: Mapping[Tuple[LsiKindId, int], str]
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]]
@@ -718,45 +720,55 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
 
 def get_exstickge_server_info(
     ipaddr_css: str,
-    port: int = 5683,
-    timeout_ping: float = 10.0,
+    port: int = AbstractSyncAsyncCoapClient.DEFAULT_COAP_PORT,
+    timeout_ping: float = _DEFAULT_COAP_SERVER_DETECTION_TIMEOUT,
     timeout_coap: float = AbstractSyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT,
 ) -> Tuple[bool, str, str]:
     # Notes: assuming ipaddr_css is already validated
     # Notes: timeout_ping of 10.0 second comes from the booting duration of the server
+    #        it was previously implemented with ping3.
     # Notes: port is not currently used
-    _ = port
+    uri1 = f"coap://{ipaddr_css}/version/firmware"
+    uri2 = f"coap://{ipaddr_css}/conf/boxtype"
+    res1: Union[aiocoap.Message, None] = None
+    res2: Union[aiocoap.Message, None] = None
 
-    if ping3.ping(ipaddr_css, timeout=math.ceil(timeout_ping)) in {None, False}:
-        raise RuntimeError(
-            f"not reachable to {ipaddr_css}, it looks like a wrong IP address or no connection to the box"
-        )
-
+    # Notes: reading box information with temporary coap client
     core = SyncAsyncCoapClientWithDummyLock(target=(ipaddr_css, port))
     core.start()
-    uri1 = f"coap://{ipaddr_css}/version/firmware"
-    res1 = core.request_and_wait(code=aiocoap.GET, uri=uri1, timeout=timeout_coap)
+
+    t0 = time.perf_counter()
+    while (time.perf_counter() < t0 + timeout_ping) and (res1 is None):
+        try:
+            res1 = core.request_and_wait(code=aiocoap.GET, uri=uri1, timeout=timeout_coap)
+            if res1 is None:
+                logger.info(f"no CoAP response from {ipaddr_css}")
+                time.sleep(3)
+        except aiocoap.error.NetworkError:
+            core.terminate()
+            time.sleep(3)
+            core = SyncAsyncCoapClientWithDummyLock(target=(ipaddr_css, port))
+            core.start()
+            res1 = None
 
     if res1 is not None:
-        uri2 = f"coap://{ipaddr_css}/conf/boxtype"
         res2 = core.request_and_wait(code=aiocoap.GET, uri=uri2, timeout=timeout_coap)
-    else:
-        res2 = None
     core.terminate()
     del core
 
+    # Notes: validating the box information
     if res1 is None:
-        logger.info(f"no response from CoAP server at {ipaddr_css}")
+        logger.info(f"timed out the detection of CoAP server on {ipaddr_css}")
         return False, "", ""  # UDP server, probably
     elif not res1.code.is_successful():
         raise RuntimeError(f"failed to access to end-point '{uri1}' with error code {res1.code}")
     else:
         v = res1.payload.decode()
         logger.info(f"CoAP server version of {ipaddr_css} is '{v}'")
-        if res2.code.is_successful():
+        if res2 and res2.code.is_successful():
             u = res2.payload.decode()
             logger.info(f"reported boxtype of {ipaddr_css} is '{u}'")
             return True, v, u
         else:
-            logger.info(f"boxtype information of {ipaddr_css} is not available")
+            logger.info(f"boxtype information of {ipaddr_css} is not available due to error")
             return True, v, ""

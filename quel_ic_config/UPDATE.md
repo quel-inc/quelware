@@ -1,6 +1,6 @@
 # 更新リスト
 
-## v0.10.1 beta3 (Public pre-Release)
+## v0.10.1 beta4 (Public pre-Release)
 - WaveSubsystem(wss)を挿し替え 
   - e7awgsw との依存を解消。
   - 500MHz情報帯域のチャネルを生のままユーザに提供する形式のAPIは固定。
@@ -17,6 +17,7 @@
   - 詳細は[こちら](./docs/BOX_EXCLUSIVE_ACCESS_CONTROL.md)を参照。
 - SIMPLEMULTI_CLASSIC版ファームウェアの対応停止
 - FEEDBACK_EARLY版ファームウェアの対応一時停止
+- ping3への依存を解消
 
 ### v0.9.6
 - v0.9.5 の不具合を修正

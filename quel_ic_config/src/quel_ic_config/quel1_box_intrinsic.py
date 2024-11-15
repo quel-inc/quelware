@@ -91,6 +91,8 @@ def _create_css_object(
         raise ValueError(f"unsupported boxtype: {boxtype}")
 
     # TODO: should be moved to the right place.
+    # Notes: for SockClients, this check is meaningless because lock acquisition is completed at the end of ctor.
+    # Notes: for CoapClients, this looks required.
     for i in range(10):
         if i > 0:
             time.sleep(0.5)
@@ -98,7 +100,7 @@ def _create_css_object(
             break
     else:
         del css
-        raise BoxLockError(f"failed to acquire lock of css at {ipaddr_css}")
+        raise BoxLockError(f"failed to acquire lock of {ipaddr_css}")
 
     return css  # noqa: F821 (avoiding a possible bug of pflake8)
 

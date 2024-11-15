@@ -5,7 +5,14 @@ from typing import Any, Dict, Set
 import pytest
 from pydantic.v1.utils import deep_update
 
-from quel_ic_config import QubeConfigSubsystem, Quel1BoxType, Quel1ConfigOption, Quel1Feature
+from quel_ic_config import (
+    ExstickgeSockClientQuel1WithDummyLock,
+    QubeConfigSubsystem,
+    Quel1BoxType,
+    Quel1ConfigOption,
+    Quel1Feature,
+)
+from quel_ic_config.exstickge_sock_client import _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 
 
@@ -137,6 +144,15 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     return root
 
 
+class QubeDummyConfigSubsystem(QubeConfigSubsystem):
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        proxy = ExstickgeSockClientQuel1WithDummyLock(self._css_addr, port, timeout, sender_limit_by_binding)
+        proxy.initialize()
+        return proxy
+
+
 @pytest.mark.parametrize(
     ("boxtype", "features", "config_options"),
     [
@@ -199,7 +215,7 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     ],
 )
 def test_config_loader(boxtype: Quel1BoxType, features: Set[Quel1Feature], config_options: Set[Quel1ConfigOption]):
-    qco = QubeConfigSubsystem("241.3.5.6", boxtype)
+    qco = QubeDummyConfigSubsystem("241.3.5.6", boxtype)
     ql = Quel1ConfigLoader(
         boxtype=boxtype,
         num_ic=qco.get_num_ics(),
