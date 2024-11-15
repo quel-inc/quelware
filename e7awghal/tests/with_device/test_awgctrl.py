@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 TEST_SETTINGS = (
     {
         "box_config": {
-            "ipaddr_wss": "10.1.0.58",
+            "ipaddr_wss": "10.1.0.50",
         },
     },
 )

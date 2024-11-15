@@ -1,4 +1,6 @@
 import copy
+import socket
+import time
 from ipaddress import IPv4Address
 from typing import Any, Callable, Optional
 
@@ -60,10 +62,18 @@ def create_quel1au50hal_for_test(
     auth_callback: Optional[Callable[[], bool]] = None,
 ) -> AbstractQuel1Au50Hal:
     vc = Quel1Au50HalVersionChecker(ipaddr_wss, 16385)
-    if not vc.ping():
-        raise RuntimeError(f"failed to communicate with {ipaddr_wss}")
     vc._udprw.inject_auth_callback(auth_callback=auth_callback)
-    fw_type, fw_auxattr, _ = vc.resolve_fwtype()
+    for i in range(3):
+        try:
+            if i > 0:
+                time.sleep(2.5)
+            fw_type, fw_auxattr, _ = vc.resolve_fwtype()
+            break
+        except socket.timeout:
+            pass
+    else:
+        raise RuntimeError(f"failed to acquire firmware information from {ipaddr_wss}")
+
     for cls in (Quel1Au50SimplemultiStandardHalForTest,):
         assert issubclass(cls, AbstractQuel1Au50Hal)
         if cls.fw_type() == fw_type:

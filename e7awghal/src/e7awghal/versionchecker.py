@@ -3,7 +3,6 @@ from ipaddress import IPv4Address
 from typing import Final
 
 import numpy as np
-import ping3
 
 from e7awghal.common_register import E7awgVersion
 from e7awghal.e7awg_packet import E7awgOutgoingPacket, E7awgPacketAccess, E7awgPacketMode
@@ -65,14 +64,6 @@ class Quel1Au50HalVersionChecker:
     def __init__(self, ipaddr: str, port: int):
         self._ipaddr = IPv4Address(ipaddr)
         self._udprw = E7awgPacketAccess(str(self._ipaddr), port)
-
-    def ping(self):
-        for _ in range(5):
-            if ping3.ping(str(self._ipaddr), timeout=1) is not None:
-                return True
-        else:
-            logger.error(f"no ping response from {str(self._ipaddr)}")
-            return False
 
     def _read_reg(self, mode: E7awgPacketMode, address: int) -> np.uint32:
         cmd = E7awgOutgoingPacket(

@@ -28,8 +28,8 @@ def complex_fir_bpf(
         npt.NDArray[np.complex64]: FIR coefficients
     """
 
-    # Notes: since low-pass filter in [0,fs/2] is used as band-pass filter [-fs/2, fs/2], 
-    # the cutoff frequency must be half of the bandwidth. 
+    # Notes: since low-pass filter in [0,fs/2] is used as band-pass filter [-fs/2, fs/2],
+    # the cutoff frequency must be half of the bandwidth.
     #           f_cutoff = bandwidth / 2 [Hz]
     # f_cutoff must be normalized by nyquist frequency fs/2 for firwin
     #           cutoff = f_cutoff / (fs/2) = bandwidth / fs
