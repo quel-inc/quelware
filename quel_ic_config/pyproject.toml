@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.1b3"
+version = "0.10.1b4"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -10,8 +10,7 @@ dependencies = [
     "python-ulid ~= 2.7.0",
     "filelock ~= 3.16.0",
     "flufl.lock ~= 8.1.0",
-    "ping3 ~= 4.0.4",
-    "e7awghal == 0.1.1",
+    "e7awghal == 0.1.2",
     "pybind11-stubgen ~= 2.5.1",
     "pandas ~= 2.2.3",
     "polars ~= 1.9.0",
@@ -45,6 +44,7 @@ dev = [
     "pytest-cov",
     "pybind11 ~= 2.13.6",
     "pandas-stubs",
+    "ping3 ~= 4.0.4",
     "quel_inst_tool >= 0.2.6",
     "quel_cmod_scripting >= 0.1.8",
     "quel_staging_tool >= 0.0.8",

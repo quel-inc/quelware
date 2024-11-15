@@ -5,7 +5,7 @@ from quel_ic_config.ad5328 import Ad5328ConfigHelper, Ad5328RegNames, Ad5328Regs
 from quel_ic_config.ad9082_v106 import Ad9082JesdParam, ChipTemperatures, NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband, Adrf6780RegNames, Adrf6780Regs
 from quel_ic_config.box_force_unlock import force_unlock_all_boxes
-from quel_ic_config.box_lock import BoxLockError
+from quel_ic_config.box_lock import BoxLockError, set_trancated_traceback_for_lock_error
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper, Quel1ConventionalE7ResourceMapper
 from quel_ic_config.exstickge_coap_client import Quel1seBoard, get_exstickge_server_info
 from quel_ic_config.generic_gpio import GenericGpioConfigHelper, GenericGpioRegNames, GenericGpioRegs
@@ -209,6 +209,7 @@ __all__ = (
     "BoxStartCapunitsNowTask",
     "BoxStartCapunitsByTriggerTask",
     "BoxLockError",
+    "set_trancated_traceback_for_lock_error",
     "NoRfSwitchError",
     "NoLoopbackPathError",
     "force_unlock_all_boxes",

@@ -5,7 +5,7 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from ipaddress import IPv4Address
-from typing import Dict, Final, List, Set, Tuple, Union
+from typing import Dict, Final, List, Set, Tuple, Union, cast
 
 import yaml
 
@@ -79,65 +79,68 @@ def validate_boxes_conf(box_confs) -> bool:
     return valid_conf
 
 
-def load_boxes(box_conf: list[dict[str, str]]):
-    box_objs: Dict[str, Union[Quel1Box, None]] = {}
+def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
+    box_name = box_conf["name"]
+    threading.current_thread().name = box_name  # Notes: thread name is printed in log messages.
 
-    for idx, spec in enumerate(box_conf):
-        box_name = spec["name"]
-        box_ipaddr = IPv4Address(spec["ipaddr"])
-        box_type = Quel1BoxType.fromstr(spec["boxtype"])
-        for _ in range(NUM_CONNECT_RETRY):
-            try:
-                box_objs[box_name] = Quel1Box.create(
-                    ipaddr_wss=str(box_ipaddr),
-                    ipaddr_sss=str(box_ipaddr + 0x010000),
-                    ipaddr_css=str(box_ipaddr + 0x040000),
-                    boxtype=box_type,
-                )
-                break
-            except Exception as e:
-                logger.warning(f"failed to connect to {box_name} due to exception: '{e}'")
-        else:
-            box_objs[box_name] = None
-            logger.error(f"give up to connect to {box_name} due to repeated failures")
+    box_ipaddr = IPv4Address(box_conf["ipaddr"])
+    box_type = Quel1BoxType.fromstr(box_conf["boxtype"])
+    exception: str = ""
+    for _ in range(NUM_CONNECT_RETRY):
+        try:
+            retval = Quel1Box.create(
+                ipaddr_wss=str(box_ipaddr),
+                ipaddr_sss=str(box_ipaddr + 0x010000),
+                ipaddr_css=str(box_ipaddr + 0x040000),
+                boxtype=box_type,
+            )
+            if retval is not None:
+                logger.info(f"connected to {box_name} successfully")
+            break
+        except Exception as e:
+            exception = str(e.args[0])
+            logger.warning(f"failed to connect to {box_name} due to exception: '{e}'")
+    else:
+        retval = exception
+        logger.error(f"give up to connect to {box_name} due to repeated failures")
 
-    return box_objs
+    return box_name, retval
 
 
-def load_conf_v1(conf, filename: pathlib.Path) -> tuple[bool, dict[str, Union[None, Quel1Box]]]:
+def load_conf_v1(conf, filename: pathlib.Path) -> tuple[bool, list[dict[str, str]]]:
     if "boxes" not in conf:
         logger.error(f"no 'boxes' key is found in the config file '{filename}'")
-        return False, {}
+        return False, []
 
     if not validate_boxes_conf(conf["boxes"]):
         logger.error(f"broken configuration file '{filename}', quitting")
-        return False, {}
+        return False, []
 
-    return True, load_boxes(conf["boxes"])
+    return True, conf["boxes"]
 
 
-def load_conf(filename: pathlib.Path) -> Tuple[bool, Dict[str, Union[None, Quel1Box]]]:
+def load_conf(filename: pathlib.Path) -> Tuple[bool, list[dict[str, str]]]:
     try:
         with open(filename) as f:
             conf = yaml.safe_load(f)
     except Exception as e:
         logger.error(f"failed to load '{filename}' due to exception: '{e}'")
-        return False, {}
+        return False, []
 
     if conf is None:
         logger.error(f"empty file '{filename}'")
-        return False, {}
+        return False, []
 
     if "version" not in conf:
         logger.error(f"version is not specified in '{filename}'")
-        return False, {}
+        return False, []
 
     version: int = conf["version"]
     if version == 1:
         return load_conf_v1(conf, filename)
     else:
         logger.error(f"wrong version '{version}' (!= 1)")
-        return False, {}
+        return False, []
 
 
 def check_link_validity(name: str, box: Quel1Box) -> bool:
@@ -189,13 +192,6 @@ def check_crc_error(name: str, box: Quel1Box, duration: int) -> bool:
 def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
     threading.current_thread().name = name  # Notes: thread name is printed in log messages.
 
-    use_bgcal: bool = True
-    if args.nouse_bgcal:
-        if args.use_bgcal:
-            raise ValueError("it is not allowed to specify both --use_bgcal and --nouse_bgcal at the same time")
-        else:
-            use_bgcal = False
-
     if args.force:
         total_status = False
     else:
@@ -206,9 +202,7 @@ def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
             # Notes: no log messages are shown during the link-up process which can last 30 seconds or so.
             logger.info("link-up is in progress")
             try:
-                status = box.relinkup(
-                    use_204b=False, use_bg_cal=use_bgcal, background_noise_threshold=args.background_noise_threshold
-                )
+                status = box.relinkup(background_noise_threshold=args.background_noise_threshold)
                 total_status = all(status.values())
                 if not total_status:
                     continue
@@ -240,24 +234,20 @@ def _suppressing_noisy_loggers() -> None:
     logging.getLogger("quel_ic_config.quel1se_config_subsystem").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1se_riken8_config_subsystem").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.quel1se_fujitsu11_config_subsystem").setLevel(logging.WARNING)
-    logging.getLogger("quel_ic_config.exstickge_sock_client").setLevel(logging.WARNING)
     logging.getLogger("e7awghal.versionchecker").setLevel(logging.WARNING)
+    logging.getLogger("quel_ic_config.exstickge_sock_client").disabled = True
     logging.getLogger("parallel_linkup").disabled = True
     logging.getLogger("quel1_parallel_linkup").disabled = True
+    logging.getLogger("coap").disabled = True
+    logging.getLogger("flufl.lock").disabled = True
 
 
 def parallel_linkup_main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: ({threadName}) {message}", style="{"
     )
-    _suppressing_noisy_loggers()
-
     parser = argparse.ArgumentParser(description="parallelized link-up of QuEL-1 series control box")
     parser.add_argument("--conf", type=pathlib.Path, required=True, help="path to a configuration file")
-    parser.add_argument("--use_bgcal", action="store_true", help="activate background calibration (default)")
-    parser.add_argument(
-        "--nouse_bgcal", action="store_true", help="deactivate background calibration (not recommended)"
-    )
     parser.add_argument("--force", action="store_true", help="force to re-linkup all the boxes")
     parser.add_argument(
         "--check_duration", type=int, default=120, help="duration in seconds for checking the stability of the link"
@@ -268,25 +258,41 @@ def parallel_linkup_main() -> int:
         default=None,
         help="maximum allowable background noise amplitude of the ADCs at relinkup (not at reconnect)",
     )
+    parser.add_argument("--verbose", action="store_true", help="show verbose log")
     args = parser.parse_args()
 
-    validity, boxes = load_conf(pathlib.Path(args.conf))
+    if not args.verbose:
+        _suppressing_noisy_loggers()
+
+    pool = ThreadPoolExecutor()
+
+    # Notes: phase-1 loading configurations of boxes
+    validity, box_confs = load_conf(pathlib.Path(args.conf))
     if not validity:
         return 1
 
-    pool = ThreadPoolExecutor(max_workers=len(boxes))
-    futures: Dict[str, Union[Future[bool], None]] = {}
-    for name, box in boxes.items():
-        if box is not None:
-            futures[name] = pool.submit(linkup_a_box, name, box, args)
+    # Notes: phase-2 creating box objects
+    futures_box: list[Future[tuple[str, Union[Quel1Box, str]]]] = [
+        pool.submit(load_box, box_conf) for box_conf in box_confs
+    ]
+    boxes: dict[str, Union[Quel1Box, str]] = {}
+    for future_box in futures_box:
+        box_name, box_obj = future_box.result()
+        boxes[box_name] = box_obj
+
+    # Notes: phase-3 linking up the boxes
+    futures_status: Dict[str, Union[Future[bool], None]] = {}
+    for name, obj in boxes.items():
+        if isinstance(obj, Quel1Box):
+            futures_status[name] = pool.submit(linkup_a_box, name, obj, args)
         else:
             # Notes: to show the final results in the same order as the given YAML file.
-            futures[name] = None
+            futures_status[name] = None
 
     # Notes: taking a barrier sync to show the results after finishing all the threads
     num_failed: int = 0
     results: Dict[str, str] = {}
-    for name, future in futures.items():
+    for name, future in futures_status.items():
         if future is not None:
             if future.result():
                 results[name] = "ready"
@@ -294,9 +300,10 @@ def parallel_linkup_main() -> int:
                 results[name] = "failed"
                 num_failed += 1
         else:
-            results[name] = "unavailable"
+            results[name] = cast(str, boxes[name])  # Notes: the content of boxes[name] is definitely str.
             num_failed += 1
 
+    # Notes: phase-4 showing the results
     print("----------")
     for name, result in results.items():
         if result == "ready":
@@ -304,7 +311,9 @@ def parallel_linkup_main() -> int:
         elif result == "failed":
             print(f"{name} fails to link up")
         else:
-            print(f"{name} looks unavailable")
+            print(f"{name} is unavailable due to '{result}'")
+
+    del boxes
 
     return 0 if num_failed == 0 else 1
 

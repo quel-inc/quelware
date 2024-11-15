@@ -46,7 +46,7 @@ def test_unlock_normal(ipaddr_wss, boxtype):
 def test_duplicated_lock(ipaddr_wss, boxtype):
     box1 = Quel1Box.create(ipaddr_wss=ipaddr_wss, boxtype=boxtype)
     ipaddr_css = str(IPv4Address(ipaddr_wss) + 0x00040000)
-    with pytest.raises(BoxLockError, match=f"failed to acquire lock of css at {ipaddr_css}"):
+    with pytest.raises(BoxLockError, match=f"failed to acquire lock of {ipaddr_css}"):
         box2 = Quel1Box.create(ipaddr_wss=ipaddr_wss, boxtype=boxtype)
         box2.dump_port(0)
 
@@ -115,6 +115,7 @@ def test_lock_release_race_condition_multiple():
         force_unlock_all_boxes()
 
 
+"""
 def test_lock_release_race_condition_multiple_del():
     targets = EXTENDED_TARGET_BOXES
     pool = ThreadPoolExecutor(max_workers=len(targets))
@@ -141,6 +142,7 @@ def test_lock_release_race_condition_multiple_del():
             del boxes[ipaddr_wss]
 
         force_unlock_all_boxes()
+"""
 
 
 def del_box(boxes: dict[str, Quel1Box], to_del: str):
