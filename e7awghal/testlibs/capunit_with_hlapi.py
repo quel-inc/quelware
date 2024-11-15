@@ -128,7 +128,12 @@ class CapUnitSimplifiedHL(CapUnitSimplified):
                         break
                 if self._capture_cancel_request:
                     logger.info(f"cancellation of cap_unit-#{self._unit_idx:02d} is conducted")
-                    self.terminate()
+                    self._terminate()
+                    self._wait_free(
+                        _DEFAULT_TIMEOUT,
+                        _DEFAULT_POLLING_PERIOD,
+                        f"failed to terminate cap_unit-#{self._unit_idx:02d} due to timeout",
+                    )
                     cancelled = True
                     break
             else:

@@ -1,4 +1,6 @@
 import logging
+import socket
+import time
 from abc import ABCMeta
 from ipaddress import IPv4Address
 from typing import Any, Callable, Final, Optional
@@ -361,10 +363,20 @@ def create_quel1au50hal(
     auth_callback: Optional[Callable[[], bool]] = None,
 ) -> AbstractQuel1Au50Hal:
     vc = Quel1Au50HalVersionChecker(ipaddr_wss, 16385)
-    if not vc.ping():
-        raise RuntimeError(f"failed to communicate with {ipaddr_wss}")
+    # Notes: liveness check of e7awghal endpoint was done here with using ping.
     vc._udprw.inject_auth_callback(auth_callback=auth_callback)
-    fw_type, fw_auxattr, _ = vc.resolve_fwtype()
+
+    for i in range(3):
+        try:
+            if i > 0:
+                time.sleep(2.5)
+            fw_type, fw_auxattr, _ = vc.resolve_fwtype()
+            break
+        except socket.timeout:
+            pass
+    else:
+        raise RuntimeError(f"failed to acquire firmware information from {ipaddr_wss}")
+
     for cls in AbstractQuel1Au50Hal.__subclasses__():
         assert issubclass(cls, AbstractQuel1Au50Hal)
         if cls.fw_type() == fw_type:

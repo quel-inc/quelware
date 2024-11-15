@@ -489,7 +489,12 @@ class CapUnitSimplified(AbstractCapUnit):
                     self._capctrl.remove_triggerable_unit(self._unit_idx)
             self.unload_parameter()
             self._waiting_for_capture = False
-            self.terminate().result()
+            self._terminate()
+            self._wait_free(
+                _DEFAULT_TIMEOUT,
+                _DEFAULT_POLLING_PERIOD,
+                f"failed to terminate cap_unit-#{self._unit_idx:02d} due to timeout",
+            )
             if self.is_busy():
                 raise RuntimeError(f"cap_unit-#{self.unit_index:02d} is still busy after sending a termination request")
             self.clear_done()
@@ -650,26 +655,29 @@ class CapUnitSimplified(AbstractCapUnit):
             self._set_ctrl(v0)
             self._set_ctrl(v1)
 
-    def _wait_free(self, timeout: float, polling_period: float, timeout_msg: str) -> Future[None]:
+    def _wait_free(self, timeout: float, polling_period: float, timeout_msg: str) -> None:
         # Notes: lock should be acquired by caller.
 
-        def _wait_free_unit_loop() -> None:
-            # Notes: the timing of check_error() is considered carefully with respect to the efficiency (less register
-            #        access is better) and the priority (more important for the users than TimeoutError).
-            t1 = time.perf_counter() + timeout
-            while time.perf_counter() < t1:
-                time.sleep(polling_period)
-                with self._master_lock:
-                    if not self.is_busy():
-                        if self.is_done():
-                            self.clear_done()
-                        self.check_error()
-                        break
-            else:
-                self.check_error()
-                raise TimeoutError(timeout_msg)
+        # Notes: the timing of check_error() is considered carefully with respect to the efficiency (less register
+        #        access is better) and the priority (more important for the users than TimeoutError).
+        t1 = time.perf_counter() + timeout
+        while time.perf_counter() < t1:
+            time.sleep(polling_period)
+            with self._master_lock:
+                if not self.is_busy():
+                    if self.is_done():
+                        self.clear_done()
+                    self.check_error()
+                    break
+        else:
+            self.check_error()
+            raise TimeoutError(timeout_msg)
 
-        return self._pool.submit(_wait_free_unit_loop)
+        return None
+
+    def _wait_free_async(self, timeout: float, polling_period: float, timeout_msg: str) -> Future[None]:
+        # Notes: lock should be acquired by caller.
+        return self._pool.submit(self._wait_free, timeout, polling_period, timeout_msg)
 
     def _terminate(self) -> None:
         v0 = CapCtrlCtrlReg()
@@ -688,7 +696,7 @@ class CapUnitSimplified(AbstractCapUnit):
         polling_period_ = polling_period or _DEFAULT_POLLING_PERIOD
         with self._unit_lock:
             self._terminate()
-            return self._wait_free(
+            return self._wait_free_async(
                 timeout_, polling_period_, f"failed to terminate cap_unit-#{self._unit_idx:02d} due to timeout"
             )
 
