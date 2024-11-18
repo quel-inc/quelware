@@ -307,9 +307,9 @@ class Quel1Box:
         if boxtype not in cls._PORT2LINE:
             raise ValueError(f"unsupported boxtype for Quel1Box: {boxtype}")
 
+        css: Quel1AnyConfigSubsystem = cast(Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype))
         wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
         sss = SequencerClient(ipaddr_sss)
-        css: Quel1AnyConfigSubsystem = cast(Quel1AnyConfigSubsystem, _create_css_object(ipaddr_css, boxtype))
         return cls(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
 
     def __init__(

@@ -376,6 +376,9 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
 
         return judge
 
+    def clear_crc_error(self, mxfe_idx: int) -> None:
+        self.ad9082[mxfe_idx].clear_crc_error()
+
     def _validate_frequency_info(
         self, mxfe_idx: int, freq_type: str, freq_in_hz: Union[float, None], ftw: Union[NcoFtw, None]
     ) -> Tuple[float, NcoFtw]:
@@ -974,6 +977,14 @@ class Quel1ConfigSubsystemAd5328Mixin(Quel1ConfigSubsystemBaseSlot):
         return ic.get_output_carboncopy(vatt_idx)
 
 
+class NoRfSwitchError(Exception):
+    pass
+
+
+class NoLoopbackPathError(Exception):
+    pass
+
+
 class Quel1ConfigSubsystemNoRfswitch(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
@@ -984,7 +995,7 @@ class Quel1ConfigSubsystemNoRfswitch(Quel1ConfigSubsystemBaseSlot):
         logger.info(f"making (group:{group}, line:{line}) passing")
 
     def block_line(self, group: int, line: Union[int, str]) -> None:
-        raise RuntimeError("no RF switch is available")
+        raise NoRfSwitchError()
 
     def is_blocked_line(self, group: int, line: Union[int, str]) -> bool:
         return False
@@ -993,7 +1004,7 @@ class Quel1ConfigSubsystemNoRfswitch(Quel1ConfigSubsystemBaseSlot):
         return True
 
     def activate_monitor_loop(self, group: int) -> None:
-        raise RuntimeError("no monitor loopback is available")
+        raise NoLoopbackPathError()
 
     def deactivate_monitor_loop(self, group: int) -> None:
         logger.info(f"deactivate monitor loop (group:{group})")
@@ -1002,7 +1013,7 @@ class Quel1ConfigSubsystemNoRfswitch(Quel1ConfigSubsystemBaseSlot):
         return False
 
     def activate_read_loop(self, group: int) -> None:
-        raise RuntimeError("no read loopback is available")
+        raise NoLoopbackPathError()
 
     def deactivate_read_loop(self, group: int) -> None:
         logger.info(f"deactivate read loop (group:{group})")

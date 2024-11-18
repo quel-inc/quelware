@@ -38,7 +38,7 @@ from quel_ic_config.quel1_config_subsystem import (
     Quel1TypeAConfigSubsystem,
     Quel1TypeBConfigSubsystem,
 )
-from quel_ic_config.quel1_config_subsystem_common import Quel1ConfigSubsystemRoot
+from quel_ic_config.quel1_config_subsystem_common import NoLoopbackPathError, NoRfSwitchError, Quel1ConfigSubsystemRoot
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1seTempctrlState
 from quel_ic_config.quel1_wave_subsystem import CaptureResults, CaptureReturnCode, Quel1WaveSubsystem
 from quel_ic_config.quel1se_adda_config_subsystem import ExstickgeCoapClientAdda, Quel1seAddaConfigSubsystem
@@ -184,4 +184,6 @@ __all__ = (
     "LinkupStatistic",
     "LinkupStatus",
     "LinkupFpgaMxfe",
+    "NoRfSwitchError",
+    "NoLoopbackPathError",
 )

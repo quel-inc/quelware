@@ -265,7 +265,8 @@ class LinkupFpgaMxfe:
             if max_backgroud_amplitude < background_noise_threshold:
                 logger.info(
                     f"successful establishment of capture link of adc{adc_idx} of mxfe-#{mxfe_idx}, "
-                    f"max amplitude of the capture data is {max_backgroud_amplitude:.1f}"
+                    f"max amplitude of the capture data is "
+                    f"{max_backgroud_amplitude:.1f} (< {background_noise_threshold:.1f})"
                 )
                 self._add_linkup_statistics(
                     mxfe_idx,

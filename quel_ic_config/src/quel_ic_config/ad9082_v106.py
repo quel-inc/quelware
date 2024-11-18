@@ -943,6 +943,10 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
+    def clear_crc_error(self):
+        self.write_reg(0x05BB, 0x00)
+        self.write_reg(0x05BB, 0x01)
+
     def _establish_link(self) -> None:
         lid = [0, 0, 0, 0, 0, 0, 0, 0]
         rc = ad9081.jesd_tx_lids_cfg_set(self.device, ad9081.LINK_0, lid)
@@ -953,9 +957,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
-        # clearing CRC IRQ status
-        self.write_reg(0x05BB, 0x00)
-        self.write_reg(0x05BB, 0x01)
+        self.clear_crc_error()
 
     def get_link_status(self) -> Tuple[int, int]:
         link_status: int = self.read_reg(0x055E)

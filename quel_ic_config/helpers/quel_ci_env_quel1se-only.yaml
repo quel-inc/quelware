@@ -1,0 +1,8 @@
+version: 1
+boxes:
+  - name: staging-094
+    ipaddr: 10.1.0.94
+    boxtype: quel1se-riken8
+  - name: staging-157
+    ipaddr: 10.1.0.157
+    boxtype: x-quel1se-fujitsu11-a
