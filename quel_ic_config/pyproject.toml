@@ -1,13 +1,12 @@
 [project]
 name = "quel_ic_config"
-version = "0.8.11rc2"
+version = "0.8.11rc3"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
     "pydantic ~= 2.4.0",
     "pyyaml ~= 6.0.1",
     "aiocoap ~= 0.4.7",
-    "ping3 ~= 4.0.4",
     "e7awgsw ~= 1.0.0",
     "quel_clock_master >= 0.1.3",
     "pybind11-stubgen ~= 2.5.1",
@@ -38,6 +37,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pybind11 ~= 2.13.6",
+    "ping3 ~= 4.0.4",
     "quel_inst_tool >= 0.2.6",
     "quel_cmod_scripting >= 0.1.8",
     "quel_staging_tool >= 0.0.8",

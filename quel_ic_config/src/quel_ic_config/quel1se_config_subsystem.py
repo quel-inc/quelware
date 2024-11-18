@@ -65,10 +65,10 @@ class _Quel1seConfigSubsystemBase(
                     return proxy_cls(self._css_addr, port, timeout)
             else:
                 raise RuntimeError(
-                    f"unsupported CoAP firmware is running on exstickge: {coap_boxtype}:{coap_firmware_version}"
+                    f"unsupported CoAP firmware is running on {self._css_addr}: {coap_boxtype}:{coap_firmware_version}"
                 )
         else:
-            raise RuntimeError("no CoAP firmware is running on exstickge")
+            raise RuntimeError(f"CoAP server is not available on {self._css_addr}")
 
     def configure_all_mxfe_clocks(
         self, param: dict[str, Any], ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None

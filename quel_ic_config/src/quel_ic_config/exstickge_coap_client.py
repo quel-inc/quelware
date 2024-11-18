@@ -1,17 +1,18 @@
 import asyncio
 import logging
-import math
 import queue
 import threading
+import time
 from enum import Enum
-from typing import Any, Callable, Mapping, Set, Tuple, Union
+from typing import Any, Callable, Final, Mapping, Set, Tuple, Union
 
 import aiocoap
 import aiocoap.error
-import ping3
 from packaging.version import Version
 
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
+
+_DEFAULT_COAP_SERVER_DETECTION_TIMEOUT: Final[float] = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,10 @@ class SyncAsyncThunk:
 
 
 class SyncAsyncCoapClient(threading.Thread):
-    _DEFAULT_LOOPING_TIMEOUT = 0.25
-    DEFAULT_RESPONSE_TIMEOUT: float = 3.0
+    DEFAULT_COAP_PORT = 5683
+    DEFAULT_COAP_RESPONSE_TIMEOUT: Final[float] = 3.0
+
+    _DEFAULT_LOOPING_TIMEOUT: Final[float] = 0.25
 
     class _ProximityTransportTuning:
         # Notes: this tuning parameter is tailored for the default timeout (= 3.0 second).
@@ -138,7 +141,8 @@ class SyncAsyncCoapClient(threading.Thread):
                 # Notes: timeout is set to avoid blocking
                 pass
 
-        logger.info("quitting _async_main()")
+        # Notes: executed only when Box object is explicitly deleted.
+        logger.info(f"quitting main loop of {self.__class__.__name__}")
         _ = await context.shutdown()
 
     async def _single_access(self, req: SyncAsyncThunk, context: aiocoap.Context):
@@ -171,8 +175,8 @@ class Quel1seBoard(str, Enum):
 
 
 class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
-    DEFAULT_RESPONSE_TIMEOUT: float = SyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT
-    DEFAULT_PORT = 5683
+    DEFAULT_PORT: int = SyncAsyncCoapClient.DEFAULT_COAP_PORT
+    DEFAULT_RESPONSE_TIMEOUT: float = SyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT
 
     _URI_MAPPINGS: Mapping[Tuple[LsiKindId, int], str]
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]]
@@ -363,45 +367,54 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
 
 def get_exstickge_server_info(
     ipaddr_css: str,
-    port: int = 5683,
-    timeout_ping: float = 10.0,
-    timeout_coap: float = SyncAsyncCoapClient.DEFAULT_RESPONSE_TIMEOUT,
+    port: int = SyncAsyncCoapClient.DEFAULT_COAP_PORT,
+    timeout_ping: float = _DEFAULT_COAP_SERVER_DETECTION_TIMEOUT,
+    timeout_coap: float = SyncAsyncCoapClient.DEFAULT_COAP_RESPONSE_TIMEOUT,
 ) -> Tuple[bool, str, str]:
     # Notes: assuming ipaddr_css is already validated
     # Notes: timeout_ping of 10.0 second comes from the booting duration of the server
+    #        it was previously implemented with ping3.
     # Notes: port is not currently used
-    _ = port
-
-    if ping3.ping(ipaddr_css, timeout=math.ceil(timeout_ping)) in {None, False}:
-        raise RuntimeError(
-            f"not reachable to {ipaddr_css}, it looks like a wrong IP address or no connection to the box"
-        )
+    uri1 = f"coap://{ipaddr_css}/version/firmware"
+    uri2 = f"coap://{ipaddr_css}/conf/boxtype"
+    res1: Union[aiocoap.Message, None] = None
+    res2: Union[aiocoap.Message, None] = None
 
     core = SyncAsyncCoapClient()
     core.start()
-    uri1 = f"coap://{ipaddr_css}/version/firmware"
-    res1 = core.request_and_wait(code=aiocoap.GET, uri=uri1, timeout=timeout_coap)
+
+    t0 = time.perf_counter()
+    while (time.perf_counter() < t0 + timeout_ping) and (res1 is None):
+        try:
+            res1 = core.request_and_wait(code=aiocoap.GET, uri=uri1, timeout=timeout_coap)
+            if res1 is None:
+                logger.info(f"no CoAP response from {ipaddr_css}")
+                time.sleep(3)
+        except aiocoap.error.NetworkError:
+            core.terminate()
+            time.sleep(3)
+            core = SyncAsyncCoapClient()
+            core.start()
+            res1 = None
 
     if res1 is not None:
-        uri2 = f"coap://{ipaddr_css}/conf/boxtype"
         res2 = core.request_and_wait(code=aiocoap.GET, uri=uri2, timeout=timeout_coap)
-    else:
-        res2 = None
     core.terminate()
     del core
 
+    # Notes: validating the box information
     if res1 is None:
-        logger.info(f"no response from CoAP server at {ipaddr_css}")
+        logger.info(f"timed out the detection of CoAP server on {ipaddr_css}")
         return False, "", ""  # UDP server, probably
     elif not res1.code.is_successful():
         raise RuntimeError(f"failed to access to end-point '{uri1}' with error code {res1.code}")
     else:
         v = res1.payload.decode()
-        logger.info(f"CoAP server version is '{v}'")
-        if res2.code.is_successful():
+        logger.info(f"CoAP server version of {ipaddr_css} is '{v}'")
+        if res2 and res2.code.is_successful():
             u = res2.payload.decode()
-            logger.info(f"reported boxtype is '{u}'")
+            logger.info(f"reported boxtype of {ipaddr_css} is '{u}'")
             return True, v, u
         else:
-            logger.info("no boxtype information is available")
+            logger.info(f"boxtype information of {ipaddr_css} is not available due to error")
             return True, v, ""

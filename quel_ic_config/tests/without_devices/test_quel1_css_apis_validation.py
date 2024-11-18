@@ -2,13 +2,30 @@ import logging
 
 import pytest
 
-from quel_ic_config import Quel1BoxType, Quel1TypeAConfigSubsystem, Quel1TypeBConfigSubsystem
+from quel_ic_config import ExstickgeSockClientQuel1, Quel1BoxType, Quel1TypeAConfigSubsystem, Quel1TypeBConfigSubsystem
+from quel_ic_config.exstickge_sock_client import _ExstickgeSockClientBase
 
 logger = logging.getLogger(__name__)
 
 
+class Quel1TypeADummyConfigSubsystem(Quel1TypeAConfigSubsystem):
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        proxy = ExstickgeSockClientQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
+        return proxy
+
+
+class Quel1TypeBDummyConfigSubsystem(Quel1TypeBConfigSubsystem):
+    def _create_exstickge_proxy(
+        self, port: int, timeout: float, sender_limit_by_binding: bool
+    ) -> _ExstickgeSockClientBase:
+        proxy = ExstickgeSockClientQuel1(self._css_addr, port, timeout, sender_limit_by_binding)
+        return proxy
+
+
 def test_parameter_validation_a():
-    css = Quel1TypeAConfigSubsystem(
+    css = Quel1TypeADummyConfigSubsystem(
         css_addr="10.254.253.252",
         boxtype=Quel1BoxType.QuEL1_TypeA,
     )
@@ -168,7 +185,7 @@ def test_parameter_validation_a():
 
 # TODO: make it dry.
 def test_parameter_validation_b():
-    css = Quel1TypeBConfigSubsystem(
+    css = Quel1TypeBDummyConfigSubsystem(
         css_addr="10.254.253.253",
         boxtype=Quel1BoxType.QuEL1_TypeB,
     )

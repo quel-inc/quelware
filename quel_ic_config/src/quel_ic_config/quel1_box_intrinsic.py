@@ -21,6 +21,7 @@ from quel_ic_config.quel1_config_subsystem import (
     Quel1TypeAConfigSubsystem,
     Quel1TypeBConfigSubsystem,
 )
+from quel_ic_config.quel1_config_subsystem_common import NoRfSwitchError
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, E7FwLifeStage, E7FwType, Quel1WaveSubsystem
 from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem, Quel2ProtoAddaConfigSubsystem
 from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
@@ -146,8 +147,8 @@ class Quel1BoxIntrinsic:
         if isinstance(boxtype, str):
             boxtype = Quel1BoxType.fromstr(boxtype)
 
-        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
         css: Quel1AnyConfigSubsystem = _create_css_object(ipaddr_css, boxtype)
+        wss: Quel1WaveSubsystem = _create_wss_object(ipaddr_wss)
         sss = SequencerClient(ipaddr_sss)
 
         return Quel1BoxIntrinsic(css=css, sss=sss, wss=wss, rmap=None, linkupper=None, **options)
@@ -305,7 +306,13 @@ class Quel1BoxIntrinsic:
         if not skip_capture_check and all(link_ok.values()):
             rfsw_restore = {k: "open" for k, v in self.dump_rfswitches().items() if v == "open"}
             rfsw_closed = {k: "loop" for k in rfsw_restore}
-            self.config_rfswitches(rfsw_closed)
+            try:
+                self.config_rfswitches(rfsw_closed)
+            except NoRfSwitchError:
+                logger.info(
+                    "background noise check may be disrupted by incoming signal "
+                    "due to the unavailability of RF switches"
+                )
             for mxfe_idx in mxfe_list:
                 if not self.linkupper.check_all_adcs_of_mxfe_at_reconnect(mxfe_idx, background_noise_threshold):
                     link_ok[mxfe_idx] = False
