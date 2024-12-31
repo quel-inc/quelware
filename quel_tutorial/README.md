@@ -1,14 +1,17 @@
 # quel_tutorial
 
 quel_tutorial は、キュエル社の制御装置を使用して量子実験を行うためのチュートリアルです。
-各チュートリアルは Jupyter notebook で構成されています。
-その他、各ノートブックを実行するための必要なファイルを含みます。
+チュートリアルは、トピックごとに Jupyter のノートブックとして提供しております。
+トピックは、随時、追加していく予定です。
+なお、チュートリアル用のコードは、説明を容易にする目的で敢えてベタ書きをしております。
+実用的な実験コードをお書きになる際には、関数などを定義してコードの再利用性を高めることをお勧めします。
 
 ## 実行環境の構築
 
-本チュートリアルを実行するために、まず[GETTING_STARTED.md](../quel_ic_config/docs/GETTING_STARTED.md) にしたがって仮想環境を構築して下さい。
+本チュートリアルを実行するために、[GETTING_STARTED.md](../quel_ic_config/docs/GETTING_STARTED.md) にしたがって仮想環境を構築して下さい。
 
-quel_tutorial の実行には Visual Studio (VS) Code を使用することを想定しています。お手元の環境に VS Code をインストールし、仮想環境が置かれた作業ディレクトリを VS Code で開いて下さい。
+quel_tutorial の実行には Visual Studio (VS) Code を使用することを想定しています。
+お手元の環境に VS Code をインストールし、仮想環境が置かれた作業ディレクトリを VS Code で開いて下さい。
 
 
 ## 必要となる知識
@@ -25,14 +28,8 @@ quel_tutorial の実行には Visual Studio (VS) Code を使用することを�
 
 ## コンテンツ
 
-チュートリアルのコンテンツとしては、現時点で QuEL-1 に対応したサンプルコードが利用可能です。
-なお、他のモデルにも対応したサンプルコードも順次増やしていく予定です。
+- [QuEL-1 用のチュートリアル](./quel1)
 
-### [quel_tutorial for QuEL-1](./quel1)
+## 謝意
 
-QuEL-1 の操作方法と QuEL-1 を用いた量子実験がメインの内容です。
-
-
-## Acknowledgements
-
-We would like to express our sincere appreciation to Prof. Ogawa and Prof. Shiomi at Osaka University for the original implementation and contributions to this project.
+本チュートリアルの原型を開発してくださった大阪大学の小川先生と塩見先生に心から感謝の意を表します。
