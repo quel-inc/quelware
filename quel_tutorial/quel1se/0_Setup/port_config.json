@@ -1,0 +1,108 @@
+{
+    "0": {
+        "cnco_freq": 1000000000.0,
+        "lo_freq": 8000000000,
+        "rfswitch": "loop",
+        "runits": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        }
+    },
+    "1": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 1000000000.0,
+        "fullscale_current": 39990,
+        "lo_freq": 8000000000,
+        "rfswitch": "block",
+        "sideband": "L",
+        "vatt": 3072
+    },
+    "2": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 2000000000.0,
+        "fullscale_current": 39990,
+        "lo_freq": 8000000000,
+        "rfswitch": "block",
+        "sideband": "L",
+        "vatt": 3072
+    },
+    "3": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 4000000000.0,
+        "fullscale_current": 39990,
+        "rfswitch": "block"
+    },
+    "4": {
+        "cnco_freq": 1000000000.0,
+        "lo_freq": 5000000000,
+        "rfswitch": "loop",
+        "runits": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        }
+    },
+    "6": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 4000000000.0,
+        "fullscale_current": 39990,
+        "rfswitch": "block"
+    },
+    "7": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 4000000000.0,
+        "fullscale_current": 39990,
+        "rfswitch": "block"
+    },
+    "8": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 4000000000.0,
+        "fullscale_current": 39990,
+        "rfswitch": "block"
+    },
+    "9": {
+        "channels": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        },
+        "cnco_freq": 4000000000.0,
+        "fullscale_current": 39990,
+        "rfswitch": "block"
+    },
+    "10": {
+        "cnco_freq": 1000000000.0,
+        "lo_freq": 5000000000,
+        "rfswitch": "loop",
+        "runits": {
+            "0": {
+                "fnco_freq": 0.0
+            }
+        }
+    }
+}
