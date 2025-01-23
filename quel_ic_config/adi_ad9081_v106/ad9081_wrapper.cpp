@@ -518,6 +518,7 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
   m.def("jesd_rx_lane_xbar_set", adi_ad9081_jesd_rx_lane_xbar_set);
   m.def("jesd_rx_link_enable_set", adi_ad9081_jesd_rx_link_enable_set);
   m.def("jesd_rx_calibrate_204c", adi_ad9081_jesd_rx_calibrate_204c);
+  m.def("jesd_oneshot_sync", adi_ad9081_jesd_oneshot_sync);
 
   py::enum_<adi_ad9081_adc_coarse_ddc_select_e>(m, "AdcCoarseDdcSelect",
                                                 py::arithmetic())

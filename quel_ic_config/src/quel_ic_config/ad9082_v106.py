@@ -811,9 +811,9 @@ class Ad9082V106Mixin(AbstractIcMixin):
 
         # Notes: values are set to device and used in the following startup methods.
         self._set_serdes_settings(param.serdes)
-        self._startup_tx(param.dac, use_204b, use_bg_cal)
+        self._startup_tx(param.dac, use_204b)
         self._startup_rx(param.adc, use_204b)
-        self._establish_link()
+        self._establish_link(use_204b, use_bg_cal)
 
         if use_204b:
             # Notes: "FREQ_DISCOUNT" was deprecated. TODO: will remove it soon.
@@ -838,7 +838,7 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.device.clk_conf_set(dac_clk_hz, adc_clk_hz, dev_ref_clk_hz)
         self.device.dev_info.dev_rev = self.device_chip_id_get().dev_revision
 
-    def _startup_tx(self, param_tx: Ad9082DacConfig, use_204b: bool, use_bg_cal: bool) -> None:
+    def _startup_tx(self, param_tx: Ad9082DacConfig, use_204b: bool) -> None:
         logger.info("starting-up DACs")
 
         # Notes: clear it before the modification of its corresponding registers.
@@ -878,27 +878,6 @@ class Ad9082V106Mixin(AbstractIcMixin):
             rc = ad9081.jesd_rx_lane_xbar_set(self.device, ad9081.LINK_0, i, param_tx.lane_xbar[i])
             if rc != CmsError.API_CMS_ERROR_OK:
                 raise RuntimeError(f"{CmsError(rc).name} at configuring {i}-th lane")
-
-        # TODO(XXX): this should be moved to establish_link()
-        # clearing PHY_PD (phy powerdown) of all the lanes
-        self.hal_reg_set(0x0401, 0x00)
-
-        # TODO(XXX): this should be moved to establish_link()
-        if not use_204b:
-            logger.info("calibrating JESD204C rx link")
-            if use_bg_cal:
-                logger.info("activating background calibration")
-            rc = ad9081.jesd_rx_calibrate_204c(
-                self.device, 1, self.device.serdes_info.des_settings.boost_mask, 1 if use_bg_cal else 0
-            )
-            if rc != CmsError.API_CMS_ERROR_OK:
-                raise RuntimeError(f"{CmsError(rc).name}")
-
-        # TODO(XXX): this should be moved to establish_link()
-        logger.info("enabling JESD204C rx link")
-        rc = ad9081.jesd_rx_link_enable_set(self.device, ad9081.LINK_0, 1)
-        if rc != CmsError.API_CMS_ERROR_OK:
-            raise RuntimeError(f"{CmsError(rc).name}")
 
         for i in range(4):
             self.set_fullscale_current(1 << i, param_tx.fullscale_current[i])
@@ -947,15 +926,33 @@ class Ad9082V106Mixin(AbstractIcMixin):
         self.write_reg(0x05BB, 0x00)
         self.write_reg(0x05BB, 0x01)
 
-    def _establish_link(self) -> None:
-        lid = [0, 0, 0, 0, 0, 0, 0, 0]
-        rc = ad9081.jesd_tx_lids_cfg_set(self.device, ad9081.LINK_0, lid)
+    def _establish_link(self, use_204b, use_bg_cal) -> None:
+        logger.info("oneshot sync")
+        rc = ad9081.jesd_oneshot_sync(self.device)
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
 
+        logger.info("enabling JESD204C tx link")
         rc = ad9081.jesd_tx_link_enable_set(self.device, ad9081.LINK_0, 1)
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(CmsError(rc).name)
+
+        # TODO(XXX): this should be moved after the first call of jesd_rx_link_enable_set().
+        #            however, link status doesn't reach 0xe0 without calibrating the link here.
+        if not use_204b:
+            logger.info("calibrating JESD204C rx link")
+            if use_bg_cal:
+                logger.info("activating background calibration")
+            rc = ad9081.jesd_rx_calibrate_204c(
+                self.device, 1, self.device.serdes_info.des_settings.boost_mask, 1 if use_bg_cal else 0
+            )
+            if rc != CmsError.API_CMS_ERROR_OK:
+                raise RuntimeError(f"{CmsError(rc).name}")
+
+        logger.info("enabling JESD204C rx link")
+        rc = ad9081.jesd_rx_link_enable_set(self.device, ad9081.LINK_0, 1)
+        if rc != CmsError.API_CMS_ERROR_OK:
+            raise RuntimeError(f"{CmsError(rc).name}")
 
         self.clear_crc_error()
 

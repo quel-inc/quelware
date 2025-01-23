@@ -194,12 +194,14 @@ elif [ "${test_with_device}" == "8" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8
 elif [ "${test_with_device}" == "8r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
-  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawrss.py
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawwss.py
 elif [ "${test_with_device}" == "11r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/fujitsu11
 elif [ "${test_with_device}" == "N" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec
+elif [ "${test_with_device}" == "Nr" ]; then
+  PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec --ignore=tests/with_devices/nec/test_wave_generation_quel1-nec.py
 elif [ "${test_with_device}" == "T" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl
 else
