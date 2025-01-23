@@ -4,6 +4,7 @@ import pytest
 
 from quel_ic_config.quel1_box import Quel1Box
 from quel_ic_config.quel_config_common import Quel1BoxType
+from quel_ic_config.quel1_config_subsystem_common import NoRfSwitchError
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -17,6 +18,8 @@ TEST_SETTINGS = (
             "ipaddr_sss": "10.2.0.80",
             "ipaddr_css": "10.5.0.80",
             "boxtype": Quel1BoxType.fromstr("quel1-nec"),
+        },
+        "linkup_config": {
             "config_root": None,
             "config_options": (),
         },
@@ -90,7 +93,7 @@ def test_invalid_port(box):
         with pytest.raises(ValueError, match="invalid port of quel1-b: 0"):
             box.config_box({0: {"lo_freq": 12e9}})
 
-    with pytest.raises(ValueError, match=f"invalid port of {box.boxtype}: 20"):
+    with pytest.raises(ValueError, match=f"invalid port of {box.boxtype}: #20"):
         box.config_box({20: {"lo_freq": 12e9}})
 
 
@@ -245,7 +248,7 @@ def test_config_rfswitch_invalid(boxtypes, config, msg, box):
 )
 def test_config_rfswitch_unrealizable(boxtypes, config, box):
     if box.boxtype in boxtypes:
-        with pytest.raises(ValueError, match="the specified configuration of rf switches is not realizable"):
+        with pytest.raises(NoRfSwitchError, match=""):
             box.config_rfswitches(config)
     else:
         assert False, f"an unexpected fixture: {box}"

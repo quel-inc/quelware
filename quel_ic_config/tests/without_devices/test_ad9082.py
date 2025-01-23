@@ -115,7 +115,7 @@ assert jesd204_0.cs == 0
 assert jesd204_0.did == 0
 assert jesd204_0.did == 0
 assert jesd204_0.lid0 == 0
-assert jesd204_0.subclass == 0
+assert jesd204_0.subclass == 1
 assert jesd204_0.scr == 1
 assert jesd204_0.duallink == 0
 assert jesd204_0.jesdv == 2

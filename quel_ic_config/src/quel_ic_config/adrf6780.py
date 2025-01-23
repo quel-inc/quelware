@@ -118,8 +118,8 @@ class Adrf6780Linearize(AbstractIcReg):
 
 
 class Adrf6780LoSideband(IntEnum):
-    Usb: Final[int] = 0
-    Lsb: Final[int] = 1
+    Usb = 0
+    Lsb = 1
 
 
 @dataclass
