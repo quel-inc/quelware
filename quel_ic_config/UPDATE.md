@@ -1,5 +1,8 @@
 # 更新リスト
 
+### v0.8.11post1
+- quel1_parallel_linkup のリンク状態のチェック時にも `--background_noise_threshold` オプションで指定したしきい値を適用するように変更。
+
 ## v0.8.11 (Public Release)
 - QuEL-1 SE RIKEN8モデルのAWGユニットのポートへの標準配置を変更
    - Port-06, -07, -08, -09  の AWGユニット数のデフォルト値を1, 3, 3, 1 に変更。

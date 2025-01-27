@@ -94,8 +94,7 @@ def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
                 ipaddr_css=str(box_ipaddr + 0x040000),
                 boxtype=box_type,
             )
-            if retval is not None:
-                logger.info(f"connected to {box_name} successfully")
+            logger.info(f"connected to {box_name} successfully")
             break
         except Exception as e:
             exception = str(e.args[0])
@@ -143,8 +142,12 @@ def load_conf(filename: pathlib.Path) -> Tuple[bool, list[dict[str, str]]]:
         return False, []
 
 
-def check_link_validity(name: str, box: Quel1Box) -> bool:
-    status = box.reconnect(ignore_crc_error_of_mxfe=box.css.get_all_mxfes(), ignore_invalid_linkstatus=True)
+def check_link_validity(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
+    status = box.reconnect(
+        background_noise_threshold=args.background_noise_threshold,
+        ignore_crc_error_of_mxfe=box.css.get_all_mxfes(),
+        ignore_invalid_linkstatus=True,
+    )
     if not all(status.values()):
         logger.warning("no valid link status, it is subject to be linked up")
         return False
@@ -195,7 +198,7 @@ def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
     if args.force:
         total_status = False
     else:
-        total_status = check_link_validity(name, box)
+        total_status = check_link_validity(name, box, args)
 
     for retry_idx in range(NUM_LINKUP_RETRY):
         if not total_status:
