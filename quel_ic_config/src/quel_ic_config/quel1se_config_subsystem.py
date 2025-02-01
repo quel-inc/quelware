@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import Any, Collection, Dict, Set, Tuple, Union, cast
 
 from quel_ic_config.exstickge_coap_client import _ExstickgeCoapClientBase, get_exstickge_server_info
@@ -7,20 +6,36 @@ from quel_ic_config.exstickge_proxy import LsiKindId
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd5328Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
-    Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemMixerboardGpioMixin,
     Quel1ConfigSubsystemPathselectorboardGpioMixin,
     Quel1ConfigSubsystemRoot,
+    Quel1GenericConfigSubsystemAd9082Mixin,
 )
 from quel_ic_config.quel_config_common import Quel1BoxType
+from quel_ic_config.quel_ic import Ad9082Generic
 
 logger = logging.getLogger(__name__)
 
 
+class Ad9082Quel1se(Ad9082Generic):
+    def _reset_pin_ctrl_cb(self, level: int) -> Tuple[bool]:
+        proxy = cast(_ExstickgeCoapClientBase, self.proxy)
+        proxy.write_reset(LsiKindId.AD9082, self.idx, level)
+        return (True,)
+
+
+class Quel1seConfigSubsystemAd9082Mixin(Quel1GenericConfigSubsystemAd9082Mixin):
+    def _construct_ad9082(self):
+        self._ad9082: tuple[Ad9082Generic, ...] = tuple(
+            Ad9082Quel1se(self._proxy, idx) for idx in range(self._NUM_IC["ad9082"])
+        )
+        self.allow_dual_modulus_nco = True
+
+
 class _Quel1seConfigSubsystemBase(
     Quel1ConfigSubsystemRoot,
-    Quel1ConfigSubsystemAd9082Mixin,
+    Quel1seConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
     Quel1ConfigSubsystemAd5328Mixin,
@@ -116,19 +131,16 @@ class _Quel1seConfigSubsystemBase(
     ) -> bool:
         self._validate_group(mxfe_idx)
 
-        if hard_reset:
-            logger.info(f"asserting a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
-            self.set_ad9082_hard_reset(mxfe_idx, True)
-            time.sleep(0.01)
-
-        if self.get_ad9082_hard_reset(mxfe_idx):
-            logger.info(f"negating a reset pin of {self._css_addr}:AD9082-{mxfe_idx}")
-            self.set_ad9082_hard_reset(mxfe_idx, False)
-
         self.ad9082[mxfe_idx].configure(
-            param["ad9082"][mxfe_idx], reset=soft_reset, use_204b=use_204b, use_bg_cal=use_bg_cal
+            param["ad9082"][mxfe_idx],
+            hard_reset=hard_reset,
+            soft_reset=soft_reset,
+            use_204b=use_204b,
+            use_bg_cal=use_bg_cal,
         )
-        return self.check_link_status(mxfe_idx, True, ignore_crc_error)
+        health, lglv, diag = self.check_link_status(mxfe_idx, True, ignore_crc_error)
+        logger.log(lglv, diag)
+        return health
 
     def reconnect_mxfe(
         self,
@@ -147,7 +159,9 @@ class _Quel1seConfigSubsystemBase(
             ref_clk *= 4
 
         self.ad9082[mxfe_idx].reconnect(ref_clk)
-        return self.check_link_status(mxfe_idx, False, ignore_crc_error)
+        health, lglv, diag = self.check_link_status(mxfe_idx, False, ignore_crc_error)
+        logger.log(lglv, diag)
+        return health
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         """dumping the current configuration of a transmitter channel.

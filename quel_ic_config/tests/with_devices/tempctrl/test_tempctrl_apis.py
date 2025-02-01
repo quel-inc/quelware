@@ -6,28 +6,14 @@ from typing import Dict, Union
 import pytest
 
 from quel_ic_config.exstickge_coap_tempctrl_client import _ExstickgeCoapClientQuel1seTempctrlBase
-from quel_ic_config.quel1_box import Quel1BoxIntrinsic
-from quel_ic_config.quel1se_riken8_config_subsystem import Quel1seRiken8DebugConfigSubsystem
-from quel_ic_config.quel_config_common import Quel1BoxType
+from quel_ic_config.quel1se_riken8_config_subsystem import Quel1seRiken8ConfigSubsystem
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-TEST_SETTINGS = (
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.94",
-            "ipaddr_sss": "10.2.0.94",
-            "ipaddr_css": "10.5.0.94",
-            "boxtype": Quel1BoxType.fromstr("x-quel1se-riken8"),
-        },
-    },
-)
-
-
 def diff_temperatures(
-    css: Quel1seRiken8DebugConfigSubsystem,
+    css: Quel1seRiken8ConfigSubsystem,
     t0: Dict[str, float],
     t1: Union[Dict[str, float], None] = None,
     threshold: float = 0.4,
@@ -43,13 +29,12 @@ def diff_temperatures(
     return diff
 
 
-@pytest.fixture(scope="module", params=TEST_SETTINGS)
-def fixtures_local(request):
-    param0 = request.param
+@pytest.fixture(scope="module")
+def fixtures_local(fixtures8):
+    box, _, _ = fixtures8
 
-    box = Quel1BoxIntrinsic.create(**param0["box_config"])
     css = box.css
-    assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
+    assert isinstance(css, Quel1seRiken8ConfigSubsystem)
     css.start_tempctrl_external()  # Notes: enter into test mode, normal thermal control is halted.
     time.sleep(15)
     _ = css.get_tempctrl_temperature().result()
@@ -63,11 +48,15 @@ def fixtures_local(request):
             logger.error(f"heater['{name}'] is not turned-off ({hhh}) after the completion of the test, fixing...")
             hh[name] = 0.0
     css.set_tempctrl_actuator_output(fan={"adda_lmx2594_0": 0.5, "adda_lmx2594_1": 0.5}, heater=hh)
+    time.sleep(15)
+
+    css.start_tempctrl()
+    time.sleep(15)
 
 
 def test_fan_settings(fixtures_local):
     css = fixtures_local.css
-    assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
+    assert isinstance(css, Quel1seRiken8ConfigSubsystem)
 
     proxy = css._proxy
     assert isinstance(proxy, _ExstickgeCoapClientQuel1seTempctrlBase)
@@ -112,7 +101,7 @@ def test_fan_settings(fixtures_local):
 
 def test_heater_settings(fixtures_local):
     css = fixtures_local.css
-    assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
+    assert isinstance(css, Quel1seRiken8ConfigSubsystem)
 
     proxy = css._proxy
     assert isinstance(proxy, _ExstickgeCoapClientQuel1seTempctrlBase)
@@ -144,19 +133,12 @@ def test_heater_settings(fixtures_local):
         a0 = css.get_tempctrl_actuator_output()
         logger.info(f"current actuator settings: {a0}")
         h = a0["heater"]
-        hmap = css.get_actuator_desc()
-        hh = css.get_heater_outputs()  # Notes: this API is only for test.
 
         for hn, hv in h.items():
-            atype, aidx = hmap[hn]
             if hn == heater_prev_name:
                 assert hv == 0.3, f"unexpected setting of heater['{hn}']: {hv} (!= 0.3)"
-                if atype == "heater" and aidx in hh:
-                    assert hh[aidx] == 0.3, f"unexpected register value of heater[{aidx}]: {hh[aidx]} (!= 0.3)"
             else:
                 assert hv == 0.0, f"unexpected setting of heater['{hn}']: {hv} (!= 0.0)"
-                if atype == "heater" and aidx in hh:
-                    assert hh[aidx] == 0.0, f"unexpected register value of heater[{aidx}]: {hh[aidx]} (!= 0.0)"
 
         # update heater settings
         if heater_prev_name != "":
@@ -173,7 +155,7 @@ def test_heater_settings(fixtures_local):
 
 def test_setpoint(fixtures_local):
     css = fixtures_local.css
-    assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
+    assert isinstance(css, Quel1seRiken8ConfigSubsystem)
 
     v0 = css.get_tempctrl_setpoint()
     v = copy.deepcopy(v0)
@@ -196,7 +178,7 @@ def test_setpoint(fixtures_local):
 
 def test_gain(fixtures_local):
     css = fixtures_local.css
-    assert isinstance(css, Quel1seRiken8DebugConfigSubsystem)
+    assert isinstance(css, Quel1seRiken8ConfigSubsystem)
 
     v0 = css.get_tempctrl_gain()
 

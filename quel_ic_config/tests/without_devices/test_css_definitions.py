@@ -10,6 +10,12 @@ from quel_ic_config.quel1_config_subsystem import (
     Quel1TypeBConfigSubsystem,
 )
 from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem
+from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
+    Quel1seFujitsu11TypeAConfigSubsystem,
+    Quel1seFujitsu11TypeADebugConfigSubsystem,
+    Quel1seFujitsu11TypeBConfigSubsystem,
+    Quel1seFujitsu11TypeBDebugConfigSubsystem,
+)
 from quel_ic_config.quel1se_riken8_config_subsystem import (
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
@@ -29,6 +35,10 @@ logger = logging.getLogger()
         (Quel1seAddaConfigSubsystem,),
         (Quel1seRiken8ConfigSubsystem,),
         (Quel1seRiken8DebugConfigSubsystem,),
+        (Quel1seFujitsu11TypeAConfigSubsystem,),
+        (Quel1seFujitsu11TypeBConfigSubsystem,),
+        (Quel1seFujitsu11TypeADebugConfigSubsystem,),
+        (Quel1seFujitsu11TypeBDebugConfigSubsystem,),
     ],
 )
 def test_group_and_mxfe_definitions(csscls):

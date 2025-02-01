@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.1b4"
+version = "0.10.1rc1"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -8,9 +8,8 @@ dependencies = [
     "pyyaml ~= 6.0.1",
     "aiocoap ~= 0.4.7",
     "python-ulid ~= 2.7.0",
-    "filelock ~= 3.16.0",
     "flufl.lock ~= 8.1.0",
-    "e7awghal == 0.1.2",
+    "e7awghal == 0.1.3",
     "pybind11-stubgen ~= 2.5.1",
     "pandas ~= 2.2.3",
     "polars ~= 1.9.0",
@@ -23,12 +22,14 @@ dependencies = [
 quel1_linkup = "quel_ic_config_cli.cli:quel1_linkup"
 quel1_linkstatus = "quel_ic_config_cli.cli:quel1_linkstatus"
 quel1_parallel_linkup = "quel_ic_config_cli.parallel_linkup:parallel_linkup_main"
+quel1_syncstatus = "quel_ic_config_cli.parallel_linkup:syncstatus_main"
+quel1_sync = "quel_ic_config_cli.parallel_linkup:sync_main"
 quel1_test_linkup = "quel_ic_config_cli.cli:quel1_test_linkup"
 quel1_dump_port_config = "quel_ic_config_cli.cli:quel1_dump_port_config"
 quel1_firmware_version = "quel_ic_config_cli.cli:quel1_firmware_version"
 quel1se_tempctrl_state = "quel_ic_config_cli.cli:quel1se_tempctrl_state"
 quel1se_tempctrl_reset = "quel_ic_config_cli.cli:quel1se_tempctrl_reset"
-quel1se_check_all_internal_loopbacks = "quel_ic_config_cli.quel1se_check_all_internal_loopbacks:main"
+quel1se_riken8_check_all_internal_loopbacks = "quel_ic_config_cli.quel1se_check_all_internal_loopbacks:main"
 quel1_check_all_internal_loopbacks = "quel_ic_config_cli.quel1_check_all_internal_loopbacks:main"
 quel1_stability_check = "quel_ic_config_cli.quel1_stability_check:cli_main"
 quel1_stability_viewer = "quel_ic_config_cli.quel1_stability_viewer:cli_main"
@@ -53,7 +54,7 @@ dev = [
 
 [build-system]
 requires = [
-    "setuptools>=43.0.0",
+    "setuptools >= 43.0.0",
     "pybind11 ~= 2.13.6"
 ]
 build-backend = "setuptools.build_meta"
@@ -62,8 +63,7 @@ build-backend = "setuptools.build_meta"
 packages = [
     "quel_ic_config",
     "quel_ic_config.settings",
-    "adi_ad9081_v106",
-    "adi_ad9082_v161",
+    "adi_ad9082_v170",
     "quel_ic_config_cli",
     "quel_ic_config_cli.settings",
     "quel_ic_config_utils"
@@ -73,12 +73,11 @@ package-dir = {"" = "src"}
 [tool.setuptools.package-data]
 "quel_ic_config.settings" = ["*.json", "quel-1/*.json", "quel-1se/*.json"]
 "quel_ic_config_cli.settings" = ["*.json"]
-adi_ad9081_v106 = ["*.pyi", "py.typed", "LICENSES.pdf"]
-adi_ad9082_v161 = ["*.pyi", "py.typed", "LICENSES.pdf"]
+adi_ad9082_v170 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
 [tool.flake8]
 max-line-length = 120
-ignore = "E203,E704,W503"
+ignore = "E203,E704,W503,W605"
 
 [tool.black]
 line-length = 120

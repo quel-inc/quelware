@@ -14,6 +14,19 @@ from testlibs.spa_helper import init_e440xb, init_ms2xxxx, measure_floor_noise
 
 logger = logging.getLogger(__name__)
 
+TEST_SETTINGS_MS2720T1 = (
+    {
+        "spa_type": "MS2XXXX",
+        "spa_name": "ms2720t-1",
+        "spa_parameters": {
+            "freq_center": 5e9,
+            "freq_span": 8e9,
+            "resolution_bandwidth": 1e4,
+        },
+        "max_background_noise": -50.0,
+    },
+)
+
 TEST_SETTINGS_QUEL1 = (
     {
         "label": "staging-074",
@@ -112,40 +125,26 @@ TEST_SETTINGS_RIKEN8 = (
         "relative_loss": 0,
         "linkup": False,
     },
-    {
-        "label": "staging-146",
-        "box_config": {
-            "ipaddr_wss": "10.1.0.146",
-            "ipaddr_sss": "10.2.0.146",
-            "ipaddr_css": "10.5.0.146",
-            "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
-        },
-        "linkup_config": {
-            "mxfes_to_linkup": (0, 1),
-            "use_204b": False,
-        },
-        "port_availability": {
-            "unavailable": [],
-            "via_monitor_out": [],
-        },
-        "image_path": "./artifacts",
-        "relative_loss": 0,
-        "linkup": False,
-    },
-)
-
-
-TEST_SETTINGS_MS2720T1 = (
-    {
-        "spa_type": "MS2XXXX",
-        "spa_name": "ms2720t-1",
-        "spa_parameters": {
-            "freq_center": 5e9,
-            "freq_span": 8e9,
-            "resolution_bandwidth": 1e4,
-        },
-        "max_background_noise": -50.0,
-    },
+    # {
+    #     "label": "staging-146",
+    #     "box_config": {
+    #         "ipaddr_wss": "10.1.0.146",
+    #         "ipaddr_sss": "10.2.0.146",
+    #         "ipaddr_css": "10.5.0.146",
+    #         "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
+    #     },
+    #     "linkup_config": {
+    #         "mxfes_to_linkup": (0, 1),
+    #         "use_204b": False,
+    #     },
+    #     "port_availability": {
+    #         "unavailable": [],
+    #         "via_monitor_out": [],
+    #     },
+    #     "image_path": "./artifacts",
+    #     "relative_loss": 0,
+    #     "linkup": False,
+    # },
 )
 
 TEST_SETTINGS_FUJITSU11A = (
@@ -155,7 +154,32 @@ TEST_SETTINGS_FUJITSU11A = (
             "ipaddr_wss": "10.1.0.157",
             "ipaddr_sss": "10.2.0.157",
             "ipaddr_css": "10.5.0.157",
-            "boxtype": Quel1BoxType.fromstr("x-quel1se-fujitsu11-a"),
+            "boxtype": Quel1BoxType.fromstr("quel1se-fujitsu11-a"),
+        },
+        "linkup_config": {
+            "mxfes_to_linkup": (0, 1),
+            "use_204b": False,
+        },
+        "port_availability": {
+            "unavailable": [],
+            "via_monitor_out": [],
+        },
+        "spa_type": "",
+        "image_path": "./artifacts",
+        "relative_loss": 0,
+        "linkup": False,
+    },
+)
+
+
+TEST_SETTINGS_FUJITSU11B = (
+    {
+        "label": "staging-164",
+        "box_config": {
+            "ipaddr_wss": "10.1.0.164",
+            "ipaddr_sss": "10.2.0.164",
+            "ipaddr_css": "10.5.0.164",
+            "boxtype": Quel1BoxType.fromstr("quel1se-fujitsu11-b"),
         },
         "linkup_config": {
             "mxfes_to_linkup": (0, 1),
@@ -217,6 +241,16 @@ def make_spa_fixture(param0):
     return spa
 
 
+@pytest.fixture(scope="session", params=TEST_SETTINGS_MS2720T1)
+def fixture_ms2720t1(
+    request,
+) -> Generator[SpectrumAnalyzer, None, None]:
+    param0 = request.param
+    spa = make_spa_fixture(param0)
+    yield spa
+    del spa
+
+
 @pytest.fixture(scope="session", params=TEST_SETTINGS_QUEL1)
 def fixtures1(
     request,
@@ -259,18 +293,24 @@ def fixtures8(
     del box
 
 
-@pytest.fixture(scope="session", params=TEST_SETTINGS_MS2720T1)
-def fixture_ms2720t1(
-    request,
-) -> Generator[SpectrumAnalyzer, None, None]:
-    param0 = request.param
-    spa = make_spa_fixture(param0)
-    yield spa
-    del spa
-
-
 @pytest.fixture(scope="session", params=TEST_SETTINGS_FUJITSU11A)
 def fixtures11a(
+    request,
+) -> Generator[tuple[Quel1Box, dict[str, Any], Path], None, None]:
+    param0 = request.param
+
+    box, topdirpath = make_box_fixture(param0)
+
+    yield box, param0, topdirpath
+
+    box.initialize_all_awgunits()
+    box.activate_monitor_loop(0)
+    box.activate_monitor_loop(1)
+    del box
+
+
+@pytest.fixture(scope="session", params=TEST_SETTINGS_FUJITSU11B)
+def fixtures11b(
     request,
 ) -> Generator[tuple[Quel1Box, dict[str, Any], Path], None, None]:
     param0 = request.param

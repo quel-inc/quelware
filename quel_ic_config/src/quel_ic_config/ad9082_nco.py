@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 class AbstractNcoFtw(BaseModel):
     # notes: x + a/b
     ftw: int = Field(ge=-0x8000_0000_0000, le=0x7FFF_FFFF_FFFF)
-    delta_b: int = Field(ge=-0x8000_0000_0000, le=0x7FFF_FFFF_FFFF)
-    modulus_a: int = Field(ge=1, le=0xFFFF_FFFF_FFFF)
+    delta_b: int = Field(ge=0x0000_0000_0000, le=0xFFFF_FFFF_FFFF)
+    modulus_a: int = Field(ge=0x0000_0000_0000, le=0xFFFF_FFFF_FFFF)
     enable_fraction: bool = Field(default=True)
 
     @model_validator(mode="after")
     def check_numerator(self):
         if self.enable_fraction:
-            if abs(self.delta_b) >= self.modulus_a:
+            if self.delta_b >= self.modulus_a:
                 raise ValueError("improper fraction is not allowed")
         else:
             if not (self.delta_b == 0 and self.modulus_a == 1):
@@ -35,10 +35,7 @@ class AbstractNcoFtw(BaseModel):
         return str(self)
 
     def __str__(self) -> str:
-        if self.delta_b >= 0:
-            return f"<ftw: {self.ftw} + {self.delta_b} / {self.modulus_a}>"
-        else:
-            return f"<ftw: {self.ftw} - {-self.delta_b} / {self.modulus_a}>"
+        return f"<ftw: {self.ftw} + {self.delta_b} / {self.modulus_a}>"
 
     @staticmethod
     def _encode_s48_as_u48(v: int):
@@ -75,9 +72,9 @@ class AbstractNcoFtw(BaseModel):
         self.enable_fraction = False
 
     def round(self):
-        frac = abs(self.delta_b) / self.modulus_a
+        frac = self.delta_b / self.modulus_a
         if (frac > 0.5) or (frac == 0.5 and self.ftw % 2 == 1):
-            self.ftw += 1 if self.ftw > 0 else -1
+            self.ftw += 1
         self.delta_b = 0
         self.modulus_a = 1
         self.enable_fraction = False
@@ -129,11 +126,13 @@ class AbstractNcoFtw(BaseModel):
         t = t.limit_denominator(0xFFFF_FFFF_FFFF)
 
         x: int = int(t)
+        if negative:
+            x += 1
         delta_b: int = t.numerator - t.denominator * x
         modulus_a: int = t.denominator
         if negative:
             x = -x
-            delta_b = -delta_b
+            delta_b = -delta_b  # Notes: delta_b becomes non-negative, finally.
         obj = cls(ftw=x, delta_b=delta_b, modulus_a=modulus_a)
 
         conv_error = abs(obj.to_frequency(converter_freq_hz) - nco_freq_hz_)

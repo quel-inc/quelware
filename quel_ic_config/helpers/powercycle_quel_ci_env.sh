@@ -27,6 +27,12 @@ while (( "$#" )); do
   "094")
     pe_switch_powercycle --rbtype PE4104AJ --ipaddr 10.250.0.107 --idx 4
     ;;
+  "157")
+    pe_switch_powercycle --rbtype PE4104AJ --ipaddr 10.250.0.107 --idx 2
+    ;;
+  "164")
+    pe_switch_powercycle --rbtype PE4104AJ --ipaddr 10.250.0.107 --idx 3
+    ;;
   *)
     echo "Error: invalid box $1, ignore it"
     ;;

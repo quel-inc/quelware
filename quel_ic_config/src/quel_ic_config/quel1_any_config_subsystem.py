@@ -3,7 +3,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import Any, Protocol, Union, runtime_checkable
 
-from quel_ic_config.ad9082_v106 import NcoFtw
+from quel_ic_config.ad9082 import LinkStatus, NcoFtw
 from quel_ic_config.exstickge_coap_tempctrl_client import Quel1seTempctrlState
 from quel_ic_config.quel1_thermistor import Quel1Thermistor
 from quel_ic_config.quel_config_common import Quel1BoxType
@@ -59,7 +59,7 @@ class Quel1AnyConfigSubsystem(Protocol):
     @allow_dual_modulus_nco.setter
     def allow_dual_modulus_nco(self, v: bool) -> None: ...
 
-    def get_link_status(self, mxfe_idx: int) -> tuple[int, int]: ...
+    def get_link_status(self, mxfe_idx: int) -> tuple[LinkStatus, int]: ...
 
     def get_crc_error_counts(self, mxfe_idx: int) -> list[int]: ...
 
@@ -199,7 +199,9 @@ class Quel1AnyConfigSubsystem(Protocol):
         ignore_crc_error: bool = False,
     ) -> bool: ...
 
-    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool: ...
+    def check_link_status(
+        self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False
+    ) -> tuple[bool, int, str]: ...
 
     def clear_crc_error(self, mxfe_idx: int) -> None: ...
 

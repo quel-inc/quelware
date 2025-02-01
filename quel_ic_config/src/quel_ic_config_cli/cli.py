@@ -69,6 +69,12 @@ def quel1_linkup() -> None:
         help="skip initialization of ICs other than AD9082",
     )
     parser.add_argument(
+        "--hard_reset_wss",
+        action="store_true",
+        default=False,
+        help="hard reset AWG units and CAP units to clear hardware error flags, should avoid using it when unnecessary",
+    )
+    parser.add_argument(
         "--save_dirpath",
         type=Path,
         default=None,
@@ -145,6 +151,7 @@ def quel1_linkup_body(args: argparse.Namespace) -> int:
         use_bg_cal=use_bgcal,
         restart_tempctrl=args.restart_tempctrl,
         skip_init=args.skip_init,
+        hard_reset_wss=args.hard_reset_wss,
         background_noise_threshold=args.background_noise_threshold,
     )
 
@@ -165,6 +172,12 @@ def quel1_linkstatus() -> None:
         parser, use_mxfe=True, allow_implicit_mxfe=True, use_config_root=False, use_config_options=False
     )
     add_common_workaround_arguments(parser, use_ignore_crc_error_of_mxfe=True)
+    parser.add_argument(
+        "--background_noise_threshold",
+        type=float,
+        default=None,
+        help="maximum allowable background noise amplitude of the ADCs",
+    )
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -212,26 +225,26 @@ def quel1_linkstatus_body(args: argparse.Namespace) -> int:
     if not isinstance(box, Quel1BoxIntrinsic):
         raise ValueError(f"boxtype {args.boxtype} is not supported currently")
 
-    _ = box.reconnect(ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe, ignore_invalid_linkstatus=True)
+    linkup_ok: Dict[int, bool] = box.reconnect(
+        background_noise_threshold=args.background_noise_threshold,
+        ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
+        ignore_invalid_linkstatus=True,
+    )
 
-    cli_retcode: int = 0
     for mxfe_idx in mxfe_list:
         try:
-            link_status, error_flag = box.css.get_link_status(mxfe_idx)
-            if link_status == 0xE0:
-                if error_flag == 0x01 or (error_flag == 0x11 and mxfe_idx in args.ignore_crc_error_of_mxfe):
-                    judge: str = "healthy datalink"
-                else:
-                    judge = "unhealthy datalink (CRC errors are detected)"
-                    cli_retcode = -1
+            ls, _, diag = box.css.check_link_status(
+                mxfe_idx, ignore_crc_error=(mxfe_idx in args.ignore_crc_error_of_mxfe)
+            )
+            if ls and not linkup_ok[mxfe_idx]:
+                diag = f"{box.css.ipaddr_css}:AD9082-#{mxfe_idx} has badly configured tx-link {diag[diag.rfind('('):]}"
             else:
-                judge = "no datalink available"
-                cli_retcode = -1
-            print(f"AD9082-#{mxfe_idx}: {judge}  (linkstatus = 0x{link_status:02x}, error_flag = 0x{error_flag:02x})")
+                linkup_ok[mxfe_idx] = ls
+            print(diag)
         except Exception as e:
             print(f"AD9082-#{mxfe_idx}: failed to sync with the hardware due to {e}")
 
-    return cli_retcode
+    return 0 if all(linkup_ok.values()) else -1
 
 
 def quel1_test_linkup() -> None:
@@ -277,6 +290,12 @@ def quel1_test_linkup() -> None:
         action="store_true",
         default=False,
         help="skip initialization of ICs other than AD9082",
+    )
+    parser.add_argument(
+        "--hard_reset_wss",
+        action="store_true",
+        default=False,
+        help="hard reset AWG units and CAP units to clear hardware error flags, should avoid using it when unnecessary",
     )
     parser.add_argument(
         "--count",
@@ -363,6 +382,7 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
             use_204b=use_204b,
             use_bg_cal=use_bgcal,
             skip_init=args.skip_init,
+            hard_reset_wss=args.hard_reset_wss,
             background_noise_threshold=args.background_noise_threshold,
         )
         for mxfe_idx in linkup_ok:

@@ -1,3 +1,7 @@
+from typing import Callable, TypeVar
+
+from typing_extensions import ParamSpec
+
 from e7awghal import BoxLockDelegationError
 
 _trancated_traceback_enable: bool = True
@@ -12,8 +16,12 @@ def set_trancated_traceback_for_lock_error(v: bool):
     _trancated_traceback_enable = v
 
 
-def guarded_by_box_lock(func):
-    def wrapper(*args, **kwargs):
+Param = ParamSpec("Param")
+RetType = TypeVar("RetType")
+
+
+def guarded_by_box_lock(func: Callable[Param, RetType]) -> Callable[Param, RetType]:
+    def wrapper(*args: Param.args, **kwargs: Param.kwargs) -> RetType:
         try:
             return func(*args, **kwargs)
         except BoxLockError as e:

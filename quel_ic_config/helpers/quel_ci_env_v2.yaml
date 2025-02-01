@@ -1,0 +1,36 @@
+version: 2
+
+clockmaster:
+  - ipaddr: 10.3.0.13
+
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74
+    boxtype: quel1-a
+  - name: staging-050
+    ipaddr: 10.1.0.50
+    boxtype: quel1-a
+  - name: staging-060
+    ipaddr: 10.1.0.60
+    boxtype: quel1-b
+  - name: staging-071
+    ipaddr: 10.1.0.71
+    boxtype: quel1-a
+  - name: staging-080
+    ipaddr: 10.1.0.80
+    boxtype: quel1-a
+  - name: staging-094
+    ipaddr: 10.1.0.94
+    boxtype: quel1se-riken8
+#  - name: staging-146
+#    ipaddr: 10.1.0.146
+#    boxtype: quel1se-riken8
+#   - name: staging-132
+#     ipaddr: 10.1.0.132
+#     boxtype: quel1se-riken8
+  - name: staging-157
+    ipaddr: 10.1.0.157
+    boxtype: quel1se-fujitsu11-a
+  - name: staging-164
+    ipaddr: 10.1.0.164
+    boxtype: quel1se-fujitsu11-b

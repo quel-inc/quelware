@@ -6,17 +6,14 @@
     [
       "quel-1/ad9082.json",
       "quel-1/ad9082_dac_channel_assign_for_mxfe0.json",
-      {"file": "quel-1/ad9082_read.json", "feature": "both_adc"},
-      {"file": "quel-1/ad9082_read.json", "option": "use_read_in_mxfe0", "feature": "single_adc"},
-      {"file": "quel-1/ad9082_monitor.json", "option": "use_monitor_in_mxfe0", "feature": "single_adc"},
+      {"file": "quel-1/ad9082_read.json"},
       {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe0"},
       {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe0"}
     ],
     [
       "quel-1/ad9082.json",
       "quel-1se/ad9082_dac_channel_assign_for_fujitsu11_mxfe1.json",
-      {"file": "quel-1/ad9082_read.json", "feature": "both_adc"},
-      {"file": "quel-1/ad9082_monitor.json", "feature": "single_adc"},
+      {"file": "quel-1/ad9082_read.json"},
       {"file": "quel-1/ad9082_cduc1500mhz_dacclk12000mhz.json", "option": "dac_cduc_1500mhz_mxfe1"},
       {"file": "quel-1/ad9082_cduc2000mhz_dacclk12000mhz.json", "option": "dac_cduc_2000mhz_mxfe1"}
     ]

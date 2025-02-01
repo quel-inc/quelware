@@ -9,6 +9,7 @@ from typing import Any, Dict, Final, List, Set, Tuple, Union
 import numpy as np
 
 from e7awghal import CapParam, CapSection, E7awgCaptureDataError
+from quel_ic_config.ad9082 import LinkStatus
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1seTempctrlState
@@ -30,7 +31,7 @@ class LinkupStatus(Enum):
 
 @dataclass(frozen=True)
 class LinkupStatistic:
-    link_status: int
+    link_status: LinkStatus
     error_status: int
     fddc_idx: int
     timeout: bool
@@ -40,7 +41,7 @@ class LinkupStatistic:
     max_noise_peak: float
 
     def categorize(self, noise_threshold: float) -> LinkupStatus:
-        if self.link_status != 0xE0:
+        if self.link_status != LinkStatus.LINK_STATUS_LOCKED:
             return LinkupStatus.LINKUP_FAILURE
         elif self.error_status != 0x01:
             return LinkupStatus.CRC_ERROR
@@ -66,7 +67,7 @@ class LinkupFpgaMxfe:
     _LINKUP_MAX_RETRY: Final[int] = 10
     _SLEEP_BTWN_LINKUP_TRIALS: Final[float] = 0.25
     _DEFAULT_BACKGROUND_NOISE_THRESHOLD_RELINKUP: Final[float] = 256.0
-    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT: Final[float] = 1536.0
+    _DEFAULT_BACKGROUND_NOISE_THRESHOLD_AT_RECONNECT: Final[float] = 4096.0
     _STAT_HISTORY_MAX_LEN: Final[int] = 1000
 
     def __init__(self, css: Quel1AnyConfigSubsystem, wss: Quel1WaveSubsystem, rmap: AbstractQuel1E7ResourceMapper):
@@ -99,14 +100,14 @@ class LinkupFpgaMxfe:
         valid_capture: bool,
         max_noise_peak: float,
     ):
-        link_status, error_status = self._css.get_link_status(mxfe_idx)
+        link_status, crc_error_status = self._css.get_link_status(mxfe_idx)
         if mxfe_idx not in self._statistics:
             self._statistics[mxfe_idx] = []
 
         self._statistics[mxfe_idx].append(
             LinkupStatistic(
                 link_status=link_status,
-                error_status=error_status,
+                error_status=crc_error_status,
                 fddc_idx=fddc_idx,
                 timeout=timeout,
                 failure=failure,

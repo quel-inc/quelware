@@ -12,10 +12,12 @@ quel_ic_configは、既存のキュエル社製制御装置モデルにおける
     - `quel1_linkup`:  リンク確立手順を実施する。
     - `quel1_linkstatus`:  現在のリンク状態を表示する。
     - `quel1_parallel_linkup`: 設定ファイルに記述した全ての装置に対し、同時にリンク確立手順を実施する。
+    - `quel1_sync`: 設定ファイルに記述した全ての装置を、指定のクロックマスタを用いて時計合わせをする。
+    - `quel1_syncstatus`: 設定ファイルに記述した全ての装置の時計のずれを表示する。
     - `quel1_dump_port_config`:  各ポートごとの設定状況を表示する。
     - `quel1_firmware_version`: ファームウェアバージョンを表示する。
     - `quel1_check_all_loopbacks`: 制御装置の全出力ポートの健全性を内部ループバックで確認するツール。QuEL-1 SE RIKEN8モデル以外で使用する。
-    - `quel1se_check_all_loopbacks`: 制御装置の全出力ポートの健全性を内部ループバックで確認するツール。QuEL-1 SE RIKEN8モデル限定。
+    - `quel1se_riken8_check_all_loopbacks`: 制御装置の全出力ポートの健全性を内部ループバックで確認するツール。QuEL-1 SE RIKEN8モデル限定。
     - `quel1se_tempctrl_state`: QuEL-1 SE の恒温制御の稼働状態を表示する。
     - `quel1se_tempctrl_reset`: QuEL-1 SE の恒温制御を再始動する。環境温度が大きく変動した場合に温度目標値をリセットするのに使う。
 
@@ -43,12 +45,12 @@ quel_ic_configは、既存のキュエル社製制御装置モデルにおける
 ### QuEL-1 NEC
 4つの独立した量子ビットを制御するためのQuEL-1のカスタムモデル。
 
-### QuEL-1 SE 
+### QuEL-1 SE
 QuEL-1 のハードウェアを大幅にリファインした2023年度末モデル。
 恒温系ハードウェアの全面的見直し、周波数コンバータのモジュール化、設定系ファームウェアの全面改修と機能向上など、性能と構成の柔軟性の両方を大幅に向上させている。
 
 - RIKEN 8GHzモデル: QuEL-1 SEのローンチモデルで、理研の5GHz帯量子ビットを制御するために、2-8GHzのRF入出力を持つ。
-- FUJITSU 11GHzモデル（予定）: QuEL-1 Type-A/B 標準型の発展版。
+- FUJITSU 11GHzモデル: QuEL-1 Type-A/-B 標準型と同等構成の装置。
 
 ### QuBE (Type-A 及び Type-B)
 QuEL-1 の元になった制御装置で、最初期型の QuBE-OU と、その改良型の QuBE-RIKEN とがある。

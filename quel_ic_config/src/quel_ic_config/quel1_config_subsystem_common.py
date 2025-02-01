@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Collection, Dict, Final, List, Mapping, Set, Tuple, Union
 
 from quel_ic_config.ad5328 import Ad5328ConfigHelper
-from quel_ic_config.ad9082_v106 import NcoFtw
+from quel_ic_config.ad9082 import LinkStatus, NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband
 from quel_ic_config.exstickge_sock_client import _ExstickgeProxyBase
 from quel_ic_config.generic_gpio import GenericGpioConfigHelper
@@ -18,7 +18,7 @@ from quel_ic_config.quel_config_common import Quel1BoxType, Quel1RuntimeOption
 from quel_ic_config.quel_ic import (
     Ad5328,
     Ad7490,
-    Ad9082V106,
+    Ad9082Generic,
     Adrf6780,
     GenericGpio,
     Lmx2594,
@@ -91,7 +91,7 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         self._proxy: _ExstickgeProxyBase
 
         # TODO: types of IC proxy will be reconsidered when controler proxy (e.g. _ExstickgeProxyBase) is generalized.
-        self._ad9082: Tuple[Ad9082V106, ...] = ()
+        self._ad9082: Tuple[Ad9082Generic, ...] = ()
         self._lmx2594: Tuple[Lmx2594, ...] = ()
         self._lmx2594_helper: Tuple[Lmx2594ConfigHelper, ...] = ()
         self._adrf6780: Tuple[Adrf6780, ...] = ()
@@ -310,12 +310,11 @@ class Quel1ConfigSubsystemRoot(Quel1ConfigSubsystemBaseSlot):
         pass
 
 
-class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
+class Quel1GenericConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
     __slots__ = ()
 
-    def _construct_ad9082(self):
-        self._ad9082 = tuple(Ad9082V106(self._proxy, idx) for idx in range(self._NUM_IC["ad9082"]))
-        self.allow_dual_modulus_nco = True
+    @abstractmethod
+    def _construct_ad9082(self): ...
 
     def validate_chip_id(self, mxfe_idx: int):
         self._validate_mxfe(mxfe_idx)
@@ -334,54 +333,52 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         self._set_runtime_option(Quel1RuntimeOption.ALLOW_DUAL_MODULUS_NCO, v)
 
     @property
-    def ad9082(self) -> Tuple[Ad9082V106, ...]:
+    def ad9082(self) -> Tuple[Ad9082Generic, ...]:
         return self._ad9082
 
-    def check_link_status(self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False) -> bool:
-        link_status, crc_flag = self.ad9082[mxfe_idx].get_link_status()
+    def check_link_status(
+        self, mxfe_idx: int, mxfe_init: bool = False, ignore_crc_error: bool = False
+    ) -> Tuple[bool, int, str]:
+        link_status, crc_error = self.ad9082[mxfe_idx].get_link_status()
+        link_status_strs = ["("]
+        # Notes: be aware that assuming that any elements of LinkStatus start with "LINK_STATUS_".
+        # TODO: should define str() for LinkStatus.
+        link_status_strs.append(f"link status is {str(link_status).split('.')[-1][12:]}, ")
+        if crc_error == 0:
+            link_status_strs.append("No CRC error")
+        else:
+            link_status_strs.append("CRC error is detected")
+        link_status_strs.append(")")
+        link_status_str = "".join(link_status_strs)
+        mxfe_name = f"{self._css_addr}:AD9082-#{mxfe_idx}"
         judge: bool = False
-        if link_status == 0xE0:
-            if crc_flag == 0x01:
+        if link_status == LinkStatus.LINK_STATUS_LOCKED:
+            if crc_error == 0:
                 judge = True
-            elif crc_flag == 0x11 and ignore_crc_error:
+            elif crc_error == 1 and ignore_crc_error:
                 judge = True
 
         if judge:
-            if crc_flag == 0x01:
+            if crc_error == 0:
+                lglv: int = logging.INFO
                 if mxfe_init:
-                    logger.info(
-                        f"{self._css_addr}:AD9082-#{mxfe_idx} links up successfully "
-                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                    )
+                    diag: str = f"{mxfe_name} links up successfully {link_status_str}"
                 else:
-                    logger.info(
-                        f"{self._css_addr}:AD9082-#{mxfe_idx} has linked up healthy "
-                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                    )
+                    diag = f"{mxfe_name} has linked up healthy {link_status_str}"
             else:
+                lglv = logging.WARNING
                 if mxfe_init:
-                    logger.warning(
-                        f"{self._css_addr}:AD9082-#{mxfe_idx} links up successfully with ignored crc error "
-                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                    )
+                    diag = f"{mxfe_name} links up successfully with ignored crc error {link_status_str}"
                 else:
-                    logger.warning(
-                        f"{self._css_addr}:AD9082-#{mxfe_idx} has linked up with ignored crc error "
-                        f"(link status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                    )
+                    diag = f"{mxfe_name} has linked up but crc error is detected thereafter {link_status_str}"
         else:
+            lglv = logging.WARNING
             if mxfe_init:
-                logger.warning(
-                    f"{self._css_addr}:AD9082-#{mxfe_idx} fails to link up "
-                    f"(link_status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                )
+                diag = f"{mxfe_name} fails to link up {link_status_str}"
             else:
-                logger.warning(
-                    f"{self._css_addr}:AD9082-#{mxfe_idx} has not linked up yet "
-                    f"(link_status = 0x{link_status:02x}, crc_flag = 0x{crc_flag:02x})"
-                )
+                diag = f"{mxfe_name} has not linked up yet {link_status_str}"
 
-        return judge
+        return judge, lglv, diag
 
     def clear_crc_error(self, mxfe_idx: int) -> None:
         self.ad9082[mxfe_idx].clear_crc_error()
@@ -620,7 +617,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         self.ad9082[dac_mxfe_idx].set_dac_cnco({dac_idx}, dac_ftw)
         self.ad9082[adc_mxfe_idx].set_adc_cnco({adc_idx}, adc_ftw)
 
-    def get_link_status(self, mxfe_idx: int) -> Tuple[int, int]:
+    def get_link_status(self, mxfe_idx: int) -> Tuple[LinkStatus, int]:
         """getting the status of the datalink between a MxFE in a group and the FPGA.
 
         :param mxfe_idx: an index of the group which the target MxFE belongs to.

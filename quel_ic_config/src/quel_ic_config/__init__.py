@@ -2,7 +2,7 @@ import importlib.metadata
 
 from e7awghal import AwgParam, CapIqDataReader, CapParam, CapSection, E7FwType, WaveChunk
 from quel_ic_config.ad5328 import Ad5328ConfigHelper, Ad5328RegNames, Ad5328Regs
-from quel_ic_config.ad9082_v106 import Ad9082JesdParam, ChipTemperatures, NcoFtw
+from quel_ic_config.ad9082 import Ad9082JesdParam, ChipTemperatures, LinkStatus, NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband, Adrf6780RegNames, Adrf6780Regs
 from quel_ic_config.box_force_unlock import force_unlock_all_boxes
 from quel_ic_config.box_lock import BoxLockError, set_trancated_traceback_for_lock_error
@@ -28,6 +28,7 @@ from quel_ic_config.quel1_box_intrinsic import (
 )
 from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 from quel_ic_config.quel1_config_subsystem import (
+    Ad9082Quel1,
     ExstickgeSockClientQuel1WithDummyLock,
     QubeConfigSubsystem,
     QubeOuTypeAConfigSubsystem,
@@ -59,6 +60,7 @@ from quel_ic_config.quel1se_adda_config_subsystem import (
     Quel1seAddaConfigSubsystem,
     Quel2ProtoAddaConfigSubsystem,
 )
+from quel_ic_config.quel1se_config_subsystem import Ad9082Quel1se
 from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
     ExstickgeCoapClientQuel1seFujitsu11,
     Quel1seFujitsu11TypeAConfigSubsystem,
@@ -78,7 +80,7 @@ from quel_ic_config.quel_clock_master_v1 import QuelClockMasterV1
 from quel_ic_config.quel_config_common import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1ConfigOption, Quel1Feature
 from quel_ic_config.quel_ic import (
     Ad5328,
-    Ad9082V106,
+    Ad9082Generic,
     Adrf6780,
     GenericGpio,
     Lmx2594,
@@ -106,7 +108,9 @@ __all__ = (
     "Ad5328ConfigHelper",
     "Ad5328Regs",
     "Ad5328RegNames",
-    "Ad9082V106",
+    "Ad9082Generic",
+    "Ad9082Quel1",
+    "Ad9082Quel1se",
     "Ad9082JesdParam",
     "Adrf6780",
     "Adrf6780ConfigHelper",
@@ -124,6 +128,7 @@ __all__ = (
     "GenericGpioConfigHelper",
     "GenericGpioRegs",
     "GenericGpioRegNames",
+    "LinkStatus",
     "Lmx2594",
     "Lmx2594ConfigHelper",
     "Lmx2594Regs",
