@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import numpy.typing as npt
 from pydantic import BaseModel, Field
@@ -24,3 +26,9 @@ def calc_abc(x0: float, y0: float, angle: float, total_exponent_offset: int) -> 
         b = -b
 
     return np.array([a, b, -(a * x0 + b * y0) * (1 << total_exponent_offset)], np.float32)
+
+
+def calc_abc_main_sub(
+    x0: float, y0: float, angle_main: float, angle_sub: float, total_exponent_offset: int
+) -> Tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
+    return calc_abc(x0, y0, angle_main, total_exponent_offset), -calc_abc(x0, y0, angle_sub, total_exponent_offset)

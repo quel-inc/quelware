@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import RLock
 from typing import Any, Callable, Final, Optional, Union
@@ -388,9 +389,13 @@ class AwgUnit:
         with self._unit_lock:
             return self._lib.has_wavedata(name)
 
-    def hard_reset(self) -> None:
-        if self._broken_reset:
-            raise RuntimeError("hard_reset() is not available because it can disrupt the JESD204C link")
+    def hard_reset(self, suppress_warning: bool = False) -> None:
+        if self._broken_reset and not suppress_warning:
+            warnings.warn(
+                "AwgUnit.hard_reset() may disrupt the JESD204C link due to firmware bug, "
+                "it should not be used in nominal situations",
+                RuntimeWarning,
+            )
         v0 = AwgUnitCtrlReg(reset=True)
         v1 = AwgUnitCtrlReg()
         with self._unit_lock, self._master_lock:

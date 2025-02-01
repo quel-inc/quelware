@@ -51,7 +51,7 @@ def real_fir_bpf(
     *,
     window: WindowType = "hamming",
     decimated_input: bool = True,
-) -> tuple[float, npt.NDArray[np.float32]]:
+) -> tuple[float, float, npt.NDArray[np.float32]]:
     """
     Design a real band pass filter.
 
@@ -60,6 +60,8 @@ def real_fir_bpf(
         bandwidth (float): Pass band [Hz]
         decimated_input (bool): True for 1/4 decimated input. both target_freq and span are converted automatically.
     Returns:
+        float: target frequency [Hz]
+        float: phase shift at target frequency [rad]
         npt.NDArray[np.float32]: FIR coefficients
     """
 
@@ -81,6 +83,9 @@ def real_fir_bpf(
     elif 0.0 < low_cutoff and 1.0 <= high_cutoff:
         # Notes: it is impossible to make highpass filter with even number of taps.
         coeff = firwin(_RFIRS_NTAPS - 1, cutoff=low_cutoff, pass_zero="highpass", window=window)
+        coeff = np.append(
+            coeff, 0.0
+        )  # 7 taps filter as 8 taps i.e. yn = c0*xn + c1*xn-1 + c2*xn-2 + ... + c7*xn-7 where c7 = 0
     else:
         logger.warning(
             f"specified bandwidth {bandwidth} is wider than nyquist frequency {sampling_freq / 2}, "
@@ -89,7 +94,11 @@ def real_fir_bpf(
         coeff = np.zeros(_RFIRS_NTAPS, dtype=np.float32)
         coeff[0] = 1.0
 
-    return target_freq, coeff[::-1]  # reverse list to be argument for CaptureParam
+    # Calculate phase shift at target frequency
+    n = np.arange(len(coeff))
+    phase = np.dot(coeff, np.exp(-1j * 2.0 * np.pi * target_freq * n / sampling_freq))
+
+    return target_freq, np.arctan2(phase.imag, phase.real), coeff[::-1]  # reverse list to be argument for CaptureParam
 
 
 def _folded_frequency_by_decimation(frequency: float) -> float:

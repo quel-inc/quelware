@@ -142,6 +142,7 @@ def test_cfir(proxy_au_cm_w):
         f = np.fft.fftfreq(len(p), DT)
 
         max_idx = np.argmax(p)
+
         for peak_idx in largest_peak_indices:
             if peak_idx == max_idx:
                 continue
@@ -153,6 +154,7 @@ def test_cfir(proxy_au_cm_w):
                 assert p[peak_idx] / p[max_idx] < 2e-2
 
         assert abs(f[max_idx] - freq) < abs(f[1] - f[0])
+
         plt.cla()
         plt.plot(f, p / (RO_DURATION / DT), marker="o", linestyle="None")
         plt.savefig(outdir / f"Spectrum{int(freq / 1e6):03d}MHZ.png")
@@ -170,9 +172,9 @@ def test_rfir(proxy_au_cm_w):
     proxy, auidx, cmidx, _ = proxy_au_cm_w
     folded_freqs = [_folded_frequency_by_decimation(freq) for freq in RO_FREQS]
     cps = []
-
+    phase_shifts = []
     for i, freq in enumerate(RO_FREQS):
-        folded_freq, rfir_coeff = real_fir_bpf(target_freq=freq, bandwidth=PASS_BAND_WIDTH, decimated_input=True)
+        _, phase_shift, rfir_coeff = real_fir_bpf(target_freq=freq, bandwidth=PASS_BAND_WIDTH, decimated_input=True)
         cp = CapParam(
             num_wait_word=0,
             num_repeat=1,
@@ -187,6 +189,7 @@ def test_rfir(proxy_au_cm_w):
         )
         cp.sections.append(CapSection(name="s0", num_capture_word=int(RO_DURATION / DT / 4)))
         cps.append(cp)
+        phase_shifts.append(phase_shift)
 
     data = au50loopback(proxy, auidx, cmidx, cps)
     outdir = make_outdir("rfir")
@@ -195,13 +198,19 @@ def test_rfir(proxy_au_cm_w):
         d00 = data[i][0]
         assert len(d00) == 1
         assert len(d00[0]) == int(RO_DURATION / DT / DECIMATION_RATE)
-
         p = abs(np.fft.fft(d00[0]))
         f = np.fft.fftfreq(len(p), DECIMATION_RATE * DT)
 
         max_idx = np.argmax(p)
         peak_indices.append(max_idx)
         assert abs(f[max_idx] - folded_freqs[i]) < abs(f[1] - f[0])
+
+        # phases are obtained with demodulation since fft includes phase offset.
+        t = np.linspace(0, RO_DURATION, int(RO_DURATION / DT / DECIMATION_RATE), endpoint=False, dtype=np.float32)
+        iq = np.sum(d00[0] * np.exp(-1j * 2.0 * np.pi * folded_freqs[i] * t))
+        # check if detected phase shift matches the expected wthin 1 degree.
+        assert abs(np.arctan2(iq.imag, iq.real) - phase_shifts[i]) < np.pi / 180.0
+
         plt.cla()
         plt.plot(f, p / (RO_DURATION / DT / 4), marker="o", linestyle="None")
         plt.savefig(outdir / f"Spectrum{int(freq / 1e6):03d}MHZ.png")
