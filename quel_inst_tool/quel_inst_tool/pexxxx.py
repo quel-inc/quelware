@@ -3,6 +3,7 @@ import socket
 import telnetlib
 import time
 from abc import abstractmethod
+from collections.abc import Collection
 from enum import Enum
 from typing import Final, List, Union
 
@@ -176,15 +177,27 @@ class Pexxxx:
         self.turn_switch(idx, PeSwitchState.OFF, no_switch_ok)
 
     def powercycle_switch(
-        self, idx: int, off_duration: float = _DEFAULT_OFF_DURATION, no_switch_ok: bool = False
+        self,
+        indices: Union[int, Collection[int]],
+        off_duration: float = _DEFAULT_OFF_DURATION,
+        no_switch_ok: bool = False,
     ) -> None:
-        self._validate_switch_index(idx)
+        if isinstance(indices, int):
+            indices = {indices}
+        if not isinstance(indices, Collection):
+            raise TypeError("invalid type of indices")
+
+        for idx in indices:
+            self._validate_switch_index(idx)
+
         if off_duration < self._MINIMUM_OFF_DURATION:
             raise ValueError(f"too short off-time: {off_duration} seconds")
 
-        self.turn_switch(idx, PeSwitchState.OFF, no_switch_ok)
+        for idx in indices:
+            self.turn_switch(idx, PeSwitchState.OFF, no_switch_ok)
         time.sleep(off_duration)
-        self.turn_switch(idx, PeSwitchState.ON)
+        for idx in indices:
+            self.turn_switch(idx, PeSwitchState.ON)
         return
 
 
