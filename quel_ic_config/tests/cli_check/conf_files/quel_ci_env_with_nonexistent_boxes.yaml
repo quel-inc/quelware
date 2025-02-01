@@ -1,0 +1,11 @@
+version: 1
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74
+    boxtype: quel1-a
+  - name: nonexistent1
+    ipaddr: 10.254.253.252
+    boxtype: quel1-a
+  - name: nonexistent2
+    ipaddr: 10.254.253.251
+    boxtype: quel1se-riken8

@@ -7,8 +7,7 @@ find src/quel_ic_config/settings -name "*.json" -print -exec jq "." {} \; > /dev
 find src/quel_ic_config_cli/settings -name "*.json" -print -exec jq "." {} \; > /dev/null
 
 echo "[clang-format]"
-clang-format -i adi_ad9081_v106/ad9081_wrapper.cpp
-clang-format -i adi_ad9082_v161/ad9082_wrapper.cpp
+clang-format -i adi_ad9082_v170/ad9082_wrapper.cpp
 
 echo "[isort]"
 isort src tests testlibs scripts scripts_internal

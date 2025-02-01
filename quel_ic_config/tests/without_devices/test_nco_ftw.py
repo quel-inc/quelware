@@ -6,22 +6,27 @@ from typing import Any, Dict, Tuple, Union
 import pytest
 from pydantic.v1.utils import deep_update
 
-from quel_ic_config.ad9082_v106 import Ad9082Config, Ad9082V106Mixin
+from quel_ic_config.ad9082 import Ad9082Config, Ad9082Mixin
 
 logger = logging.getLogger(__name__)
 
 
-class Ad9082V106Dummy(Ad9082V106Mixin):
+class Ad9082Dummy(Ad9082Mixin):
     def _read_reg_cb(self, address: int) -> Tuple[bool, int]:
         return True, 0
 
     def _write_reg_cb(self, address: int, value: int) -> Tuple[bool]:
         return (True,)
 
+    def _reset_pin_ctrl_cb(self, level: int) -> Tuple[bool]:
+        return (True,)
+
     def configure(
         self,
         param_in: Union[str, Dict[str, Any], Ad9082Config],
-        reset: bool = False,
+        *,
+        hard_reset: bool = False,
+        soft_reset: bool = False,
         use_204b: bool = False,
         use_bg_cal: bool = True,
         wait_after_device_init: float = 0.1,
@@ -56,7 +61,7 @@ def ad9082_obj_4x6():
     setting = deep_update(setting, additional_setting)
     del setting["meta"]
     cfg_obj = Ad9082Config.model_validate(setting)
-    ic_obj = Ad9082V106Dummy("dummy")
+    ic_obj = Ad9082Dummy("dummy")
     ic_obj.configure(cfg_obj)
     return ic_obj
 

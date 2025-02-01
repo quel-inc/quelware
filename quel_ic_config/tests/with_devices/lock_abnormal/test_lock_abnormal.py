@@ -12,16 +12,17 @@ logger = logging.getLogger(__name__)
 TARGET_BOXES = [
     ("10.1.0.50", Quel1BoxType.QuEL1_TypeA),
     ("10.1.0.146", Quel1BoxType.QuEL1SE_RIKEN8),
-    ("10.1.0.94", Quel1BoxType.QuEL1SE_RIKEN8),  # with device lock
-    ("10.1.0.157", Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA),
+    ("10.1.0.94", Quel1BoxType.QuEL1SE_RIKEN8),
+    ("10.1.0.157", Quel1BoxType.QuEL1SE_FUJITSU11_TypeA),
 ]
 
 EXTENDED_TARGET_BOXES = [
     ("10.1.0.50", Quel1BoxType.QuEL1_TypeA),
     ("10.1.0.60", Quel1BoxType.QuEL1_TypeB),
     ("10.1.0.146", Quel1BoxType.QuEL1SE_RIKEN8),
-    ("10.1.0.94", Quel1BoxType.QuEL1SE_RIKEN8),  # with device lock
-    ("10.1.0.157", Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA),
+    ("10.1.0.94", Quel1BoxType.QuEL1SE_RIKEN8),
+    ("10.1.0.157", Quel1BoxType.QuEL1SE_FUJITSU11_TypeA),
+    ("10.1.0.164", Quel1BoxType.QuEL1SE_FUJITSU11_TypeB),
 ]
 
 

@@ -39,7 +39,9 @@ from quel_ic_config.quel1_wave_subsystem import (
 )
 from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem, Quel2ProtoAddaConfigSubsystem
 from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
+    Quel1seFujitsu11TypeAConfigSubsystem,
     Quel1seFujitsu11TypeADebugConfigSubsystem,
+    Quel1seFujitsu11TypeBConfigSubsystem,
     Quel1seFujitsu11TypeBDebugConfigSubsystem,
 )
 from quel_ic_config.quel1se_riken8_config_subsystem import (
@@ -81,6 +83,10 @@ def _create_css_object(
         css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8:
         css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11_TypeA:
+        css = Quel1seFujitsu11TypeAConfigSubsystem(ipaddr_css, boxtype)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11_TypeB:
+        css = Quel1seFujitsu11TypeBConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8DBG:
         css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA:
@@ -384,7 +390,7 @@ class Quel1BoxIntrinsic:
                     link_ok[mxfe_idx] = False
                     if not ignore_invalid_linkstatus:
                         logger.error(
-                            f"JESD204C downlink of AD9082-#{mxfe_idx} is not working properly, it must be linked up"
+                            f"JESD204C tx-link of AD9082-#{mxfe_idx} is not working properly, it must be linked up"
                         )
                     # Notes: do not break here even if here to check all the MxFEs to show information.
             self.config_rfswitches(rfsw_restore)
@@ -420,6 +426,44 @@ class Quel1BoxIntrinsic:
         )
         return loader.load_config()
 
+    def hardreset_wss_units(
+        self,
+        mxfes: Union[Collection[int], None] = None,
+        reset_awg: bool = True,
+        reset_cap: bool = True,
+        suppress_warning: bool = False,
+    ) -> None:
+        # Notes: an only way to clear hardware error flag of wss is hard-resetting the corresponding units.
+        #        however, its soundness is not confirmed well yet. at least, it often destroys JESD204C link and needs
+        #        the re-linkup. it is still unclear that re-linkup recovers the internal consistency again or not.
+        #        be careful if you use it.
+        if mxfes is None:
+            mxfes = self._css.get_all_mxfes()
+
+        if reset_awg:
+            for mxfe in mxfes:
+                for awg_idx in self._rmap.get_awgs_of_mxfe(mxfe):
+                    self._wss._get_awgunit(awg_idx).hard_reset(suppress_warning=suppress_warning)
+
+        if reset_cap:
+            fddcs: Set[Tuple[int, int]] = set()
+            for g in self._css.get_all_groups():
+                for rl in self._css.get_all_rlines_of_group(g):
+                    for rch in range(self._css.get_num_rchannels_of_rline(g, rl)):
+                        m, d = self._css.get_fddc_idx(g, rl, rch)
+                        fddcs.add((m, d))
+
+            for mxfe, fddc in fddcs:
+                if mxfe in mxfes:
+                    cm_idx = self._rmap.get_capmod_from_fddc(mxfe, fddc)
+                    for cu_idx in range(self._wss.num_capunit_of_capmod(cm_idx)):
+                        self._wss._get_capunit((cm_idx, cu_idx)).hard_reset()
+
+        if reset_awg or reset_cap:
+            # TODO: confirm the effectiveness.
+            logger.info("waiting for 15 seconds after hard-resetting wave subsystem")
+            time.sleep(15)
+
     def relinkup(
         self,
         *,
@@ -431,6 +475,7 @@ class Quel1BoxIntrinsic:
         use_204b: bool = False,
         use_bg_cal: bool = True,
         skip_init: bool = False,
+        hard_reset_wss: bool = False,
         background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
@@ -467,6 +512,9 @@ class Quel1BoxIntrinsic:
                 ignore_lock_failure_of_lmx2594=ignore_lock_failure_of_lmx2594,
             )
 
+        if hard_reset_wss:
+            self.hardreset_wss_units(mxfes_to_linkup, suppress_warning=True)
+
         linkup_ok: Dict[int, bool] = {}
         for mxfe in mxfes_to_linkup:
             linkup_ok[mxfe] = self.linkupper.linkup_and_check(
@@ -488,9 +536,11 @@ class Quel1BoxIntrinsic:
 
         link_health: Dict[int, bool] = {}
         for mxfe_idx in self.css.get_all_mxfes():
-            link_health[mxfe_idx] = self.css.check_link_status(
+            link_health[mxfe_idx], log_level, diag = self.css.check_link_status(
                 mxfe_idx, False, ignore_crc_error=(mxfe_idx in ignore_crc_error_of_mxfe)
             )
+            logger.log(log_level, diag)
+
         return link_health
 
     def _get_rchannel_from_runit(self, group: int, rline: str, runit: int) -> int:

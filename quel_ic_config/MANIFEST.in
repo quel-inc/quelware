@@ -1,6 +1,4 @@
-include adi_ad9081_v106/*.h
-include adi_ad9081_v106/LICENSES.pdf
-include adi_ad9082_v161/ad9082_api/ad9082/inc/*.h
-include adi_ad9082_v161/ad9082_api/adi_inc/*.h
-include adi_ad9082_v161/ad9082_api/adi_utils/inc/*.h
-include adi_ad9082_v161/ad9082_api/LICENSES.pdf
+include adi_ad9082_v170/ad9082_api/ad9082/inc/*.h
+include adi_ad9082_v170/ad9082_api/adi_inc/*.h
+include adi_ad9082_v170/ad9082_api/adi_utils/inc/*.h
+include adi_ad9082_v170/ad9082_api/LICENSES.pdf

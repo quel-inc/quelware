@@ -143,10 +143,13 @@ elif [ "${test_with_device}" == "8r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py
 elif [ "${test_with_device}" == "11r" ]; then
-  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype quel1se-fujitsu11-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.164 --boxtype quel1se-fujitsu11-b
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/fujitsu11
 elif [ "${test_with_device}" == "N" ]; then
   pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec
+elif [ "${test_with_device}" == "Nr" ]; then
+  pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec --ignore=tests/with_devices/nec/test_wave_generation_quel1-nec.py
 elif [ "${test_with_device}" == "Ta" ]; then
   pytest --log-cli-level INFO --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/tempctrl/test_tempctrl_apis.py
 elif [ "${test_with_device}" == "Tr" ]; then

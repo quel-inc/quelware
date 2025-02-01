@@ -23,7 +23,329 @@ logger = logging.getLogger()
 
 
 DEFAULT_PULSE_DETECTION_THRESHOLD: Final[float] = 2000.0
+DEFAULT_PULSE_DETECTION_THRESHOLD_FUJITSU11_MON: Final[float] = 1200.0
 
+
+CAP_VPORT_SETTINGS_QUEL1SE_FUJITSU11_A: dict[str, dict[str, VportSettingType]] = {
+    "READ0": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 0,  # (0, "r")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 8.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [2048],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD,
+        },
+    },
+    "READ1": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 7,  # (1, "r")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 8.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [2048],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD,
+        },
+    },
+    "MON0": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 5,  # (0, "m")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [2048],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD_FUJITSU11_MON,
+        },
+    },
+    "MON1": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 12,  # (1, "m")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [2048],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD_FUJITSU11_MON,
+        },
+    },
+}
+
+CAP_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B: dict[str, dict[str, VportSettingType]] = {
+    "MON0": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 5,  # (0, "m")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [3072],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD_FUJITSU11_MON,
+        },
+    },
+    "MON1": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 12,  # (1, "m")
+            "runits": {0},
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "rfswitch": "loop",
+        },
+        "simple_parameters": {
+            0: {
+                "num_delay_sample": 0,
+                "num_integration_section": 1,
+                "num_capture_samples": [3072],
+                "num_blank_samples": [4],
+            },
+        },
+        "check": {
+            "pulse_threshold": DEFAULT_PULSE_DETECTION_THRESHOLD_FUJITSU11_MON,
+        },
+    },
+}
+
+GEN_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B: dict[str, dict[str, VportSettingType]] = {
+    "GEN01": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 1,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 128,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (0, 0),
+        },
+    },
+    "GEN02": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 2,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 64,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (512, 0),
+        },
+    },
+    "GEN03": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 3,
+            "channel": 0,
+        },
+        "config": {
+            # "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 128,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (1024, 0),
+        },
+    },
+    "GEN04": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 4,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 64,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (1536, 0),
+        },
+    },
+    "GEN08": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 8,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 128,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (0, 0),
+        },
+    },
+    "GEN09": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 9,
+            "channel": 0,
+        },
+        "config": {
+            # "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 64,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (512, 0),
+        },
+    },
+    "GEN10": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 10,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 128,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (1024, 0),
+        },
+    },
+    "GEN11": {
+        "create": {
+            "boxname": "BOX0",
+            "port": 11,
+            "channel": 0,
+        },
+        "config": {
+            "lo_freq": 11.5e9,
+            "cnco_freq": 1.5e9,
+            "fnco_freq": 0.0,
+            "fullscale_current": 40000,
+            "sideband": "L",
+            "vatt": 0xC00,
+        },
+        "cw_parameter": {
+            "amplitude": 32767.0,
+            "num_wave_sample": 64,
+            "num_repeats": (1, 1),
+            "num_wait_samples": (1536, 0),
+        },
+    },
+}
 
 CAP_VPORT_SETTINGS_QUEL1A: dict[str, dict[str, VportSettingType]] = {
     "READ0": {
@@ -1103,6 +1425,28 @@ class LoopbackTest:
 
 
 TEST_CONFIGS = {
+    Quel1BoxType.QuEL1SE_FUJITSU11_TypeA: lambda cms, bxs: LoopbackTest(
+        cms,
+        bxs,
+        CAP_VPORT_SETTINGS_QUEL1SE_FUJITSU11_A,
+        GEN_VPORT_SETTINGS_QUEL1A,
+        {
+            "READ0": (1,),
+            "MON0": (2, 3, 4),
+            "READ1": (8,),
+            "MON1": (9, 10, 11),
+        },
+    ),
+    Quel1BoxType.QuEL1SE_FUJITSU11_TypeB: lambda cms, bxs: LoopbackTest(
+        cms,
+        bxs,
+        CAP_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B,
+        GEN_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B,
+        {
+            "MON0": (1, 2, 3, 4),
+            "MON1": (8, 9, 10, 11),
+        },
+    ),
     Quel1BoxType.QuEL1_TypeA: lambda cms, bxs: LoopbackTest(
         cms,
         bxs,

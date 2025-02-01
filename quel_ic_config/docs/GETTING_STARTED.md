@@ -130,18 +130,20 @@ quel_ic_config のパッケージにはいくつかの便利なシェルコマ�
 識別子の一覧は以下のとおりである。
 各モデルの詳細は[README.md](../README.md)を参照いただきたい。
 
-| モデル名                 | 識別子              | 出荷番号（ブロック番号-個体番号)                 |
-|----------------------|------------------|-----------------------------------|
-| QuEL-1 最初期型          | `qube-riken-a`   | QuEL-1 #1-xx                      |
-| QuEL-1 標準型 タイプA機     | 　`quel1-a`　      | QuEL-1 #2-xx, #3-xx, #5-xx, #6-xx |
-| QuEL-1 標準型 タイプB機     | `quel1-b`        | 同上                                | 
-| QuEL-1 7GHzモデル       | `quel1-a`        | QuEL-1 #4-xx                      |
-| QuEL-1 NECモデル        | `quel1-nec`      | QuEL-1 #7-xx                      |
-| QuEL-1 SE Riken-8モデル | `quel1se-riken8` | QuEL-1 SE #1-xx, #2-xx, #3-xx     |
-| QuBE OU タイプA機        | `qube-ou-a`      | QuBE OU #1-xx, #2-xx, #3-xx       | 
-| QuBE OU タイプB機        | `qube-ou-b`      | 同上                                | 
-| QuBE Riken タイプA機     | `qube-riken-a`   | QuBE Riken #1-xx                  | 
-| QuBE Riken タイプB機     | `qube-riken-b`   | 同上                                | 
+| モデル名                          | 識別子                   | 出荷番号（ブロック番号-個体番号)                           |
+|-------------------------------|-----------------------|---------------------------------------------|
+| QuEL-1 最初期型                   | `qube-riken-a`        | QuEL-1 #1-xx                                |
+| QuEL-1 標準型 タイプA機              | `quel1-a`　           | QuEL-1 #2-xx, #3-xx, #5-xx, #6-xx           |
+| QuEL-1 標準型 タイプB機              | `quel1-b`             | 同上                                          | 
+| QuEL-1 7GHzモデル                | `quel1-a`             | QuEL-1 #4-xx                                |
+| QuEL-1 NECモデル                 | `quel1-nec`           | QuEL-1 #7-xx                                |
+| QuEL-1 SE Riken-8モデル          | `quel1se-riken8`      | QuEL-1 SE #1-xx, #2-xx, #3-xx, #5-xx, #6-xx |
+| QuEL-1 SE Fujitus-11モデル タイプA機 | `quel1se-fujitsu11-a` | QuEL-1 SE #4-xx                             |
+| QuEL-1 SE Fujitus-11モデル タイプB機 | `quel1se-fujitsu11-b` | 同上                                          |
+| QuBE OU タイプA機                 | `qube-ou-a`           | QuBE OU #1-xx, #2-xx, #3-xx                 | 
+| QuBE OU タイプB機                 | `qube-ou-b`           | 同上                                          | 
+| QuBE Riken タイプA機              | `qube-riken-a`        | QuBE Riken #1-xx                            | 
+| QuBE Riken タイプB機              | `qube-riken-b`        | 同上                                          | 
 
 タイプAとタイプBの識別は、本体背面パネルに貼ってあるシールを確認していただきたい。
 タイプB機はブロック番号に続く個体番号が3の倍数である場合が多いが、例外（たとえば、QuBE OU #3-02はタイプB）もあるので注意が必要だ。
@@ -297,7 +299,7 @@ QuEL-1 Type-A は4つの入力ポートを持つので、各入力ポートご�
 
 この後、ポート7(read-in)、ポート12（monitor-in)　と続くが同様のデータが得られる。
 
-###### quel1se_check_all_internal_loopbacks.py
+###### quel1se_riken8_check_all_internal_loopbacks.py
 上記のスクリプトの QuEL-1 SE RIKEN-8 版である。
 使い方は基本同じだが、`--boxtype`を与える必要はない。
 QuEL-1 SE RIKEN-8 はそれまでのQuEL-1 と異なり、モニタ系の入力にLNAを持たないので、モニタ系でキャプチャした信号の振幅がリード系の 1/10 程度になる。
@@ -490,3 +492,6 @@ task.result()  # 波形生成をキャンセルしたので、CancelledError の
 ## 次のステップ
 [scriptディレクトリ](../scripts) にある他のスクリプトも実験コードを書く参考になると思う。
 これらのスクリプトの内容について、 [こちら](./HOW_TO_USE_EXAMPLES.md)に詳しい説明があるので参照されたい。
+
+また、jupyterlab 上での使用については、[チュートリアル](https://github.com/quel-inc/quelware/blob/main/quel_tutorial/README.md) 
+が参考になる。

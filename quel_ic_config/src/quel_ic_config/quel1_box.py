@@ -285,6 +285,8 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8: _PORT2LINE_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _PORT2LINE_QuEL1SE_FUJITSU11_TypeA,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _PORT2LINE_QuEL1SE_FUJITSU11_TypeB,
+        Quel1BoxType.QuEL1SE_FUJITSU11_TypeA: _PORT2LINE_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11_TypeB: _PORT2LINE_QuEL1SE_FUJITSU11_TypeB,
     }
 
     _LOOPBACK: Final[Dict[Quel1BoxType, Dict[Quel1PortType, Set[Quel1PortType]]]] = {
@@ -298,7 +300,9 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_RIKEN8DBG: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_RIKEN8: _LOOPBACK_QuEL1SE_RIKEN8,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA: _LOOPBACK_QuEL1SE_FUJITSU11_TypeA,
+        Quel1BoxType.QuEL1SE_FUJITSU11_TypeA: _LOOPBACK_QuEL1SE_FUJITSU11_TypeA,
         Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeB: _LOOPBACK_QuEL1SE_FUJITSU11_TypeB,
+        Quel1BoxType.QuEL1SE_FUJITSU11_TypeB: _LOOPBACK_QuEL1SE_FUJITSU11_TypeB,
     }
 
     __slots__ = (
@@ -448,6 +452,7 @@ class Quel1Box:
         use_204b: bool = False,
         use_bg_cal: bool = True,
         skip_init: bool = False,
+        hard_reset_wss: bool = False,
         background_noise_threshold: Union[float, None] = None,
         ignore_crc_error_of_mxfe: Union[Collection[int], None] = None,
         ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
@@ -464,6 +469,7 @@ class Quel1Box:
             use_204b=use_204b,
             use_bg_cal=use_bg_cal,
             skip_init=skip_init,
+            hard_reset_wss=hard_reset_wss,
             background_noise_threshold=background_noise_threshold,
             ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
             ignore_access_failure_of_adrf6780=ignore_access_failure_of_adrf6780,

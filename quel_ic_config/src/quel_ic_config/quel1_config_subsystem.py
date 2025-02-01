@@ -13,14 +13,15 @@ from quel_ic_config.exstickge_sock_client import (
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd5328Mixin,
     Quel1ConfigSubsystemAd6780Mixin,
-    Quel1ConfigSubsystemAd9082Mixin,
     Quel1ConfigSubsystemLmx2594Mixin,
     Quel1ConfigSubsystemNoRfswitch,
     Quel1ConfigSubsystemRfswitch,
     Quel1ConfigSubsystemRoot,
+    Quel1GenericConfigSubsystemAd9082Mixin,
 )
 from quel_ic_config.quel1_config_subsystem_tempctrl import Quel1ConfigSubsystemTempctrlMixin
 from quel_ic_config.quel_config_common import _DEFAULT_LOCK_DIRECTORY, Quel1BoxType
+from quel_ic_config.quel_ic import Ad9082Generic
 
 _DEFAULT_SOCKET_SERVER_DETECTION_TIMEOUT: Final[float] = 15.0  # [s]
 
@@ -104,6 +105,20 @@ class ExstickgeSockClientQuel1WithFileLock(AbstractExstickgeSockClientQuel1):
         t = FileLockKeeper(target=self._target, lock_directory=self._lock_directory)
         t.activate()
         return t
+
+
+class Ad9082Quel1(Ad9082Generic):
+    def _reset_pin_ctrl_cb(self, level: int) -> Tuple[bool]:
+        logger.warning("hardware reset of AD9082 is not implemented")
+        return (False,)
+
+
+class Quel1ConfigSubsystemAd9082Mixin(Quel1GenericConfigSubsystemAd9082Mixin):
+    def _construct_ad9082(self):
+        self._ad9082: tuple[Ad9082Generic, ...] = tuple(
+            Ad9082Quel1(self._proxy, idx) for idx in range(self._NUM_IC["ad9082"])
+        )
+        self.allow_dual_modulus_nco = True
 
 
 class QuelMeeBoardConfigSubsystem(
@@ -225,12 +240,19 @@ class QuelMeeBoardConfigSubsystem(
                 f"QuEL-1 ({self._css_addr}) does not support hardware reset of AD9082-#{mxfe_idx}, "
                 "conducts software reset instead."
             )
+            hard_reset = False
             soft_reset = True
 
         self.ad9082[mxfe_idx].configure(
-            param["ad9082"][mxfe_idx], reset=soft_reset, use_204b=use_204b, use_bg_cal=use_bg_cal
+            param["ad9082"][mxfe_idx],
+            hard_reset=hard_reset,
+            soft_reset=soft_reset,
+            use_204b=use_204b,
+            use_bg_cal=use_bg_cal,
         )
-        return self.check_link_status(mxfe_idx, True, ignore_crc_error)
+        health, lglv, diag = self.check_link_status(mxfe_idx, True, ignore_crc_error)
+        logger.log(lglv, diag)
+        return health
 
     def reconnect_mxfe(
         self,
@@ -249,7 +271,9 @@ class QuelMeeBoardConfigSubsystem(
             ref_clk *= 4
 
         self.ad9082[mxfe_idx].reconnect(ref_clk)
-        return self.check_link_status(mxfe_idx, False, ignore_crc_error)
+        health, lglv, diag = self.check_link_status(mxfe_idx, False, ignore_crc_error)
+        logger.log(lglv, diag)
+        return health
 
     def dump_channel(self, group: int, line: int, channel: int) -> Dict[str, Any]:
         """dumping the current configuration of a transmitter channel.
