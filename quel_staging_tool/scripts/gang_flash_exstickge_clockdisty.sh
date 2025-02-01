@@ -15,6 +15,10 @@ function hs2_color_to_id {
     echo 210249B87FAE
   elif [ "$1" == "gry" ]; then
     echo 210249B87F93
+  elif [ "$1" == "org" ]; then
+    echo 210249B87FA8
+  elif [ "$1" == "prp" ]; then
+    echo 210249B2B9DE
   else
     echo xxx
   fi
@@ -53,6 +57,22 @@ function program {
 
 function select_quel1se {
   case "$1" in
+  "014")
+    # RIKEN 202501 (updating existing one)
+    program 00-1B-1A-EE-01-30 10.6.0.14 "$2"
+    ;;
+  "015")
+    # NTT 202501 (improved hardware)
+    program 00-1B-1A-EE-01-56 10.6.0.15 "$2"
+    ;;
+  "017")
+    # RIKEN 202501 (improved hardware)
+    program 00-1B-1A-EE-01-58 10.6.0.17 "$2"
+    ;;
+  "021")
+    # FUJITSU 202502 (improved hardware)
+    program 00-1B-1A-EE-01-7A 10.6.0.21 "$2"
+    ;;
   "024")
     # NEC
     program 00-1B-1A-EE-01-8C	10.6.0.24 "$2"

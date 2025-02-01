@@ -15,6 +15,10 @@ function hs2_color_to_id {
     echo 210249B87FAE
   elif [ "$1" == "gry" ]; then
     echo 210249B87F93
+  elif [ "$1" == "org" ]; then
+    echo 210249B87FA8
+  elif [ "$1" == "prp" ]; then
+    echo 210249B2B9DE
   else
     echo xxx
   fi
@@ -329,6 +333,48 @@ function select_quel1se {
     ;;
   "164")
     program 00-1B-1A-EE-01-EE 10.5.0.164 F11B "$2"
+    ;;
+  "165")
+    program 00-1B-1A-EE-01-F1 10.5.0.165 F11B "$2"
+    ;;
+  "166")
+    program 00-1B-1A-EE-01-F2 10.5.0.166 R8 "$2"
+    ;;
+  "167")
+    program 00-1B-1A-EE-01-F3 10.5.0.167 R8 "$2"
+    ;;
+  "168")
+    program 00-1B-1A-EE-01-F4 10.5.0.168 R8 "$2"
+    ;;
+  "169")
+    program 00-1B-1A-EE-01-F5 10.5.0.169 R8 "$2"
+    ;;
+  "170")
+    program 00-1B-1A-EE-01-F6 10.5.0.170 R8 "$2"
+    ;;
+  "171")
+    program 00-1B-1A-EE-01-F7 10.5.0.171 R8 "$2"
+    ;;
+  "172")
+    program 00-1B-1A-EE-01-F8 10.5.0.172 R8 "$2"
+    ;;
+  "173")
+    program 00-1B-1A-EE-01-F9 10.5.0.173 R8 "$2"
+    ;;
+  "174")
+    program 00-1B-1A-EE-01-FA 10.5.0.174 R8 "$2"
+    ;;
+  "175")
+    program 00-1B-1A-EE-01-FB 10.5.0.175 R8 "$2"
+    ;;
+  "176")
+    program 00-1B-1A-EE-01-92 10.5.0.176 R8 "$2"
+    ;;
+  "177")
+    program 00-1B-1A-EE-01-93 10.5.0.177 R8 "$2"
+    ;;
+  "178")
+    program 00-1B-1A-EE-01-94 10.5.0.178 R8 "$2"
     ;;
   "000")
     program 00-1B-1A-EE-01-4A 192.168.192.4 R8 "$2"
