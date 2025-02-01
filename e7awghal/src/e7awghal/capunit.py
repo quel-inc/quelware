@@ -14,7 +14,7 @@ from e7awghal.abstract_register import AbstractFpgaReg, b_1bf_bool, p_1bf_bool
 from e7awghal.capctrl import CapCtrlSimpleMulti
 from e7awghal.capdata import CapIqDataReader
 from e7awghal.capparam import CapSection
-from e7awghal.classification import calc_abc
+from e7awghal.classification import calc_abc_main_sub
 from e7awghal.common_defs import _CAP_MINIMUM_ALIGN, _DEFAULT_POLLING_PERIOD, _DEFAULT_TIMEOUT, E7awgHardwareError
 from e7awghal.e7awg_memoryobj import E7awgAbstractMemoryManager, E7awgMemoryObj
 from e7awghal.hbmctrl import HbmCtrl
@@ -410,15 +410,10 @@ class _CapParamClassificationRegFile(BaseModel, validate_assignment=True):
     @classmethod
     def fromcapparam(cls, cp: AbstractCapParam[CapSection]) -> "_CapParamClassificationRegFile":
         r = cls()
-        r.p0 = calc_abc(
+        r.p0, r.p1 = calc_abc_main_sub(
             cp.classification_param.pivot_x,
             cp.classification_param.pivot_y,
             cp.classification_param.angle_main,
-            cp.total_exponent_offset(),
-        )
-        r.p1 = calc_abc(
-            cp.classification_param.pivot_x,
-            cp.classification_param.pivot_y,
             cp.classification_param.angle_sub,
             cp.total_exponent_offset(),
         )

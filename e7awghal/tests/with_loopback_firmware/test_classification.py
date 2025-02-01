@@ -92,7 +92,7 @@ def calc_class(us: npt.NDArray[np.complex64], deg_main: float, deg_sub: float):
     e_main = np.array((np.cos(np.deg2rad(deg_main)), np.sin(np.deg2rad(deg_main))))
     e_sub = np.array((np.cos(np.deg2rad(deg_sub)), np.sin(np.deg2rad(deg_sub))))
     #              2e=0s   0e=1s   1e=3s    3e=2s
-    vs = np.array([e_main, -e_sub, -e_main, e_sub])
+    vs = np.array([e_main, e_sub, -e_main, -e_sub])
     return np.array([_calc_class_single(np.array([u.real, u.imag]), vs) for u in us], dtype=np.uint8)
 
 
@@ -127,13 +127,13 @@ def verify_class(
 @pytest.mark.parametrize(
     ["dataname", "angle0", "angle1", "shift_i", "shift_q"],
     [
-        ("circle", 0, -90, 0, 0),
-        ("circle", 23, -19, 0, 0),
-        ("circle", 23, 47, 0, 0),
-        ("shifted_circle", 0, -90, 6319, -8211),
-        ("shifted_circle", -50, -95, 6319, -8211),
-        ("shifted_circle", 0, -90, 0, 0),
-        ("shifted_circle", -120, 165, 0, 0),
+        ("circle", 0, 90, 0, 0),
+        ("circle", 23, 161, 0, 0),
+        ("circle", 23, -133, 0, 0),
+        ("shifted_circle", 0, 90, 6319, -8211),
+        ("shifted_circle", -50, 85, 6319, -8211),
+        ("shifted_circle", 0, 90, 0, 0),
+        ("shifted_circle", -120, -15, 0, 0),
     ],
 )
 def test_classification(proxy_au_cm_data, dataname: str, angle0: float, angle1: float, shift_i: float, shift_q: float):
@@ -152,10 +152,10 @@ def test_classification(proxy_au_cm_data, dataname: str, angle0: float, angle1: 
 @pytest.mark.parametrize(
     ["dataname", "angle0", "angle1", "shift_i", "shift_q"],
     [
-        ("circle", 23, -19, 0, 0),
-        ("shifted_circle", 0, -90, 0, 0),
-        ("shifted_circle", 23, 47, 0, 0),
-        ("shifted_circle", -120, 165, 0, 0),
+        ("circle", 23, 161, 0, 0),
+        ("shifted_circle", 0, 90, 0, 0),
+        ("shifted_circle", 23, -133, 0, 0),
+        ("shifted_circle", -120, -15, 0, 0),
     ],
 )
 def test_classification_with_cfir(
@@ -176,10 +176,10 @@ def test_classification_with_cfir(
 @pytest.mark.parametrize(
     ["dataname", "angle0", "angle1", "shift_i", "shift_q"],
     [
-        ("circle", 23, -19, 0, 0),
-        ("shifted_circle", 0, -90, 0, 0),
-        ("shifted_circle", 23, 47, 0, 0),
-        ("shifted_circle", -120, 165, 0, 0),
+        ("circle", 23, 161, 0, 0),
+        ("shifted_circle", 0, 90, 0, 0),
+        ("shifted_circle", 23, -133, 0, 0),
+        ("shifted_circle", -120, -15, 0, 0),
     ],
 )
 def test_classification_with_rfirs(

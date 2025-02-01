@@ -67,7 +67,7 @@ def calc_class(us: npt.NDArray[np.complex64], deg_main: float, deg_sub: float):
     e_main = np.array((np.cos(np.deg2rad(deg_main)), np.sin(np.deg2rad(deg_main))))
     e_sub = np.array((np.cos(np.deg2rad(deg_sub)), np.sin(np.deg2rad(deg_sub))))
     #              2e=0s   0e=1s   1e=3s    3e=2s
-    vs = np.array([e_main, -e_sub, -e_main, e_sub])
+    vs = np.array([e_main, e_sub, -e_main, -e_sub])
     return np.array([_calc_class_single(np.array([u.real, u.imag]), vs) for u in us], dtype=np.uint8)
 
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     """
     logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
-    proxy: AbstractQuel1Au50Hal = create_quel1au50hal_for_test(ipaddr_wss="10.1.0.74")
+    proxy: AbstractQuel1Au50Hal = create_quel1au50hal_for_test(ipaddr_wss="10.1.0.74", auth_callback=lambda: True)
     proxy.initialize()
 
     circle = np.exp(1j * np.pi * np.arange(256) / 128)
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     # case-21
     cp21: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
     cp21.classification_param.angle_main = 0
-    cp21.classification_param.angle_sub = -90
+    cp21.classification_param.angle_sub = 90
     cp21.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     rdr21 = au50loopback_reader(auidx, cmidx, cp21)
     cls21 = rdr21.as_class_list()[0][0]
@@ -146,21 +146,21 @@ if __name__ == "__main__":
     assert (cls21_1 >= 90.0).all() and (cls21_1 <= 180.0).all()
     assert (cls21_3 >= -180.0).all() and (cls21_3 <= -90.0).all()
     assert (cls21_2 >= -90.0).all() and (cls21_2 <= 0.0).all()
-    assert verify_class("case-21", cls21, circle, 0, -90)
+    assert verify_class("case-21", cls21, circle, 0, 90)
     clsd21 = rdr21.as_class_dict()["s0"][0]
     assert (cls21 == clsd21).all()
 
     # case-22
     cp22: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
     cp22.classification_param.angle_main = 23
-    cp22.classification_param.angle_sub = -19
+    cp22.classification_param.angle_sub = 161
     cp22.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls22 = au50loopback_class(auidx, cmidx, cp22)[0][0]
-    assert verify_class("case-22", cls22, circle, 23, -19)
+    assert verify_class("case-22", cls22, circle, 23, 161)
 
     # case-xx
     for mdeg in (0, 25, 62, 99, 112, 142, -179, -159, -126, -89, -50, -30):
-        for sdeg in (15, 45.1, 75, 105, 134, 165, -165, -134, -105, -75, -46, -15):
+        for sdeg in (-165, -134.9, -105, -75, -46, -15, 15, 46, 75, 105, 134, 165):
             # Notes: mismatch at edge happens at deg is either of 45, 135, -45, or -135.
             cpxx: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
             cpxx.classification_param.angle_main = mdeg
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # case-24
     cp24: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
     cp24.classification_param.angle_main = 23
-    cp24.classification_param.angle_sub = -19
+    cp24.classification_param.angle_sub = 161
     cp24.sections.append(CapSection(name="s0", num_capture_word=16, num_blank_word=16))
     cp24.sections.append(CapSection(name="s1", num_capture_word=16, num_blank_word=16))
     rdr24 = au50loopback_reader(auidx, cmidx, cp24)
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     # case-26
     cp26: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
     cp26.classification_param.angle_main = 23
-    cp26.classification_param.angle_sub = -19
+    cp26.classification_param.angle_sub = 161
     cp26.sections.append(CapSection(name="s0", num_capture_word=9, num_blank_word=2))
     cp26.sections.append(CapSection(name="s1", num_capture_word=14, num_blank_word=39))
     rdr26 = au50loopback_reader(auidx, cmidx, cp26)
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     # case-28
     cp28: CapParam = CapParam(num_wait_word=0, num_repeat=2, classification_enable=True)
     cp28.classification_param.angle_main = 23
-    cp28.classification_param.angle_sub = -19
+    cp28.classification_param.angle_sub = 161
     cp28.sections.append(CapSection(name="s0", num_capture_word=16, num_blank_word=16))
     rdr28 = au50loopback_reader(auidx, cmidx, cp28)
     cls28 = rdr28.as_class_list()
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     # case-30
     cp30: CapParam = CapParam(num_wait_word=0, num_repeat=2, classification_enable=True)
     cp30.classification_param.angle_main = 23
-    cp30.classification_param.angle_sub = -19
+    cp30.classification_param.angle_sub = 161
     cp30.sections.append(CapSection(name="s0", num_capture_word=17, num_blank_word=15))
     rdr30 = au50loopback_reader(auidx, cmidx, cp30)
     cls30 = rdr30.as_class_list()
@@ -269,16 +269,17 @@ if __name__ == "__main__":
     # case-32
     cp32: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
     cp32.classification_param.angle_main = 0
-    cp32.classification_param.angle_sub = -90
+    cp32.classification_param.angle_sub = 90
     cp32.classification_param.pivot_x = 6789
     cp32.classification_param.pivot_y = -9876
     cp32.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls32 = au50loopback_class(auidx, cmidx, cp32)[0][0]
-    assert verify_class("case-32", cls32, d31, 0, -90, 6789, -9876)
+    # edge mismatch happens at 64th sample (between class 0 and 1)
+    assert verify_class("case-32", cls32, d31, 0, 90, 6789, -9876)
 
     # case-yy
     for mdeg in (9, 132, -159, -25):
-        for sdeg in (1, 93, -160, -46):
+        for sdeg in (179, -87, 20, -134):
             for px in (-12000.1, -2609, 4305, 13033):
                 for py in (-20013.2, -8222.2, 613, 15201):
                     cpyy: CapParam = CapParam(num_wait_word=0, num_repeat=1, classification_enable=True)
@@ -293,34 +294,37 @@ if __name__ == "__main__":
     # case-33
     cp33: CapParam = CapParam(num_wait_word=0, num_repeat=1, complexfir_enable=True, classification_enable=True)
     cp33.classification_param.angle_main = 0
-    cp33.classification_param.angle_sub = -90
+    cp33.classification_param.angle_sub = 90
     cp33.classification_param.pivot_x = 6789
     cp33.classification_param.pivot_y = -9876
     cp33.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls33 = au50loopback_class(auidx, cmidx, cp33)[0][0]
-    assert verify_class("case-33", cls33, d31, 0, -90, 6789, -9876)
+    # edge mismatch happens at 64th sample (between class 0 and 1)
+    assert verify_class("case-33", cls33, d31, 0, 90, 6789, -9876)
 
     # case-34
     cp34: CapParam = CapParam(num_wait_word=0, num_repeat=1, realfirs_enable=True, classification_enable=True)
     cp34.classification_param.angle_main = 0
-    cp34.classification_param.angle_sub = -90
+    cp34.classification_param.angle_sub = 90
     cp34.classification_param.pivot_x = 6789
     cp34.classification_param.pivot_y = -9876
     cp34.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls34 = au50loopback_class(auidx, cmidx, cp34)[0][0]
-    assert verify_class("case-34", cls34, d31, 0, -90, 6789, -9876)
+    # edge mismatch happens at 64th sample (between class 0 and 1)
+    assert verify_class("case-34", cls34, d31, 0, 90, 6789, -9876)
 
     # case-35
     cp35: CapParam = CapParam(
         num_wait_word=0, num_repeat=1, complexfir_enable=True, realfirs_enable=True, classification_enable=True
     )
     cp35.classification_param.angle_main = 0
-    cp35.classification_param.angle_sub = -90
+    cp35.classification_param.angle_sub = 90
     cp35.classification_param.pivot_x = 6789
     cp35.classification_param.pivot_y = -9876
     cp35.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls35 = au50loopback_class(auidx, cmidx, cp35)[0][0]
-    assert verify_class("case-35", cls35, d31, 0, -90, 6789, -9876)
+    # edge mismatch happens at 64th sample (between class 0 and 1)
+    assert verify_class("case-35", cls35, d31, 0, 90, 6789, -9876)
 
     # case-36 (reference)
     cp36: CapParam = CapParam(num_wait_word=0, num_repeat=1, decimation_enable=True)
@@ -331,9 +335,10 @@ if __name__ == "__main__":
     # case-37
     cp37: CapParam = CapParam(num_wait_word=0, num_repeat=1, decimation_enable=True, classification_enable=True)
     cp37.classification_param.angle_main = 0
-    cp37.classification_param.angle_sub = -90
+    cp37.classification_param.angle_sub = 90
     cp37.classification_param.pivot_x = 6789
     cp37.classification_param.pivot_y = -9876
     cp37.sections.append(CapSection(name="s0", num_capture_word=64, num_blank_word=1))
     cls37 = au50loopback_class(auidx, cmidx, cp37)[0][0]
-    assert verify_class("case-37", cls37, d36, 0, -90, 6789, -9876)
+    # edge mismatch happens at 16th sample (between class 0 and 1)
+    assert verify_class("case-37", cls37, d36, 0, 90, 6789, -9876)

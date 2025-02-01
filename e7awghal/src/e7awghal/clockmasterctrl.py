@@ -57,9 +57,11 @@ class ClockmasterCtrl:
         rpl = self._udprw.send_command(cmd)
         return struct.unpack("<Q", rpl.payload)[0]
 
-    def kick_sync(self, boxes: set[_SyncInterface]) -> None:
+    def kick_sync(self, boxes: set[_SyncInterface]) -> int:
         mode = E7awgSimple64PacketMode.MCLK_SYNC_KICK
         cmd = E7awgSimple64OutgoingPacket(mode=mode, num_payload_bytes=len(boxes) * 8)
         for i, box in enumerate(boxes):
             cmd.payload[i * 8 : (i + 1) * 8] = struct.pack(">LL", int(box.ipaddr), box.port)
-        self._udprw.send_command(cmd)
+        rpl = self._udprw.send_command(cmd)
+        # Notes: the format of reply packet is identical to MCLK_CNTR_READ, although users don't usually need it.
+        return struct.unpack("<Q", rpl.payload)[0]
