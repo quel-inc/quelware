@@ -34,18 +34,20 @@ quel_tutorial の実行には Visual Studio (VS) Code を使用することを�
 
 - [0章: 制御装置を使ってみる](./0_Setup/)
 - [1章: Rabi 振動の観測](./1_Rabi_Oscillations/)
+- [2章: 複数量子ビットの Rabi 振動の観測](./2_Multi_Qubit_Rabi_Oscillations/)
 
 ## 対応モデル
 
-本チュートリアルが対応している制御装置のモデルは、以下の2種類です:
-- `QuEL-1 Type-A`
-- `QuEL-1 SE`
+本チュートリアルが対応している制御装置のモデルは、以下のテーブルの通りです。
+各チュートリアルコースのサンプルコードを理解するためには、対象となる制御装置モデルの入出力ポートや装置構成に関する知識が必要です。
+詳細については、必要に応じて以下のドキュメントを参照してください。
 
-各チュートリアルコースのサンプルコードを理解するためには、対象となる制御装置モデルの入出力ポートや装置構成に関する知識が必要です。詳細については、必要に応じて以下のドキュメントを参照してください。
 
-- [`QuEL-1 Type-A` のドキュメント](./model/quel1.md)
-- [`QuEL-1 SE` のドキュメント](https://github.com/quel-inc/quelware/blob/main/reference_manuals/Quel1seRiken8ReferenceManual.md)
-
+| **モデル** | **ドキュメント** |
+|---------------------------|-----------------------------|
+| **QuEL-1 Type-A** | [QuEL-1 Type-A のドキュメント](./model/quel1.md) |
+| **QuEL-1 SE 2-8 GHz モデル** | [QuEL-1 SE 2-8 GHz モデルのドキュメント](https://github.com/quel-inc/quelware/blob/main/reference_manuals/Quel1seRiken8ReferenceManual.md) |
+| **QuEL-1 SE 7-11 GHz モデル Type-A** | [QuEL-1 SE 7-11 GHz モデル Type-A のドキュメント](https://github.com/quel-inc/quelware/blob/main/reference_manuals/Quel1seFujitsu11ReferenceManual.md)|
 
 ## 謝意
 

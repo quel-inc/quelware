@@ -5,12 +5,17 @@
 
 ## ファイル一覧
 
-- [`quel1.ipynb`](./quel1.ipynb): QuEL-1 用のチュートリアル
-- [`quel1se.ipynb`](./quel1se.ipynb): QuEL-1 SE 用のチュートリアル
-- [`port_config_quel1.json`](./port_config_quel1.json): QuEL-1 用のポート設定情報
-- [`port_config_quel1se.json`](./port_config_quel1se.json): QuEL-1 SE 用のポート設定情報
 
-また、[`common`](./common/) には、チュートリアルの実行に必要な補助関数を含む Python モジュールが格納されています。
+| **モデル**              | **関連ファイル**             | **説明**                             |
+|---------------------------|-----------------------------|--------------------------------------|
+| **QuEL-1 Type-A**               | [`quel1.ipynb`](./quel1.ipynb)              | チュートリアル用 Jupyter notebook ファイル |
+|                           | [`port_config_quel1.json`](./port_config_quel1.json)   | ポート設定情報                       |
+| **QuEL-1 SE 2-8 GHz モデル** | [`quel1se8.ipynb`](./quel1se8.ipynb)           | チュートリアル用 Jupyter notebook ファイル |
+|                           | [`port_config_quel1se8.json`](./port_config_quel1se8.json)| ポート設定情報                       |
+| **QuEL-1 SE 7-11 GHz モデル Type-A** | [`quel1se11.ipynb`](./quel1se11.ipynb)          | チュートリアル用 Jupyter notebook ファイル |
+|                           | [`port_config_quel1se11.json`](./port_config_quel1se11.json)| ポート設定情報                      |
+
+[`common`](./common/) には、チュートリアルの実行に必要な補助関数を含む Python モジュールが格納されています。
 
 ## はじめに
 
@@ -35,5 +40,6 @@
 使用するモデルに対応した資料を開いてください。
 
 - [`quel1.ipynb`](./quel1.ipynb): QuEL-1 用のチュートリアル
-- [`quel1se.ipynb`](./quel1se.ipynb): QuEL-1 SE 用のチュートリアル
+- [`quel1se8.ipynb`](./quel1se8.ipynb): QuEL-1 SE 2-8 GHz モデル用のチュートリアル
+- [`quel1se11.ipynb`](./quel1se11.ipynb): QuEL-1 SE 7-11 GHz モデル用のチュートリアル
 
