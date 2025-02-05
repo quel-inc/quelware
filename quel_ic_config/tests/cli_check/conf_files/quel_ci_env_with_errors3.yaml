@@ -1,0 +1,4 @@
+version: 1
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74

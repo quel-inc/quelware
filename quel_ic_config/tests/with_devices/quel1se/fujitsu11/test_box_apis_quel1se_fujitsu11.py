@@ -19,7 +19,26 @@ TEST_SETTINGS = (
             "ipaddr_wss": "10.1.0.157",
             "ipaddr_sss": "10.2.0.157",
             "ipaddr_css": "10.5.0.157",
-            "boxtype": Quel1BoxType.fromstr("x-quel1se-fujitsu11-a"),
+            "boxtype": Quel1BoxType.fromstr("quel1se-fujitsu11-a"),
+        },
+        "linkup_config": {
+            "config_root": None,
+            "config_options": [],
+            "mxfes_to_linkup": (0, 1),
+            "use_204b": False,
+        },
+        "port_availability": {
+            "unavailable": [],
+            "via_monitor_out": [],
+        },
+        "linkup": False,
+    },
+    {
+        "box_config": {
+            "ipaddr_wss": "10.1.0.164",
+            "ipaddr_sss": "10.2.0.164",
+            "ipaddr_css": "10.5.0.164",
+            "boxtype": Quel1BoxType.fromstr("quel1se-fujitsu11-b"),
         },
         "linkup_config": {
             "config_root": None,
@@ -64,8 +83,16 @@ def test_just_run_apis(box):
         box.prepare_for_emission({(1, 1)})
     with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #00-1"):
         box.prepare_for_emission({((0, 1), 1)})
-    with pytest.raises(ValueError, match="port-#00 is not an output port"):
-        box.prepare_for_emission({(0, 0)})
+
+    if box.boxtype == "quel1se-fujitsu11-a":
+        with pytest.raises(ValueError, match="port-#00 is not an output port"):
+            box.prepare_for_emission({(0, 0)})
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.prepare_for_emission({(0, 0)})
+    else:
+        assert False
+
     with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #06"):
         box.prepare_for_emission({(6, 0)})
     with pytest.raises(TypeError):
@@ -74,17 +101,33 @@ def test_just_run_apis(box):
         box.prepare_for_emission("wrong type")  # type: ignore
 
     # Notes: monitor-out port is not included.  TODO: reconsider this design to improve error readability of error.
-    for p_sp in (0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12):
-        p, sp = box._decode_port(p_sp)
-        assert p == p_sp
-        assert sp == 0
+    if box.boxtype == "quel1se-fujitsu11-a":
+        for p_sp in (0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12):
+            p, sp = box._decode_port(p_sp)
+            assert p == p_sp
+            assert sp == 0
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        for p_sp in (1, 2, 3, 4, 5, 8, 9, 10, 11, 12):
+            p, sp = box._decode_port(p_sp)
+            assert p == p_sp
+            assert sp == 0
+    else:
+        assert False
 
     with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-[ab]: #01-1"):
         p, sp = box._decode_port((1, 1))
 
     box.easy_stop_all()
-    with pytest.raises(ValueError, match="port-#00 is not an output port"):
-        box.easy_stop(port=0)
+
+    if box.boxtype == "quel1se-fujitsu11-a":
+        with pytest.raises(ValueError, match="port-#00 is not an output port"):
+            box.easy_stop(port=0)
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.easy_stop(port=0)
+    else:
+        assert False
+
     box.easy_stop(port=1)
     with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #01-1"):
         box.easy_stop(port=1, subport=1)
@@ -181,7 +224,7 @@ def test_config_box_json(conffilename, ports_only, box):
                     assert False, f"unexpected key (='{k}') in the test data {conf0path}"
     elif box.boxtype == "quel1se-fujitsu11-b":
         # TODO: write tests when type-b box becomes available.
-        raise NotImplementedError()
+        pass
     else:
         assert False, f"an unexpected fixture: {box}"
 
@@ -207,25 +250,34 @@ def test_config_box_json_wrong(conffilename, msg, box):
 
 
 def test_config_box_abnormal(box):
-    if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
-        assert not box.config_validate_box({8: {"non-existent": 999}})
-        assert not box.config_validate_box({0: {"fullscale_current": 12000}})
-        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-a: #06"):
-            box.config_validate_box({6: {"fullscale_current": 12000}})
+    assert not box.config_validate_box({8: {"non-existent": 999}})
 
-        with pytest.raises(ValueError, match=re.escape("port-#08 is not an input port, not applicable")):
-            box.config_box(
-                {
-                    8: {
-                        "runits": {
-                            1: {"fnco_freq": 0.0},
-                            2: {"fnco_freq": 0.0},
-                            3: {"fnco_freq": 0.0},
-                            0: {"fnco_freq": 0.0},
-                        }
+    if box.boxtype == "quel1se-fujitsu11-a":
+        assert not box.config_validate_box({0: {"fullscale_current": 12000}})
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_validate_box({0: {"fullscale_current": 12000}})
+    else:
+        assert False
+
+    with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #06"):
+        box.config_validate_box({6: {"fullscale_current": 12000}})
+
+    with pytest.raises(ValueError, match=re.escape("port-#08 is not an input port, not applicable")):
+        box.config_box(
+            {
+                8: {
+                    "runits": {
+                        1: {"fnco_freq": 0.0},
+                        2: {"fnco_freq": 0.0},
+                        3: {"fnco_freq": 0.0},
+                        0: {"fnco_freq": 0.0},
                     }
                 }
-            )
+            }
+        )
+
+    if box.boxtype == "quel1se-fujitsu11-a":
         with pytest.raises(ValueError, match=r"port-#00 is not an output port, not applicable"):
             box.config_box({0: {"channels": {0: {"fnco_freq": 0.0}}}})
         assert not box.config_validate_box(
@@ -241,30 +293,61 @@ def test_config_box_abnormal(box):
             }
         )
         assert not box.config_validate_box({0: {"channels": {0: {"fnco_freq": 0.0}}}})
-
-        with pytest.raises(ValueError, match=r"invalid runit:2 for port-#05"):
-            box.config_box({5: {"runits": {2: {"fnco_freq": 0.0}}}})
-        with pytest.raises(ValueError, match=r"invalid runit:2 for port-#05"):
-            box.config_validate_box({5: {"runits": {2: {"fnco_freq": 0.0}}}})
-        assert not box.config_validate_box({5: {"runits": {0: {"non-existent": 0.0}}}})
-
-        with pytest.raises(ValueError, match=r"an invalid combination of port-#08, and channel:1"):
-            box.config_box({8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
-        assert not box.config_validate_box({9: {"channels": {0: {"non-existent": 0.0}}}})
-        with pytest.raises(ValueError, match=r"an invalid combination of port-#10, and channel:1"):
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_box({0: {"channels": {0: {"fnco_freq": 0.0}}}})
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #07"):
             box.config_validate_box(
-                {10: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
+                {
+                    7: {
+                        "runits": {
+                            1: {"fnco_freq": 1.0},
+                            2: {"fnco_freq": 2.0},
+                            3: {"fnco_freq": -1.0},
+                            0: {"fnco_freq": -2.0},
+                        }
+                    }
+                }
             )
+        with pytest.raises(ValueError, match="invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_validate_box({0: {"channels": {0: {"fnco_freq": 0.0}}}})
+    else:
+        assert False
 
+    with pytest.raises(ValueError, match=r"invalid runit:2 for port-#05"):
+        box.config_box({5: {"runits": {2: {"fnco_freq": 0.0}}}})
+    with pytest.raises(ValueError, match=r"invalid runit:2 for port-#05"):
+        box.config_validate_box({5: {"runits": {2: {"fnco_freq": 0.0}}}})
+    assert not box.config_validate_box({5: {"runits": {0: {"non-existent": 0.0}}}})
+
+    with pytest.raises(ValueError, match=r"an invalid combination of port-#08, and channel:1"):
+        box.config_box({8: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}})
+    assert not box.config_validate_box({9: {"channels": {0: {"non-existent": 0.0}}}})
+    with pytest.raises(ValueError, match=r"an invalid combination of port-#10, and channel:1"):
+        box.config_validate_box(
+            {10: {"channels": {0: {"fnco_freq": 0.0}, 1: {"fnco_freq": 0.0}, 2: {"fnco_freq": 0.0}}}}
+        )
+
+    if box.boxtype == "quel1se-fujitsu11-a":
         with pytest.raises(ValueError, match=r"port-#05 is not an output port"):
             box.config_box({0: {"cnco_locked_with": 5}})
-        with pytest.raises(ValueError, match=r"no cnco_locked_with is available for the output port-#08"):
-            box.config_box({8: {"cnco_locked_with": 9}})
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_box({0: {"cnco_locked_with": 5}})
+    else:
+        assert False
 
+    with pytest.raises(ValueError, match=r"no cnco_locked_with is available for the output port-#08"):
+        box.config_box({8: {"cnco_locked_with": 9}})
+
+    if box.boxtype == "quel1se-fujitsu11-a":
         with pytest.raises(ValueError, match=r"no configurable mixer is available for the input port-#07"):
             box.config_box({7: {"vatt": 0xC00}})
+    elif box.boxtype == "quel1se-fujitsu11-b":
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-b: #07"):
+            box.config_box({7: {"vatt": 0xC00}})
     else:
-        assert False, f"an unexpected fixture: {box}"
+        assert False
 
 
 def test_config_port(box):
@@ -289,6 +372,15 @@ def test_config_port_abnormal(box):
             box.config_port("hoge", vatt=0xC00)  # type: ignore
         with pytest.raises(ValueError, match=re.escape("duplicated subport specifiers")):
             box.config_port((1, 0), subport=0, vatt=0xC00)
+    elif box.boxtype in {"quel1se-fujitsu11-b", "x-quel1se-fujitsu11-b"}:
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #00"):
+            box.config_port(0, fullscale_current=10000)
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-[ab]: #01-1"):
+            box.config_port(1, subport=1, vatt=0xC00)
+        with pytest.raises(ValueError, match=re.escape("malformed port: 'hoge'")):
+            box.config_port("hoge", vatt=0xC00)  # type: ignore
+        with pytest.raises(ValueError, match=re.escape("duplicated subport specifiers")):
+            box.config_port((1, 0), subport=0, vatt=0xC00)
     else:
         assert False, f"an unexpected fixture: {box}"
 
@@ -297,15 +389,28 @@ def test_config_rfswitches_abnormal(box):
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
         with pytest.raises(ValueError, match="malformed port: 'non-existent'"):
             box.config_rfswitches({"non-existent": "invalid"})  # type: ignore
-        with pytest.raises(ValueError, match=re.escape("invalid configuration of an input switch: invalid")):
+        with pytest.raises(ValueError, match=r"invalid configuration of an input switch: invalid"):
             box.config_rfswitches({0: "invalid"})
-        with pytest.raises(ValueError, match=re.escape("invalid configuration of an input switch: pass")):
+        with pytest.raises(ValueError, match=r"invalid configuration of an input switch: pass"):
             box.config_rfswitches({0: "pass"})
-        with pytest.raises(ValueError, match=re.escape("invalid configuration of an output switch: loop")):
+        with pytest.raises(ValueError, match=r"invalid configuration of an output switch: loop"):
             box.config_rfswitches({1: "loop"})
-        with pytest.raises(ValueError, match=re.escape("invalid configuration of an output switch: loop")):
+        with pytest.raises(ValueError, match=r"invalid configuration of an output switch: loop"):
             box.config_rfswitches({2: "loop"})
         with pytest.raises(ValueError, match="the specified configuration of rf switches is not realizable"):
+            box.config_rfswitches({0: "loop", 1: "pass"})
+    elif box.boxtype in {"quel1se-fujitsu11-b", "x-quel1se-fujitsu11-b"}:
+        with pytest.raises(ValueError, match="malformed port: 'non-existent'"):
+            box.config_rfswitches({"non-existent": "invalid"})  # type: ignore
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_rfswitches({0: "invalid"})
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-b: #00"):
+            box.config_rfswitches({0: "pass"})
+        with pytest.raises(ValueError, match=r"invalid configuration of an output switch: loop"):
+            box.config_rfswitches({1: "loop"})
+        with pytest.raises(ValueError, match=r"invalid configuration of an output switch: loop"):
+            box.config_rfswitches({2: "loop"})
+        with pytest.raises(ValueError, match=r"invalid port of (x-)?quel1se-fujitsu11-b: #00"):
             box.config_rfswitches({0: "loop", 1: "pass"})
     else:
         assert False, f"an unexpected fixture: {box}"
@@ -323,6 +428,9 @@ def test_config_box_inconsistent(box):
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
         assert config[1]["lo_freq"] == config[0]["lo_freq"]
         config[1]["lo_freq"] -= 1e6
+    elif box.boxtype in {"quel1se-fujitsu11-b", "x-quel1se-fujitsu11-b"}:
+        assert config[3]["lo_freq"] == config[5]["lo_freq"]
+        config[3]["lo_freq"] -= 1e6
     else:
         assert False, f"unexpected boxtype: {box.boxtype}"
 
@@ -348,5 +456,10 @@ def test_config_rfswitch_invalid(box):
             box.config_rfswitches({1: "loop"})
         with pytest.raises(ValueError, match="the specified configuration of rf switches is not realizable"):
             box.config_rfswitches({0: "loop", 1: "pass"})
+    elif box.boxtype in {"quel1se-fujitsu11-b", "x-quel1se-fujitsu11-b"}:
+        with pytest.raises(ValueError, match="invalid configuration of an input switch: block"):
+            box.config_rfswitches({5: "block"})
+        with pytest.raises(ValueError, match="invalid configuration of an output switch: loop"):
+            box.config_rfswitches({1: "loop"})
     else:
         assert False, f"an unexpected fixture: {box}"

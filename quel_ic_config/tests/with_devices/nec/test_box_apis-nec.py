@@ -3,8 +3,8 @@ import logging
 import pytest
 
 from quel_ic_config.quel1_box import Quel1Box
-from quel_ic_config.quel_config_common import Quel1BoxType
 from quel_ic_config.quel1_config_subsystem_common import NoRfSwitchError
+from quel_ic_config.quel_config_common import Quel1BoxType
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")

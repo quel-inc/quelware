@@ -120,7 +120,7 @@ function test_cli_8_11 {
   ./helpers/powercycle_quel_ci_env.sh 094
   # no rebooter is connected to 157
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 || true
-  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a || true
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype quel1se-fujitsu11-a || true
 
   echo "step 8 ================ (link up first time after reboot)"
   quel1_linkup --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 --ignore_crc_error_of_mxfe 0,1 --ignore_access_failure_of_adrf6780 0,1 --ignore_lock_failure_of_lmx2594 0,1,2,3,4
@@ -139,11 +139,11 @@ function test_cli_8_11 {
 
   echo "step 9.1 ================ (check the linkstatus of staging-xxx, all the mxfes should be 'healthy')"
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
-  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype quel1se-fujitsu11-a
 
   echo "step 10 ================ (dumping the current config of staging-xxx)"
   quel1_dump_port_config --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8 > artifacts/dump_port_staging-094.txt
-  quel1_dump_port_config --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a > artifacts/dump_port_staging-157.txt
+  quel1_dump_port_config --ipaddr_wss 10.1.0.157 --boxtype quel1se-fujitsu11-a > artifacts/dump_port_staging-157.txt
 }
 
 
@@ -196,7 +196,7 @@ elif [ "${test_with_device}" == "8r" ]; then
   quel1_linkstatus --ipaddr_wss 10.1.0.94 --boxtype quel1se-riken8
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawwss.py
 elif [ "${test_with_device}" == "11r" ]; then
-  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype x-quel1se-fujitsu11-a
+  quel1_linkstatus --ipaddr_wss 10.1.0.157 --boxtype quel1se-fujitsu11-a
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/quel1se/common tests/with_devices/quel1se/fujitsu11
 elif [ "${test_with_device}" == "N" ]; then
   PYTHONPATH=src:. pytest --log-cli-level "${log_level}" --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html tests/with_devices/common tests/with_devices/nec

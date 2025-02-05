@@ -1,0 +1,5 @@
+version: 1
+boxes:
+  - name: staging-060
+    ipaddr: 10.1.0.60x
+    boxtype: quel1-b

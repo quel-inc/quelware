@@ -1,4 +1,8 @@
-version: 1
+version: 2
+
+clockmaster:
+  - ipaddr: 10.3.0.13
+
 boxes:
   - name: staging-074
     ipaddr: 10.1.0.74

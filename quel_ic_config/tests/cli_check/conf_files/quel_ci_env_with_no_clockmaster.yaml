@@ -1,0 +1,5 @@
+version: 2
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74
+    boxtype: quel1-c

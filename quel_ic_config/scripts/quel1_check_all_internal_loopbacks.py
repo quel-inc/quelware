@@ -1064,6 +1064,24 @@ class LoopbackTest:
 
 
 TEST_CONFIGS = {
+    Quel1BoxType.QuEL1SE_FUJITSU11_TypeA: LoopbackTest(
+        CAP_VPORT_SETTINGS_QUEL1A,
+        GEN_VPORT_SETTINGS_QUEL1A,
+        {
+            "READ0": (1,),
+            "MON0": (2, 3, 4),
+            "READ1": (8,),
+            "MON1": (9, 10, 11),
+        },
+    ),
+    Quel1BoxType.QuEL1SE_FUJITSU11_TypeB: LoopbackTest(
+        CAP_VPORT_SETTINGS_QUEL1B,
+        GEN_VPORT_SETTINGS_QUEL1B,
+        {
+            "MON0": (1, 2, 3, 4),
+            "MON1": (8, 9, 10, 11),
+        },
+    ),
     Quel1BoxType.QuEL1_TypeA: LoopbackTest(
         CAP_VPORT_SETTINGS_QUEL1A,
         GEN_VPORT_SETTINGS_QUEL1A,
