@@ -25,7 +25,9 @@ from quel_ic_config.quel1_config_subsystem_common import NoRfSwitchError
 from quel_ic_config.quel1_wave_subsystem import CaptureReturnCode, E7FwLifeStage, E7FwType, Quel1WaveSubsystem
 from quel_ic_config.quel1se_adda_config_subsystem import Quel1seAddaConfigSubsystem, Quel2ProtoAddaConfigSubsystem
 from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
+    Quel1seFujitsu11TypeAConfigSubsystem,
     Quel1seFujitsu11TypeADebugConfigSubsystem,
+    Quel1seFujitsu11TypeBConfigSubsystem,
     Quel1seFujitsu11TypeBDebugConfigSubsystem,
 )
 from quel_ic_config.quel1se_riken8_config_subsystem import (
@@ -85,6 +87,10 @@ def _create_css_object(
         css = Quel2ProtoAddaConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8:
         css = Quel1seRiken8ConfigSubsystem(ipaddr_css, boxtype)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11_TypeA:
+        css = Quel1seFujitsu11TypeAConfigSubsystem(ipaddr_css, boxtype)
+    elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11_TypeB:
+        css = Quel1seFujitsu11TypeBConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_RIKEN8DBG:
         css = Quel1seRiken8DebugConfigSubsystem(ipaddr_css, boxtype)
     elif boxtype == Quel1BoxType.QuEL1SE_FUJITSU11DBG_TypeA:
@@ -318,7 +324,7 @@ class Quel1BoxIntrinsic:
                     link_ok[mxfe_idx] = False
                     if not ignore_invalid_linkstatus:
                         logger.error(
-                            f"JESD204C downlink of AD9082-#{mxfe_idx} is not working properly, it must be linked up"
+                            f"JESD204C tx-link of AD9082-#{mxfe_idx} is not working properly, it must be linked up"
                         )
                     # Notes: do not break here even if here to check all the MxFEs to show information.
             self.config_rfswitches(rfsw_restore)

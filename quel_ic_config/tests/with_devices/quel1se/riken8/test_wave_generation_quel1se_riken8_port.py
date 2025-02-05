@@ -45,8 +45,8 @@ TEST_SETTINGS = (
         # "spa_name": "ms2090-1",
         # "spa_parameters": {},
         # "max_background_noise": -65.0,
-        "spectrum_image_path": "./artifacts/spectrum-132-port",
-        "relative_loss": 0,
+        "spectrum_image_path": "./artifacts/spectrum-094-port",
+        "relative_loss": 9,
         "linkup": False,
     },
 )

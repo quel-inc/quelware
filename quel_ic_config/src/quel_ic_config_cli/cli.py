@@ -3,6 +3,7 @@ import json
 import logging
 import socket
 import sys
+import time
 from pathlib import Path
 from pprint import pprint
 from typing import Dict, Tuple
@@ -161,6 +162,12 @@ def quel1_linkstatus() -> None:
     )
     add_common_workaround_arguments(parser, use_ignore_crc_error_of_mxfe=True)
     parser.add_argument(
+        "--background_noise_threshold",
+        type=float,
+        default=None,
+        help="maximum allowable background noise amplitude of the ADCs",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         default=False,
@@ -207,7 +214,11 @@ def quel1_linkstatus_body(args: argparse.Namespace) -> int:
     if not isinstance(box, Quel1BoxIntrinsic):
         raise ValueError(f"boxtype {args.boxtype} is not supported currently")
 
-    _ = box.reconnect(ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe, ignore_invalid_linkstatus=True)
+    _ = box.reconnect(
+        background_noise_threshold=args.background_noise_threshold,
+        ignore_crc_error_of_mxfe=args.ignore_crc_error_of_mxfe,
+        ignore_invalid_linkstatus=True,
+    )
 
     cli_retcode: int = 0
     for mxfe_idx in mxfe_list:
@@ -594,6 +605,7 @@ def quel1se_tempctrl_reset() -> None:
 
     try:
         retcode = quel1se_tempctrl_reset_body(args)
+        time.sleep(0.1)  # Notes: waiting for releasing the lock and closing coap context
         sys.exit(retcode)
     except AssertionError as e:
         if args.verbose:

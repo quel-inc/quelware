@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.8.11"
+version = "0.8.12rc1"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -67,7 +67,7 @@ adi_ad9081_v106 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
 [tool.flake8]
 max-line-length = 120
-ignore = "E203,E704,W503"
+ignore = "E203,E704,W503,W605"
 
 [tool.black]
 line-length = 120

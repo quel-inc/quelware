@@ -115,18 +115,20 @@ quel_ic_config のパッケージにはいくつかの便利なシェルコマ�
 識別子の一覧は以下のとおりである。
 各モデルの詳細は[README.md](../README.md)を参照いただきたい。
 
-| モデル名                 | 識別子              | 出荷番号（ブロック番号-個体番号)               |
-|----------------------|------------------|---------------------------------|
-| QuEL-1 最初期型          | `qube-riken-a`   | QuEL-1 #1-xx                    |
-| QuEL-1 標準型 タイプA機     | 　`quel1-a`　      | QuEL-1 #2-xx, #3-xx, #5-xx, #6-xx |
-| QuEL-1 標準型 タイプB機     | `quel1-b`        | 同上                              | 
-| QuEL-1 7GHzモデル       | `quel1-a`        | QuEL-1 #4-xx                    |
-| QuEL-1 NECモデル        | `quel1-nec`      | QuEL-1 #7-xx                    |
-| QuEL-1 SE Riken-8モデル | `quel1se-riken8` | QuEL-1 SE #1-xx, #2-xx          |
-| QuBE OU タイプA機        | `qube-ou-a`      | QuBE OU #1-xx, #2-xx, #3-xx     | 
-| QuBE OU タイプB機        | `qube-ou-b`      | 同上                              | 
-| QuBE Riken タイプA機     | `qube-riken-a`   | QuBE Riken #1-xx                | 
-| QuBE Riken タイプB機     | `qube-riken-b`   | 同上                              | 
+| モデル名                          | 識別子                   | 出荷番号（ブロック番号-個体番号)                           |
+|-------------------------------|-----------------------|---------------------------------------------|
+| QuEL-1 最初期型                   | `qube-riken-a`        | QuEL-1 #1-xx                                |
+| QuEL-1 標準型 タイプA機              | `quel1-a`　           | QuEL-1 #2-xx, #3-xx, #5-xx, #6-xx           |
+| QuEL-1 標準型 タイプB機              | `quel1-b`             | 同上                                          | 
+| QuEL-1 7GHzモデル                | `quel1-a`             | QuEL-1 #4-xx                                |
+| QuEL-1 NECモデル                 | `quel1-nec`           | QuEL-1 #7-xx                                |
+| QuEL-1 SE Riken-8モデル          | `quel1se-riken8`      | QuEL-1 SE #1-xx, #2-xx, #3-xx, #5-xx, #6-xx |
+| QuEL-1 SE Fujitus-11モデル タイプA機 | `quel1se-fujitsu11-a` | QuEL-1 SE #4-xx                             |
+| QuEL-1 SE Fujitus-11モデル タイプB機 | `quel1se-fujitsu11-b` | 同上                                          |
+| QuBE OU タイプA機                 | `qube-ou-a`           | QuBE OU #1-xx, #2-xx, #3-xx                 | 
+| QuBE OU タイプB機                 | `qube-ou-b`           | 同上                                          | 
+| QuBE Riken タイプA機              | `qube-riken-a`        | QuBE Riken #1-xx                            | 
+| QuBE Riken タイプB機              | `qube-riken-b`        | 同上                                          | 
 
 タイプAとタイプBの識別は、本体背面パネルに貼ってあるシールを確認していただきたい。
 タイプB機はブロック番号に続く個体番号が3の倍数である場合が多いが、例外（たとえば、QuBE OU #3-02はタイプB）もあるので注意が必要だ。
@@ -387,16 +389,18 @@ box.easy_stop_all()
 とすると、iq にループバック受信した直流のベースバンド信号を取得できるはずだ。
 `quel1-a`以外のモデルでは、ポート番号を次のように読み替えていただきたい。
 
-| モデル識別子           | Read-inポート | Read-outポート | 備考                  |
-|------------------|------------|-------------|---------------------|
-| `quel1-a`        | 0          | 1           |                     |
-| `quel1-b`        | N.A.       | N.A.        | 実施不能                |
-| `quel1-nec`      | 2          | 0           | RFスイッチがないので一部の設定が不要 |
-| `quel1se-riken8` | 0          | 1           |                     |
-| `qube-ou-a`      | 1          | 0           | RFスイッチがないので一部の設定が不要 |
-| `qube-ou-b`      | N.A.       | N.A.        | 実施不能                |
-| `qube-riken-a`   | 1          | 0           |                     |
-| `qube-riken-b`   | N.A.       | N.A.        | 実施不能                |
+| モデル識別子                 | Read-inポート | Read-outポート | 備考                  |
+|------------------------|------------|-------------|---------------------|
+| `quel1-a`              | 0          | 1           |                     |
+| `quel1-b`              | N.A.       | N.A.        | 実施不能                |
+| `quel1-nec`            | 2          | 0           | RFスイッチがないので一部の設定が不要 |
+| `quel1se-riken8`       | 0          | 1           |                     |
+| `quel1se-fujitsu11-a`  | 0          | 1           |                     |
+| `quel1se-fujitsu11-b`  | N.A.       | N.A.        | 実施不能                |
+| `qube-ou-a`            | 1          | 0           | RFスイッチがないので一部の設定が不要 |
+| `qube-ou-b`            | N.A.       | N.A.        | 実施不能                |
+| `qube-riken-a`         | 1          | 0           |                     |
+| `qube-riken-b`         | N.A.       | N.A.        | 実施不能                |
 
 結果を確認する前に少しだけコードを解説しておく。
 まず、注意が必要なのは、1番ポートと0番ポートのRFスイッチは連動していることだ。
@@ -440,7 +444,7 @@ abs(iq)
 ## 次のステップ
 波形発生の実用的APIについては、サンプルコードを読んでいただくのが理解の早道だと考える。
 - [`general_loopback_test_update.py`](../testlibs/general_looptest_common_updated.py):  boxオブジェクトを使った信号発生と取得の例として分かりやすい。
-- [`quel1se_check_all_internal_loopback.py`](../scripts/quel1se_check_all_internal_loopbacks.py): 上記 `general_loopback_test_update.py`を使った最もシンプルなスクリプト。   
+- [`quel1se_riken8_check_all_internal_loopback.py`](../scripts/quel1se_riken8_check_all_internal_loopbacks.py): 上記 `general_loopback_test_update.py`を使った最もシンプルなスクリプト。   
 
 なお、boxオブジェクトのAPIのより詳しい情報は、[移行ガイド](MIGRATION_TO_0_8_X.md) に記載がある。
 また、[ソースコード](../src/quel_ic_config/quel1_box.py) の pydoc にも説明がある。

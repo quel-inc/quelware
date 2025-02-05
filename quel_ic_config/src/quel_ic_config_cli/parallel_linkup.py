@@ -79,6 +79,18 @@ def validate_boxes_conf(box_confs) -> bool:
     return valid_conf
 
 
+def validate_clockmaster_conf(cm_conf) -> bool:
+    if not (isinstance(cm_conf, list) and len(cm_conf) == 1 and isinstance(cm_conf[0], dict)):
+        logger.error("unexpected format of clockmaster descriptions")
+        return False
+
+    if "ipaddr" not in cm_conf[0]:
+        logger.error("no 'ipaddr' found of clock master")
+        return False
+
+    return True
+
+
 def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
     box_name = box_conf["name"]
     threading.current_thread().name = box_name  # Notes: thread name is printed in log messages.
@@ -94,8 +106,7 @@ def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
                 ipaddr_css=str(box_ipaddr + 0x040000),
                 boxtype=box_type,
             )
-            if retval is not None:
-                logger.info(f"connected to {box_name} successfully")
+            logger.info(f"connected to {box_name} successfully")
             break
         except Exception as e:
             exception = str(e.args[0])
@@ -108,43 +119,73 @@ def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
 
 
 def load_conf_v1(conf, filename: pathlib.Path) -> tuple[bool, list[dict[str, str]]]:
+    if len(set(conf.keys()) - {"version", "boxes"}) != 0:
+        logger.error(f"CANCELED: unexpected keys are found in the config file '{filename}'")
+
     if "boxes" not in conf:
-        logger.error(f"no 'boxes' key is found in the config file '{filename}'")
+        logger.error(f"CANCELED: no 'boxes' key is found in the config file '{filename}'")
         return False, []
 
     if not validate_boxes_conf(conf["boxes"]):
-        logger.error(f"broken configuration file '{filename}', quitting")
+        logger.error(f"CANCELED: broken configuration file '{filename}', quitting")
         return False, []
 
     return True, conf["boxes"]
 
 
-def load_conf(filename: pathlib.Path) -> Tuple[bool, list[dict[str, str]]]:
+def load_conf_v2(conf, filename: pathlib.Path) -> tuple[bool, list[dict[str, str]], dict[str, str]]:
+    if len(set(conf.keys()) - {"version", "clockmaster", "boxes"}) != 0:
+        logger.error(f"CANCELED: unexpected keys are found in the config file '{filename}'")
+
+    if "clockmaster" not in conf:
+        logger.error(f"CANCELED: no 'clockmaster' key is found in the config file '{filename}'")
+        return False, [], {}
+
+    if "boxes" not in conf:
+        logger.error(f"CANCELED: no 'boxes' key is found in the config file '{filename}'")
+        return False, [], {}
+
+    if not (validate_boxes_conf(conf["boxes"]) and validate_clockmaster_conf(conf["clockmaster"])):
+        logger.error(f"CANCELED: broken configuration file '{filename}', quitting")
+        return False, [], {}
+
+    return True, conf["boxes"], conf["clockmaster"][0]
+
+
+def load_conf(filename: pathlib.Path) -> Tuple[bool, int, list[dict[str, str]], dict[str, str]]:
     try:
         with open(filename) as f:
             conf = yaml.safe_load(f)
     except Exception as e:
-        logger.error(f"failed to load '{filename}' due to exception: '{e}'")
-        return False, []
+        logger.error(f"CANCELED: failed to load '{filename}' due to exception: '{e}'")
+        return False, 0, [], {}
 
     if conf is None:
-        logger.error(f"empty file '{filename}'")
-        return False, []
+        logger.error(f"CANCELED: empty config file '{filename}'")
+        return False, 0, [], {}
 
     if "version" not in conf:
-        logger.error(f"version is not specified in '{filename}'")
-        return False, []
+        logger.error(f"CANCELED: version is not specified in the config file '{filename}'")
+        return False, 0, [], {}
 
     version: int = conf["version"]
     if version == 1:
-        return load_conf_v1(conf, filename)
+        validity, boxes = load_conf_v1(conf, filename)
+        return validity, version, boxes, {}
+    elif version == 2:
+        validity, boxes, cm = load_conf_v2(conf, filename)
+        return validity, version, boxes, cm
     else:
-        logger.error(f"wrong version '{version}' (!= 1)")
-        return False, []
+        logger.error(f"CANCELED: wrong version '{version}' (!= 1, 2)")
+        return False, version, [], {}
 
 
-def check_link_validity(name: str, box: Quel1Box) -> bool:
-    status = box.reconnect(ignore_crc_error_of_mxfe=box.css.get_all_mxfes(), ignore_invalid_linkstatus=True)
+def check_link_validity(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
+    status = box.reconnect(
+        background_noise_threshold=args.background_noise_threshold,
+        ignore_crc_error_of_mxfe=box.css.get_all_mxfes(),
+        ignore_invalid_linkstatus=True,
+    )
     if not all(status.values()):
         logger.warning("no valid link status, it is subject to be linked up")
         return False
@@ -195,7 +236,7 @@ def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
     if args.force:
         total_status = False
     else:
-        total_status = check_link_validity(name, box)
+        total_status = check_link_validity(name, box, args)
 
     for retry_idx in range(NUM_LINKUP_RETRY):
         if not total_status:
@@ -224,6 +265,15 @@ def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
     return True
 
 
+def reconnect_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
+    threading.current_thread().name = name  # Notes: thread name is printed in log messages.
+
+    total_status = check_link_validity(name, box, args)  # Notes: don't care of CRC error flags.
+    if not total_status:
+        logger.info("link is NOT ready")
+    return total_status
+
+
 def _suppressing_noisy_loggers() -> None:
     logging.getLogger("quel_ic_config.ad9082_v106").setLevel(logging.WARNING)
     logging.getLogger("quel_ic_config.lmx2594").setLevel(logging.WARNING)
@@ -248,6 +298,7 @@ def parallel_linkup_main() -> int:
     )
     parser = argparse.ArgumentParser(description="parallelized link-up of QuEL-1 series control box")
     parser.add_argument("--conf", type=pathlib.Path, required=True, help="path to a configuration file")
+    parser.add_argument("--ignore_unavailable", action="store_true", help="just ignoring unavailable boxes")
     parser.add_argument("--force", action="store_true", help="force to re-linkup all the boxes")
     parser.add_argument(
         "--check_duration", type=int, default=120, help="duration in seconds for checking the stability of the link"
@@ -256,7 +307,7 @@ def parallel_linkup_main() -> int:
         "--background_noise_threshold",
         type=float,
         default=None,
-        help="maximum allowable background noise amplitude of the ADCs at relinkup (not at reconnect)",
+        help="maximum allowable background noise amplitude of the ADCs at relinkup and at reconnect",
     )
     parser.add_argument("--verbose", action="store_true", help="show verbose log")
     args = parser.parse_args()
@@ -267,7 +318,7 @@ def parallel_linkup_main() -> int:
     pool = ThreadPoolExecutor()
 
     # Notes: phase-1 loading configurations of boxes
-    validity, box_confs = load_conf(pathlib.Path(args.conf))
+    validity, version, box_confs, cm_conf = load_conf(pathlib.Path(args.conf))
     if not validity:
         return 1
 
@@ -291,6 +342,7 @@ def parallel_linkup_main() -> int:
 
     # Notes: taking a barrier sync to show the results after finishing all the threads
     num_failed: int = 0
+    num_unavailable: int = 0
     results: Dict[str, str] = {}
     for name, future in futures_status.items():
         if future is not None:
@@ -301,7 +353,7 @@ def parallel_linkup_main() -> int:
                 num_failed += 1
         else:
             results[name] = cast(str, boxes[name])  # Notes: the content of boxes[name] is definitely str.
-            num_failed += 1
+            num_unavailable += 1
 
     # Notes: phase-4 showing the results
     print("----------")
@@ -312,10 +364,24 @@ def parallel_linkup_main() -> int:
             print(f"{name} fails to link up")
         else:
             print(f"{name} is unavailable due to '{result}'")
+    print("----------")
 
     del boxes
 
-    return 0 if num_failed == 0 else 1
+    is_success: bool = False
+    if num_failed == 0:
+        if num_unavailable == 0:
+            is_success = True
+            logger.info(f"SUCCESS: all the boxes described in in '{args.conf}' are ready")
+        elif args.ignore_unavailable:
+            is_success = True
+            logger.info(f"SUCCESS: but some boxes described in '{args.conf}' are unavailable")
+        else:
+            logger.error(f"FAILED: some boxes described in '{args.conf}' are unavailable")
+    else:
+        logger.error(f"FAILED: some boxes described in '{args.conf}' are not ready")
+
+    return 0 if is_success else 1
 
 
 if __name__ == "__main__":

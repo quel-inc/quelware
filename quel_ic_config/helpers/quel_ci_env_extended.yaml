@@ -26,10 +26,10 @@ boxes:
     boxtype: quel1se-riken8
   - name: staging-157
     ipaddr: 10.1.0.157
-    boxtype: x-quel1se-fujitsu11-a
+    boxtype: quel1se-fujitsu11-a
   - name: staging-164
     ipaddr: 10.1.0.164
-    boxtype: x-quel1se-fujitsu11-b
+    boxtype: quel1se-fujitsu11-b
   - name: staging-058
     ipaddr: 10.1.0.58
     boxtype: quel1-a

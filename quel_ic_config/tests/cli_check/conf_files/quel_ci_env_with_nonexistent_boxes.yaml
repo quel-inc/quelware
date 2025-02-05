@@ -3,15 +3,6 @@ boxes:
   - name: staging-074
     ipaddr: 10.1.0.74
     boxtype: quel1-a
-  - name: staging-050
-    ipaddr: 10.1.0.50
-    boxtype: quel1-a
-  - name: staging-060
-    ipaddr: 10.1.0.60
-    boxtype: quel1-b
-  - name: staging-094
-    ipaddr: 10.1.0.94
-    boxtype: quel1se-riken8
   - name: nonexistent1
     ipaddr: 10.254.253.252
     boxtype: quel1-a
