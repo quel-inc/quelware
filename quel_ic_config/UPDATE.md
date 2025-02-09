@@ -1,6 +1,6 @@
 # 更新リスト
 
-### v0.8.12rc1 (Public PreRelease)
+## v0.8.12 (Public Release)
 - quel1_parallel_linkup コマンドを更新。 
   - `--background_noise_threshold` オプションの引数を再リンクアップ時だけでなく、再接続時にも適用するようにした。
   - 再接続時の許容最大ノイズ値を 1536 から 4096 に増加。外部接続機器からのノイズ起因で、再リンクアップの実施判定が出にくいようにした。
