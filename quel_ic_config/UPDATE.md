@@ -1,6 +1,6 @@
 # 更新リスト
 
-## v0.10.1 rc1 (Public pre-Release)
+## v0.10.1 (Public Release)
 - WaveSubsystem(wss)を挿し替え 
   - e7awgsw との依存を解消。
   - quel_clock_master も代替。
