@@ -289,7 +289,7 @@ GEN_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B: dict[str, dict[str, VportSettingType]] =
             "channel": 0,
         },
         "config": {
-            # "lo_freq": 11.5e9,
+            "lo_freq": 11.5e9,
             "cnco_freq": 1.5e9,
             "fnco_freq": 0.0,
             "fullscale_current": 40000,
@@ -310,7 +310,7 @@ GEN_VPORT_SETTINGS_QUEL1SE_FUJITSU11_B: dict[str, dict[str, VportSettingType]] =
             "channel": 0,
         },
         "config": {
-            "lo_freq": 11.5e9,
+            # "lo_freq": 11.5e9,
             "cnco_freq": 1.5e9,
             "fnco_freq": 0.0,
             "fullscale_current": 40000,
