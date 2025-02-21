@@ -66,7 +66,7 @@ class _BoxFailedUnlockError(Exception):
 
 class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
     DEFAULT_COAP_PORT = 5683
-    DEFAULT_COAP_RESPONSE_TIMEOUT: Final[float] = 3.0
+    DEFAULT_COAP_RESPONSE_TIMEOUT: Final[float] = 10.0
 
     _DEFAULT_LOOPING_TIMEOUT: Final[float] = 0.25
 
@@ -75,8 +75,8 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
 
     class _ProximityTransportTuning:
         # Notes: this tuning parameter is tailored for the default timeout (= 3.0 second).
-        #        i.e., 0.15 * (1+2+4+8) * 1.25 = 2.8125 < 3.0
-        ACK_TIMEOUT = 0.15
+        #        i.e., 0.3 * (1+2+4+8) * 1.25 = 5.625 < 10.0
+        ACK_TIMEOUT = 0.3
         ACK_RANDOM_FACTOR = 1.25
         MAX_RETRANSMIT = 3
 

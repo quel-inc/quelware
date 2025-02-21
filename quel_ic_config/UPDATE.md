@@ -1,5 +1,12 @@
 # 更新リスト
 
+## v0.10.2 (Public Release)
+- quel1_parallel_link コマンドのバグ修正。
+  - 対象装置で特定の異常が発生した際に、コマンドが異常終了する問題を解消。
+  - パフォーマンスを調整。
+- 制御装置との通信のタイムアウト時間を調整。
+- quel1_check_all_internal_loopbacks コマンドの quel1se-fujitsu11-b用の設定を修正。
+
 ## v0.10.1 (Public Release)
 - WaveSubsystem(wss)を挿し替え 
   - e7awgsw との依存を解消。
