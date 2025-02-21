@@ -91,6 +91,8 @@ def validate_clockmaster_conf(cm_conf) -> bool:
     return True
 
 
+# Notes: no leakage of exceptions is allowed. this function is submitted to pool.
+#        all the possible exceptions are handled within function for better diagnosis.
 def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
     box_name = box_conf["name"]
     threading.current_thread().name = box_name  # Notes: thread name is printed in log messages.
@@ -230,13 +232,19 @@ def check_crc_error(name: str, box: Quel1Box, duration: int) -> bool:
     return True
 
 
-def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
+# Notes: no leakage of exceptions is allowed. this function is submitted to pool.
+#        all the possible exceptions are handled within function for better diagnosis.
+def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> Union[bool, None]:
     threading.current_thread().name = name  # Notes: thread name is printed in log messages.
 
     if args.force:
         total_status = False
     else:
-        total_status = check_link_validity(name, box, args)
+        try:
+            total_status = check_link_validity(name, box, args)
+        except Exception as e:
+            logger.error(f"abort linking up due to {e}")
+            return None
 
     for retry_idx in range(NUM_LINKUP_RETRY):
         if not total_status:
@@ -254,11 +262,16 @@ def linkup_a_box(name: str, box: Quel1Box, args: argparse.Namespace) -> bool:
 
         # Notes: here total_status must be True
         logger.info(f"observing the link stability for {args.check_duration} seconds")
-        if check_crc_error(name, box, args.check_duration):
-            logger.info("no CRC error is detected")
-            break
-        else:
-            total_status = False
+        try:
+            if check_crc_error(name, box, args.check_duration):
+                logger.info("no CRC error is detected")
+                break
+            else:
+                total_status = False
+        except Exception as e:
+            logger.error(e)
+            # Notes: total_status is not changed because no new information is available.
+            continue
     else:
         return False
 
@@ -315,14 +328,14 @@ def parallel_linkup_main() -> int:
     if not args.verbose:
         _suppressing_noisy_loggers()
 
-    pool = ThreadPoolExecutor()
-
     # Notes: phase-1 loading configurations of boxes
     validity, version, box_confs, cm_conf = load_conf(pathlib.Path(args.conf))
     if not validity:
         return 1
 
     # Notes: phase-2 creating box objects
+    pool = ThreadPoolExecutor(max_workers=len(box_confs))
+
     futures_box: list[Future[tuple[str, Union[Quel1Box, str]]]] = [
         pool.submit(load_box, box_conf) for box_conf in box_confs
     ]
@@ -332,7 +345,7 @@ def parallel_linkup_main() -> int:
         boxes[box_name] = box_obj
 
     # Notes: phase-3 linking up the boxes
-    futures_status: Dict[str, Union[Future[bool], None]] = {}
+    futures_status: Dict[str, Union[Future[Union[bool, None]], None]] = {}
     for name, obj in boxes.items():
         if isinstance(obj, Quel1Box):
             futures_status[name] = pool.submit(linkup_a_box, name, obj, args)

@@ -1,5 +1,11 @@
 # 更新リスト
 
+## v0.8.13 (Public Release)
+- quel1_parallel_link コマンドのバグ修正。
+  - 対象装置で特定の異常が発生した際に、コマンドが異常終了する問題を解消。
+  - パフォーマンスを調整。
+- 制御装置との通信のタイムアウト時間を調整。
+
 ## v0.8.12 (Public Release)
 - quel1_parallel_linkup コマンドを更新。 
   - `--background_noise_threshold` オプションの引数を再リンクアップ時だけでなく、再接続時にも適用するようにした。
