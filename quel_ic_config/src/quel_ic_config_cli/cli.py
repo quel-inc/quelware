@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import socket
 import sys
@@ -410,15 +409,13 @@ def quel1_test_linkup_body(args: argparse.Namespace) -> int:
 
 def quel1_dump_port_config() -> None:
     logging.basicConfig(level=logging.ERROR, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
-    parser = argparse.ArgumentParser(
-        description="identifying the failed step at the establishment of JESD204B/C link between FPGA and AD9082"
-    )
+    parser = argparse.ArgumentParser(description="Dump the current configuration settings of the QuEL1 device.")
     add_common_arguments(
         parser,
         use_config_root=False,
         use_config_options=False,
     )
-    parser.add_argument("--json", action="store_true", default=False, help="dump port configuration in json format")
+    parser.add_argument("--json", action="store_true", default=False, help="dump port configuration in JSON format")
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -432,8 +429,8 @@ def quel1_dump_port_config() -> None:
         logging.getLogger().setLevel(logging.INFO)
 
     try:
-        retcode = quel1_dump_port_config_body(args)
-        sys.exit(retcode)
+        _quel1_dump_port_config_body(args)
+        sys.exit(0)
     except AssertionError as e:
         if args.verbose:
             logger.exception(
@@ -446,10 +443,10 @@ def quel1_dump_port_config() -> None:
             logger.exception(e, exc_info=e)
         else:
             logger.error(e)
-        sys.exit(-1)
+    sys.exit(-1)
 
 
-def quel1_dump_port_config_body(args: argparse.Namespace) -> int:
+def _quel1_dump_port_config_body(args: argparse.Namespace) -> None:
     try:
         box = Quel1Box.create(
             ipaddr_wss=str(args.ipaddr_wss),
@@ -458,26 +455,18 @@ def quel1_dump_port_config_body(args: argparse.Namespace) -> int:
             boxtype=args.boxtype,
         )
     except socket.timeout:
-        logger.error(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
-        return -1
+        raise Exception(f"cannot access to the given IP addresses {args.ipaddr_wss} / {args.ipaddr_css}")
 
     if not isinstance(box, Quel1Box):
         raise ValueError(f"boxtype {args.boxtype} is not supported currently")
 
     if not all(box.reconnect(ignore_crc_error_of_mxfe=box.css.get_all_groups()).values()):
-        logger.error("failed to syncing with the hardware, check the power and link status before retrying.")
-        return -1
+        raise Exception("failed to syncing with the hardware, check the power and link status before retrying.")
 
-    cli_retcode = 0
-    try:
-        if args.json:
-            print(json.dumps(box.dump_box()))
-        else:
-            pprint(box.dump_box(), sort_dicts=False)
-    except Exception as e:
-        logger.error(f"failed due to {e}")
-        cli_retcode = -1
-    return cli_retcode
+    if args.json:
+        print(box.dump_box_to_jsonstr())
+    else:
+        pprint(box.dump_box(), sort_dicts=False)
 
 
 def quel1_firmware_version() -> None:
