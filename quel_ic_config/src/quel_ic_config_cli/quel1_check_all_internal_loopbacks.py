@@ -5,8 +5,6 @@ from collections.abc import Collection, Mapping
 from ipaddress import ip_address
 from typing import Any, Final, Optional, cast
 
-import matplotlib
-
 from e7awghal import CapIqDataReader
 from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1PortType
 from quel_ic_config_utils import (
@@ -1504,8 +1502,6 @@ def main():
         else:
             if isinstance(lgr, logging.Logger):
                 lgr.setLevel(logging.WARNING)
-
-    matplotlib.use("Gtk3agg")
 
     parser = argparse.ArgumentParser("observing signals from all the output port via internal loop-back paths")
     parser.add_argument(

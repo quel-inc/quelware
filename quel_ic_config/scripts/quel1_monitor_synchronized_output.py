@@ -3,8 +3,6 @@ import logging
 from ipaddress import ip_address
 from typing import Any, Dict, Final, Mapping, Set
 
-import matplotlib
-
 from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1Box, Quel1BoxType
 from quel_ic_config_utils import BoxPool, VportSettingType, plot_iqs, single_schedule
 
@@ -83,8 +81,6 @@ if __name__ == "__main__":
         else:
             if isinstance(lgr, logging.Logger):
                 lgr.setLevel(logging.WARNING)
-
-    matplotlib.use("Gtk3Agg")
 
     parser = argparse.ArgumentParser(
         "monitoring the output of box-B with the input of box-A via an external RF path",

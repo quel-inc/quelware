@@ -4,8 +4,6 @@ from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
 from quel_ic_config import Quel1BoxType
 from quel_ic_config_utils import BoxPool, BoxSettingType, VportSettingType, complete_ipaddrs, plot_iqs, single_schedule
 
@@ -33,8 +31,6 @@ def main():
         else:
             if isinstance(lgr, logging.Logger):
                 lgr.setLevel(logging.WARNING)
-
-    matplotlib.use("Gtk3Agg")
 
     parser = argparse.ArgumentParser(
         "observing the output of port 1, 2, 3, 6, 7, 8, and 9 via internal loop-back paths"

@@ -2,7 +2,6 @@ import logging
 import sys
 from typing import Final
 
-import matplotlib
 import numpy as np
 
 from e7awghal import AwgParam, CapParam, CapSection, WaveChunk
@@ -56,8 +55,6 @@ if __name__ == "__main__":
     for mxfe_idx, s in status.items():
         if not s:
             logger.error(f"be aware that mxfe-#{mxfe_idx} is not linked-up properly")
-
-    matplotlib.use("Gtk3Agg")
 
     cfg: dict[Quel1PortType, dict[str, object]] = {
         0: {
