@@ -3,7 +3,6 @@ import logging
 from pprint import pprint
 from typing import Dict, Final, Optional, Tuple, Union
 
-import matplotlib
 import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -297,7 +296,6 @@ if __name__ == "__main__":
     pprint(rfir_coeffs)
     pprint("*** RFIR phase shift at target frequency [rad] ***")
     pprint(phase_shift)
-    matplotlib.use("Gtk3Agg")
     draw_frequency_responses(
         cfir_coeffs, rfir_coeffs, args.without_decimation, None if args.without_demodulation else dm_table
     )

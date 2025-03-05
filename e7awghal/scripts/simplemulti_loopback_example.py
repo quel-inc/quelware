@@ -1,7 +1,6 @@
 import logging
 from typing import Union
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -248,7 +247,6 @@ if __name__ == "__main__":
     fut2 = ac.wait_done({au.unit_index})
     fut2.result()
 
-    matplotlib.use("Gtk3agg")
     for i in range(NUM_REPEAT):
         find_chunks(data["s0"][i], 1500)
     plot_iqs({f"loop-{i}": data["s0"][i] for i in range(NUM_REPEAT)})
