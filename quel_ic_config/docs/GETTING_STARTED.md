@@ -22,10 +22,25 @@
             - 0.10.1b3 リリースのタイミングでは、v1.3.0ファームウェアは公開していない。
 
 ## 環境構築
-### システムへの依存パッケージのインストール
+### グラフ描画用ライブラリのバックエンド設定
 サンプルスクリプトやテストコードにて、グラフの表示に matplotlib を用いている。
-Qt5Aggを使いたいところではあるが商用ライセンスを購入しないとGPLが適用されてしまうので、quelwareの配布物では Gtk3Agg を使用する。
-quelwareの開発に参加したり、サンプルスクリプトを使用する場合には、以下の手順でパッケージのインストールをしておく必要がある。
+場合によっては描画用のバックエンドを指定する必要がある。
+詳しくは [matplotlib の公式ドキュメント](https://matplotlib.org/stable/users/explain/figure/backends.html)を参照のこと。
+
+#### バックエンドの設定例
+ユーザ設定ファイル `matplotlibrc` 上でバックエンドを指定する場合を紹介する。
+設定ファイルを置くべきパスを取得するには、matplotlib がインストールされた状態で、次のコマンドを実行する。
+```shell
+python -c "import matplotlib as mpl; print(mpl.get_configdir())"
+```
+ユーザ設定としてバックエンドを指定するには、このディレクトリ内にファイル `matplotlibrc` を次の内容で作成する。
+```text
+backend: GTK3Agg
+```
+この例ではバックエンドとして `GTK3Agg` を指定している。
+各種バックエンドの解説は [matplotlib の公式ドキュメント](https://matplotlib.org/stable/users/explain/figure/backends.html)を参照のこと。
+それぞれのバックエンドが利用可能かどうかはシステム環境に依存しており、追加のインストールが必要となる場合がある。
+例えば `GTK3Agg` をUbuntu 20.04環境で使う場合には、以下の手順でシステムにパッケージをインストールしておく必要がある。
 ```shell
 sudo apt install libgirepository1.0-dev gcc libcairo2-dev pkg-config python3-dev gir1.2-gtk-3.0
 ```
