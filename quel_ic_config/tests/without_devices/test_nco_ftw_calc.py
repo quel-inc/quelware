@@ -129,3 +129,15 @@ def test_abstract_nco_ftw():
     # multiply negative
     adc_ftwn1g_matched = dac_ftwn1g.multiply(2)
     assert dac_ftwn1g.to_frequency(12e9) == adc_ftwn1g_matched.to_frequency(6e9)
+
+
+def test_abstract_nco_ftw_integer():
+    f0 = 375000000  # Notes: 375e6 is one of special values because 375e6 * (1 << 48) // int(12e9) == 0x800_0000_0000
+
+    for i in range(16):
+        for pm in {1, -1}:
+            f1 = f0 / (1 << i) * pm
+            ftw1 = AbstractNcoFtw.from_frequency(f1, 12e9)
+            ftw2 = AbstractNcoFtw.from_frequency(f1, 6e9)
+            assert ftw1.to_frequency(12e9) == f1
+            assert ftw2.to_frequency(6e9) == f1

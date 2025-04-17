@@ -126,7 +126,7 @@ class AbstractNcoFtw(BaseModel):
         t = t.limit_denominator(0xFFFF_FFFF_FFFF)
 
         x: int = int(t)
-        if negative:
+        if negative and t.denominator > 1:
             x += 1
         delta_b: int = t.numerator - t.denominator * x
         modulus_a: int = t.denominator
