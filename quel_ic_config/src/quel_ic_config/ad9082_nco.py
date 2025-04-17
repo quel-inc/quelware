@@ -111,7 +111,7 @@ class AbstractNcoFtw(BaseModel):
             raise ValueError(f"the given nco_frequency (= {nco_freq_hz_:f}Hz) is out of range")
 
         if not isinstance(converter_freq_hz, int):
-            raise TypeError("converter_freq_hz must be interger")
+            raise TypeError("converter_freq_hz must be integer")
 
         if isinstance(nco_freq_hz_, Fraction):
             nco_freq_hz: Fraction = nco_freq_hz_
