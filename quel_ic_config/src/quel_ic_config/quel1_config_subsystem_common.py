@@ -125,14 +125,14 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
 
     def _validate_group(self, group: int) -> None:
         if group not in self._GROUPS:
-            raise ValueError("an invalid group: {group}")
+            raise ValueError(f"an invalid group: {group}")
 
     def get_all_mxfes(self) -> Set[int]:
         return self._MXFE_IDXS
 
     def _validate_mxfe(self, mxfe_idx: int) -> None:
         if mxfe_idx not in self._MXFE_IDXS:
-            raise ValueError("an invalid mxfe: {mxfe_idx}")
+            raise ValueError(f"an invalid mxfe: {mxfe_idx}")
 
     def get_all_any_lines(self) -> Set[Tuple[int, Union[int, str]]]:
         any_lines: Set[Tuple[int, Union[int, str]]] = set()
@@ -607,7 +607,7 @@ class Quel1ConfigSubsystemAd9082Mixin(Quel1ConfigSubsystemBaseSlot):
         adc_clk = self.ad9082[adc_mxfe_idx].device.dev_info.adc_freq_hz
         # TODO: relax constrains by-need basis.
         if dac_clk % adc_clk != 0:
-            raise RuntimeError("ratio of dac_clk (= {dac_clk}Hz) and adc_clk (= {adc_clk}Hz) is not N:1")
+            raise RuntimeError(f"ratio of dac_clk (= {dac_clk}Hz) and adc_clk (= {adc_clk}Hz) is not N:1")
         ratio: int = dac_clk // adc_clk
 
         freq_in_hz_, dac_ftw = self._validate_frequency_info(dac_mxfe_idx, "dac_cnco", freq_in_hz, None)
@@ -802,7 +802,7 @@ class Quel1ConfigSubsystemLmx2594Mixin(Quel1ConfigSubsystemBaseSlot):
         """
         self._validate_line_or_rline(group, line)
         if (group, line) not in self._LO_IDX:
-            raise ValueError("no LO is available for group:{group}, line:{line}")
+            raise ValueError(f"no LO is available for group:{group}, line:{line}")
         lo_idx, outpin = self._LO_IDX[(group, line)]
 
         ic = self._lmx2594[lo_idx]
@@ -1076,7 +1076,7 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         if (group, line) in self._RFSWITCH_NAME:
             return self._RFSWITCH_NAME[(group, line)]
         else:
-            raise ValueError("no switch available for group:{group}, line:{line}")
+            raise ValueError(f"no switch available for group:{group}, line:{line}")
 
     def is_subordinate_rfswitch(self, group: int, line: Union[int, str]) -> bool:
         return (group, line) in self._RFSWITCH_SUBORDINATE_OF
@@ -1287,7 +1287,7 @@ class Quel1ConfigSubsystemPathselectorboardGpioMixin(Quel1ConfigSubsystemBaseSlo
             idx, bit = self._RFSWITCH_IDX[(group, line)]
             return idx, f"b{bit:02}"
         else:
-            raise ValueError("no switch available for group:{group}, line:{line}")
+            raise ValueError(f"no switch available for group:{group}, line:{line}")
 
     def pass_line(self, group: int, line: Union[int, str]) -> None:
         """allowing a line to emit RF signal from its corresponding SMA connector.
