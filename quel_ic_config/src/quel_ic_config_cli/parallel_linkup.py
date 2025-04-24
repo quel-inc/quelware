@@ -3,9 +3,10 @@ import logging
 import pathlib
 import threading
 import time
+from collections.abc import Collection
 from concurrent.futures import Future, ThreadPoolExecutor
 from ipaddress import IPv4Address
-from typing import Dict, Final, List, Set, Tuple, Union, cast
+from typing import Any, Dict, Final, List, Set, Tuple, Union, cast
 
 import yaml
 
@@ -16,6 +17,31 @@ logger = logging.getLogger()
 NUM_CONNECT_RETRY: Final[int] = 2
 NUM_LINKUP_RETRY: Final[int] = 3
 DEFAULT_MAX_ALLOWABLE_COUNTERDELTA: Final[int] = 256  # = 2048ns
+
+
+def validate_collection_of_index(v: Collection[int]):
+    is_valid: bool = True
+    if isinstance(v, Collection):
+        for i in v:
+            if not isinstance(i, int) or i < 0:
+                is_valid = False
+                break
+    else:
+        is_valid = False
+    return is_valid
+
+
+def validate_options_of_box(box_opt: dict[str, Any]) -> bool:
+    is_valid: bool = True
+    for k, v in box_opt.items():
+        if k in {"ignore_crc_error_of_mxfe", "ignore_access_failure_of_adrf6780", "ignore_lock_failure_of_lmx2594"}:
+            if not validate_collection_of_index(v):
+                logger.error(f"invalid list of indices: '{v}'")
+                is_valid = False
+        else:
+            logger.error(f"invalid option '{k}'")
+            is_valid = False
+    return is_valid
 
 
 def validate_boxes_conf(box_confs) -> bool:
@@ -77,6 +103,11 @@ def validate_boxes_conf(box_confs) -> bool:
             valid_conf = False
             continue
 
+        if "options" in spec and not validate_options_of_box(spec["options"]):
+            logger.error(f"invalid option '{spec['options']}' of a box '{box_name}'")
+            valid_conf = False
+            continue
+
     return valid_conf
 
 
@@ -94,12 +125,14 @@ def validate_clockmaster_conf(cm_conf) -> bool:
 
 # Notes: no leakage of exceptions is allowed. this function is submitted to pool.
 #        all the possible exceptions are handled within function for better diagnosis.
-def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
+def load_box(box_conf: dict[str, Any]) -> tuple[str, Union[Quel1Box, str]]:
     box_name = box_conf["name"]
     threading.current_thread().name = box_name  # Notes: thread name is printed in log messages.
 
     box_ipaddr = IPv4Address(box_conf["ipaddr"])
     box_type = Quel1BoxType.fromstr(box_conf["boxtype"])
+    box_opt: dict[str, Any] = box_conf.get("options", {})
+
     exception: str = ""
     for _ in range(NUM_CONNECT_RETRY):
         try:
@@ -108,6 +141,9 @@ def load_box(box_conf: dict[str, str]) -> tuple[str, Union[Quel1Box, str]]:
                 ipaddr_sss=str(box_ipaddr + 0x010000),
                 ipaddr_css=str(box_ipaddr + 0x040000),
                 boxtype=box_type,
+                ignore_crc_error_of_mxfe=box_opt.get("ignore_crc_error_of_mxfe", set()),
+                ignore_access_failure_of_adrf6780=box_opt.get("ignore_access_failure_of_adrf6780", set()),
+                ignore_lock_failure_of_lmx2594=box_opt.get("ignore_lock_failure_of_lmx2594", set()),
             )
             logger.info(f"connected to {box_name} successfully")
             break
@@ -202,15 +238,25 @@ def get_crc_error_count(box: Quel1Box) -> Dict[int, List[int]]:
     return cntr
 
 
-def diff_crc_error_count(cnts0: Dict[int, List[int]], cnts1: Dict[int, List[int]]) -> bool:
+def diff_crc_error_count(
+    cnts0: Dict[int, List[int]], cnts1: Dict[int, List[int]], ignore_crc_error_of_mxfe: Collection[int]
+) -> bool:
     for mxfe_idx in cnts0:
         for lane_idx, cnt in enumerate(cnts0[mxfe_idx]):
             if cnt != cnts1[mxfe_idx][lane_idx]:
-                logger.warning(
-                    f"a new crc error is detected at the {lane_idx}-th lane of the mxfe-#{mxfe_idx}: "
-                    f"{cnt} -> {cnts1[mxfe_idx][lane_idx]}"
-                )
-                return False
+                if mxfe_idx in ignore_crc_error_of_mxfe:
+                    logger.warning(
+                        f"a new crc error is detected at the {lane_idx}-th lane of the mxfe-#{mxfe_idx}: "
+                        f"{cnt} -> {cnts1[mxfe_idx][lane_idx]}, but ignore it."
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"a new crc error is detected at the {lane_idx}-th lane of the mxfe-#{mxfe_idx}: "
+                        f"{cnt} -> {cnts1[mxfe_idx][lane_idx]}"
+                    )
+                    return False
+
     return True
 
 
@@ -223,7 +269,7 @@ def check_crc_error(name: str, box: Quel1Box, duration: int) -> bool:
         time.sleep(step)
         t = time.perf_counter()
         e1 = get_crc_error_count(box)
-        if not diff_crc_error_count(e0, e1):
+        if not diff_crc_error_count(e0, e1, box.options["ignore_crc_error_of_mxfe"]):
             return False
         step = min(10.0, step * 2)
 

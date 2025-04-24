@@ -18,6 +18,11 @@ CASES_QPLU = {
         "rc": 0,
         "msg": r"(.*)SUCCESS: all the boxes described in in '(.*)' are ready",
     },
+    "nominal_v2_opt": {
+        "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only_v2_with_options.yaml --check_duration 10",
+        "rc": 0,
+        "msg": r"(.*)SUCCESS: all the boxes described in in '(.*)' are ready",
+    },
     "nonexistent": {
         "args": "--conf tests/cli_check/conf_files/nonexistent.yaml",
         "rc": 1,
@@ -98,6 +103,16 @@ CASES_QPLU = {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_wrong_boxtype.yaml --check_duration 10",
         "rc": 1,
         "msg": "(.*)FAILED: some boxes described in '(.*)' are unavailable",
+    },
+    "wrong_options1": {
+        "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_wrong_options1.yaml",
+        "rc": 1,
+        "msg": r"(.*)CANCELED: broken configuration file '(.*)', quitting",
+    },
+    "wrong_options2": {
+        "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_wrong_options2.yaml",
+        "rc": 1,
+        "msg": r"(.*)CANCELED: broken configuration file '(.*)', quitting",
     },
 }
 
