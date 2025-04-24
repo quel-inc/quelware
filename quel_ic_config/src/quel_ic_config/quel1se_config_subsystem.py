@@ -102,22 +102,6 @@ class _Quel1seConfigSubsystemBase(
                 ignore_lock_failure=lmx2594_idx in ignore_lock_failure_of_lmx2594,
             )
 
-    def get_ad9082_hard_reset(self, mxfe_idx: int) -> bool:
-        # Notes: re-consider better way
-        proxy = cast(_ExstickgeCoapClientBase, self._proxy)
-        v = proxy.read_reset(LsiKindId.AD9082, mxfe_idx)
-        if v == 0:
-            return True
-        elif v == 1:
-            return False
-        else:
-            raise RuntimeError(f"invalid value {v} for state of AD9082[{mxfe_idx}]'s hard_reset")
-
-    def set_ad9082_hard_reset(self, mxfe_idx: int, value: bool) -> None:
-        # Notes: re-consider better way
-        proxy = cast(_ExstickgeCoapClientBase, self._proxy)
-        proxy.write_reset(LsiKindId.AD9082, mxfe_idx, 0 if value else 1)
-
     def configure_mxfe(
         self,
         mxfe_idx: int,
