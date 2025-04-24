@@ -8,7 +8,6 @@ from quel_ic_config.box_force_unlock import force_unlock_all_boxes
 from quel_ic_config.box_lock import BoxLockError, set_trancated_traceback_for_lock_error
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper, Quel1ConventionalE7ResourceMapper
 from quel_ic_config.exstickge_coap_client import Quel1seBoard, get_exstickge_server_info
-from quel_ic_config.generic_gpio import GenericGpioConfigHelper, GenericGpioRegNames, GenericGpioRegs
 from quel_ic_config.linkupper import LinkupFpgaMxfe, LinkupStatistic, LinkupStatus
 from quel_ic_config.lmx2594 import Lmx2594ConfigHelper, Lmx2594RegNames, Lmx2594Regs
 from quel_ic_config.mixerboard_gpio import MixerboardGpioConfigHelper, MixerboardGpioRegNames, MixerboardGpioRegs
@@ -82,7 +81,6 @@ from quel_ic_config.quel_ic import (
     Ad5328,
     Ad9082Generic,
     Adrf6780,
-    GenericGpio,
     Lmx2594,
     MixerboardGpio,
     PathselectorboardGpio,
@@ -124,10 +122,6 @@ __all__ = (
     "ExstickgeCoapClientQuel1seRiken8WithLock",
     "ExstickgeCoapClientQuel1seFujitsu11",
     "ExstickgeSockClientQuel1WithDummyLock",
-    "GenericGpio",
-    "GenericGpioConfigHelper",
-    "GenericGpioRegs",
-    "GenericGpioRegNames",
     "LinkStatus",
     "Lmx2594",
     "Lmx2594ConfigHelper",
