@@ -642,6 +642,8 @@ class Ad9082Config(NoExtraBaseModel):
 class Ad9082Mixin(AbstractIcMixin):
     """wrapping adi_ad9081 APIs to make them Pythonic"""
 
+    _WAIT_FOR_STABILIZATION_OF_LINK: float = 10.0  # [s]
+
     def __init__(self, name: str):
         super().__init__(name)
         self.device: Final[Device] = Device()
@@ -1009,8 +1011,8 @@ class Ad9082Mixin(AbstractIcMixin):
         if rc != CmsError.API_CMS_ERROR_OK:
             raise RuntimeError(f"failure in jesd_rx_link_enable_set() due to {CmsError(rc).name}")
 
-        logger.info("waiting for 10.0 seconds for link stabilization")
-        time.sleep(10.0)
+        logger.info(f"waiting for {self._WAIT_FOR_STABILIZATION_OF_LINK} seconds for link stabilization")
+        time.sleep(self._WAIT_FOR_STABILIZATION_OF_LINK)
 
         self.clear_crc_error()
 
