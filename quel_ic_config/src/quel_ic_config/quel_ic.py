@@ -7,7 +7,6 @@ from quel_ic_config.ad7490 import Ad7490Mixin
 from quel_ic_config.ad9082_v106 import Ad9082V106Mixin
 from quel_ic_config.adrf6780 import Adrf6780Mixin
 from quel_ic_config.exstickge_proxy import LsiKindId, _ExstickgeProxyBase
-from quel_ic_config.generic_gpio import GenericGpioMixin
 from quel_ic_config.lmx2594 import Lmx2594Mixin
 from quel_ic_config.mixerboard_gpio import MixerboardGpioMixin
 from quel_ic_config.pathselectorboard_gpio import PathselectorboardGpioMixin
@@ -189,18 +188,6 @@ class Quel1TypeBRfSwitchArray(Quel1TypeBRfSwitchArrayMixin, Quel1Ic):
         if addr != 0:
             raise ValueError(f"invalid address of {self.name}: {addr}")
         Quel1Ic._write_reg(self, addr, data)
-
-
-class GenericGpio(GenericGpioMixin, Quel1Ic):
-    def __init__(self, proxy: _ExstickgeProxyBase, idx: int):
-        GenericGpioMixin.__init__(self, f"GenericGpio[{idx}]")
-        Quel1Ic.__init__(self, proxy, LsiKindId.GPIO, idx)
-
-    def read_reg(self, addr: int) -> int:
-        return Quel1Ic._read_reg(self, addr)
-
-    def write_reg(self, addr: int, data: int) -> None:
-        return Quel1Ic._write_reg(self, addr, data)
 
 
 class MixerboardGpio(MixerboardGpioMixin, Quel1Ic):

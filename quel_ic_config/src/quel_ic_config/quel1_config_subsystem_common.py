@@ -9,7 +9,6 @@ from quel_ic_config.ad5328 import Ad5328ConfigHelper
 from quel_ic_config.ad9082_v106 import NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband
 from quel_ic_config.exstickge_sock_client import _ExstickgeProxyBase
-from quel_ic_config.generic_gpio import GenericGpioConfigHelper
 from quel_ic_config.lmx2594 import Lmx2594ConfigHelper
 from quel_ic_config.mixerboard_gpio import MixerboardGpioConfigHelper
 from quel_ic_config.pathselectorboard_gpio import PathselectorboardGpioConfigHelper
@@ -20,7 +19,6 @@ from quel_ic_config.quel_ic import (
     Ad7490,
     Ad9082V106,
     Adrf6780,
-    GenericGpio,
     Lmx2594,
     MixerboardGpio,
     PathselectorboardGpio,
@@ -51,8 +49,6 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         "_rfswitch",
         "_rfswitch_gpio_idx",
         "_rfswitch_helper",
-        "_gpio",
-        "_gpio_helper",
         "_mixerboard_gpio",
         "_mixerboard_gpio_helper",
         "_pathselectorboard_gpio",
@@ -101,8 +97,6 @@ class Quel1ConfigSubsystemBaseSlot(metaclass=ABCMeta):
         self._rfswitch_gpio_idx: int = 0
         self._rfswitch: Union[AbstractRfSwitchArrayMixin, None] = None
         self._rfswitch_helper: Union[RfSwitchArrayConfigHelper, None] = None
-        self._gpio: Tuple[GenericGpio, ...] = ()
-        self._gpio_helper: Tuple[GenericGpioConfigHelper, ...] = ()
 
     def get_num_ic(self, ic_name: str) -> int:
         if ic_name in self._VALID_IC_NAME:
@@ -1179,31 +1173,6 @@ class Quel1ConfigSubsystemRfswitch(Quel1ConfigSubsystemBaseSlot):
         """
         swgroup, swname = self._get_rfswitch_name(group, "r")
         return getattr(self._rfswitch_helper.read_reg(swgroup), swname)
-
-
-class Quel1ConfigSubsystemGpioMixin(Quel1ConfigSubsystemBaseSlot):
-    __slots__ = ()
-
-    def _construct_gpio(self):
-        self._gpio: Tuple[GenericGpio, ...] = tuple(
-            GenericGpio(self._proxy, idx) for idx in range(self._NUM_IC.get("gpio", 0))
-        )
-        self._gpio_helper: Tuple[GenericGpioConfigHelper, ...] = tuple(GenericGpioConfigHelper(ic) for ic in self._gpio)
-
-    @property
-    def gpio(self) -> Tuple[GenericGpio, ...]:
-        return self._gpio
-
-    @property
-    def gpio_helper(self) -> Tuple[GenericGpioConfigHelper, ...]:
-        return self._gpio_helper
-
-    def init_gpio(self, idx: int, param: Mapping[str, Mapping[str, Mapping[str, Union[int, bool]]]]) -> None:
-        # XXX: = self._param["gpio"][idx]
-        helper = self.gpio_helper[idx]
-        for name, fields in param["registers"].items():
-            helper.write_field(name, **fields)
-        helper.flush()
 
 
 class Quel1ConfigSubsystemMixerboardGpioMixin(Quel1ConfigSubsystemBaseSlot):

@@ -13,7 +13,6 @@ from quel_ic_config.e7workaround import (
     resolve_hw_type,
 )
 from quel_ic_config.exstickge_coap_client import Quel1seBoard, get_exstickge_server_info
-from quel_ic_config.generic_gpio import GenericGpioConfigHelper, GenericGpioRegNames, GenericGpioRegs
 from quel_ic_config.linkupper import LinkupFpgaMxfe, LinkupStatistic, LinkupStatus
 from quel_ic_config.lmx2594 import Lmx2594ConfigHelper, Lmx2594RegNames, Lmx2594Regs
 from quel_ic_config.mixerboard_gpio import MixerboardGpioConfigHelper, MixerboardGpioRegNames, MixerboardGpioRegs
@@ -61,7 +60,6 @@ from quel_ic_config.quel_ic import (
     Ad5328,
     Ad9082V106,
     Adrf6780,
-    GenericGpio,
     Lmx2594,
     MixerboardGpio,
     PathselectorboardGpio,
@@ -106,10 +104,6 @@ __all__ = (
     "ExstickgeCoapClientQuel1seRiken8",
     "ExstickgeCoapClientQuel1seFujitsu11",
     "ExstickgeSockClientQuel1",
-    "GenericGpio",
-    "GenericGpioConfigHelper",
-    "GenericGpioRegs",
-    "GenericGpioRegNames",
     "Lmx2594",
     "Lmx2594ConfigHelper",
     "Lmx2594Regs",
