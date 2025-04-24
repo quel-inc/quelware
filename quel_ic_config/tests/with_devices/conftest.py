@@ -78,7 +78,11 @@ TEST_SETTINGS_QUEL1 = (
         },
         "linkup_config": {
             "mxfes_to_linkup": (0, 1),
+            "ignore_crc_error_of_mxfe": (0, 1),
             "use_204b": False,
+        },
+        "reconnect_config": {
+            "ignore_crc_error_of_mxfe": (0, 1),
         },
         "port_availability": {
             "unavailable": [],
@@ -216,7 +220,8 @@ def make_box_fixture(param0):
     if param0["linkup"]:
         linkstatus = box.relinkup(**param0["linkup_config"])
     else:
-        linkstatus = box.reconnect()
+        cfg = param0["reconnect_config"] if "reconnect_config" in param0 else {}
+        linkstatus = box.reconnect(**cfg)
     assert linkstatus[0]
     assert linkstatus[1]
 
