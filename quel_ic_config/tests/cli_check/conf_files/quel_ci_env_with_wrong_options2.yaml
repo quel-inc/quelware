@@ -1,0 +1,10 @@
+version: 1
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74
+    boxtype: quel1-a
+    options:
+      ignore_crc_error_of_mxfe: [0, -1]
+  - name: staging-050
+    ipaddr: 10.1.0.50
+    boxtype: quel1-a

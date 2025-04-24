@@ -1,0 +1,20 @@
+version: 2
+clockmaster:
+  - name: clockmaster_ci
+    ipaddr: 10.3.0.13
+boxes:
+  - name: staging-074
+    ipaddr: 10.1.0.74
+    boxtype: quel1-a
+  - name: staging-050
+    ipaddr: 10.1.0.50
+    boxtype: quel1-a
+    options:
+      ignore_crc_error_of_mxfe: []
+      ignore_access_failure_of_adrf6780: [3, 4, 5]
+      ignore_lock_failure_of_lmx2594: [0]
+  - name: staging-060
+    ipaddr: 10.1.0.60
+    boxtype: quel1-b
+    options:
+      ignore_crc_error_of_mxfe: [0, 1]
