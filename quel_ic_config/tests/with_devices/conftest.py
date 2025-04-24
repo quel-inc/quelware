@@ -129,26 +129,6 @@ TEST_SETTINGS_RIKEN8 = (
         "relative_loss": 0,
         "linkup": False,
     },
-    # {
-    #     "label": "staging-146",
-    #     "box_config": {
-    #         "ipaddr_wss": "10.1.0.146",
-    #         "ipaddr_sss": "10.2.0.146",
-    #         "ipaddr_css": "10.5.0.146",
-    #         "boxtype": Quel1BoxType.fromstr("quel1se-riken8"),
-    #     },
-    #     "linkup_config": {
-    #         "mxfes_to_linkup": (0, 1),
-    #         "use_204b": False,
-    #     },
-    #     "port_availability": {
-    #         "unavailable": [],
-    #         "via_monitor_out": [],
-    #     },
-    #     "image_path": "./artifacts",
-    #     "relative_loss": 0,
-    #     "linkup": False,
-    # },
 )
 
 TEST_SETTINGS_FUJITSU11A = (
