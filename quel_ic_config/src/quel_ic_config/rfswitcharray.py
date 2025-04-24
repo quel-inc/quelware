@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class RfSwitchArray(AbstractIcReg):
+class RfSwitchArrayReg(AbstractIcReg):
     path0: bool = field(default=False)
     path1: bool = field(default=False)
     path2: bool = field(default=False)
@@ -37,7 +37,7 @@ class AbstractRfSwitchArrayMixin(AbstractIcMixin):
         return regs
 
 
-class QubeRfSwitchArray0(RfSwitchArray):
+class QubeRfSwitchArray0Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = self._parse_switch_pair(v & 0b00000000000011)
         self.path1 = p_1bf_bool(v, 2)
@@ -57,7 +57,7 @@ class QubeRfSwitchArray0(RfSwitchArray):
         )
 
 
-class QubeRfSwitchArray1(RfSwitchArray):
+class QubeRfSwitchArray1Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = self._parse_switch_pair((v & 0b11000000000000) >> 12)
         self.path1 = p_1bf_bool(v, 11)
@@ -78,8 +78,8 @@ class QubeRfSwitchArray1(RfSwitchArray):
 
 
 QubeRfSwitchRegs: Dict[int, type] = {
-    0: QubeRfSwitchArray0,
-    1: QubeRfSwitchArray1,
+    0: QubeRfSwitchArray0Reg,
+    1: QubeRfSwitchArray1Reg,
 }
 
 QubeSwitchRegNames: Dict[str, int] = {
@@ -96,7 +96,7 @@ class QubeRfSwitchArrayMixin(AbstractRfSwitchArrayMixin):
         super().__init__(name)
 
 
-class Quel1TypeARfSwitchArray0(RfSwitchArray):
+class Quel1TypeARfSwitchArray0Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = p_1bf_bool(v, 0)  # port0: read-in,  port1: read-out
         self.path1 = p_1bf_bool(v, 5)  # port3 for typeA, port2 for TypeB
@@ -114,7 +114,7 @@ class Quel1TypeARfSwitchArray0(RfSwitchArray):
         )
 
 
-class Quel1TypeARfSwitchArray1(RfSwitchArray):
+class Quel1TypeARfSwitchArray1Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = p_1bf_bool(v, 12)  # port7: readin, port8: read-out
         self.path1 = p_1bf_bool(v, 8)  # port10 for typeA, port9 for typeB
@@ -132,7 +132,7 @@ class Quel1TypeARfSwitchArray1(RfSwitchArray):
         )
 
 
-class Quel1TypeBRfSwitchArray0(RfSwitchArray):
+class Quel1TypeBRfSwitchArray0Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = p_1bf_bool(v, 0)  # port0: read-in,  port1: read-out
         self.path1 = p_1bf_bool(v, 2)  # port3 for typeA, port2 for TypeB
@@ -150,7 +150,7 @@ class Quel1TypeBRfSwitchArray0(RfSwitchArray):
         )
 
 
-class Quel1TypeBRfSwitchArray1(RfSwitchArray):
+class Quel1TypeBRfSwitchArray1Reg(RfSwitchArrayReg):
     def parse(self, v: int) -> None:
         self.path0 = p_1bf_bool(v, 12)  # port7: readin, port8: read-out
         self.path1 = p_1bf_bool(v, 11)  # port10 for typeA, port9 for typeB
@@ -169,13 +169,13 @@ class Quel1TypeBRfSwitchArray1(RfSwitchArray):
 
 
 Quel1TypeARfSwitchRegs: Dict[int, type] = {
-    0: Quel1TypeARfSwitchArray0,
-    1: Quel1TypeARfSwitchArray1,
+    0: Quel1TypeARfSwitchArray0Reg,
+    1: Quel1TypeARfSwitchArray1Reg,
 }
 
 Quel1TypeBRfSwitchRegs: Dict[int, type] = {
-    0: Quel1TypeBRfSwitchArray0,
-    1: Quel1TypeBRfSwitchArray1,
+    0: Quel1TypeBRfSwitchArray0Reg,
+    1: Quel1TypeBRfSwitchArray1Reg,
 }
 
 Quel1SwitchRegNames: Dict[str, int] = {
