@@ -1,8 +1,0 @@
-version: 1
-boxes:
-  - name: staging-074
-    ipaddr: 10.1.0.74
-    boxtype: quel1-a
-  - name: staging-050
-    ipaddr: 10.1.0.50
-    boxtype: quel1-a
