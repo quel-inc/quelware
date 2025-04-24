@@ -4,8 +4,6 @@ from typing import Union, cast
 from quel_ic_config import (
     ExstickgeCoapClientQuel1seFujitsu11,
     ExstickgeCoapClientQuel1seRiken8,
-    ExstickgeCoapClientQuel1seRiken8Dev1,
-    ExstickgeCoapClientQuel1seRiken8Dev2,
     ExstickgeCoapClientQuel1seRiken8WithLock,
     get_exstickge_server_info,
 )
@@ -16,8 +14,6 @@ logger = logging.getLogger(__name__)
 ProxyType = Union[
     ExstickgeCoapClientQuel1seRiken8WithLock,
     ExstickgeCoapClientQuel1seRiken8,
-    ExstickgeCoapClientQuel1seRiken8Dev1,
-    ExstickgeCoapClientQuel1seRiken8Dev2,
     ExstickgeCoapClientQuel1seFujitsu11,
 ]
 
@@ -31,8 +27,6 @@ def create_proxy(ipaddr_css: str) -> ProxyType:
 
         for proxy_cls in (
             ExstickgeCoapClientQuel1seRiken8WithLock,
-            ExstickgeCoapClientQuel1seRiken8Dev1,
-            ExstickgeCoapClientQuel1seRiken8Dev2,
             ExstickgeCoapClientQuel1seRiken8,
             ExstickgeCoapClientQuel1seFujitsu11,
         ):

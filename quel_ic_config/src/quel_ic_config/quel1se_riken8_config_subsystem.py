@@ -91,100 +91,6 @@ class _ExstickgeCoapClientQuel1seRiken8Base(_ExstickgeCoapClientQuel1seTempctrlB
             return False
 
 
-class ExstickgeCoapClientQuel1seRiken8Dev1(_ExstickgeCoapClientQuel1seRiken8Base):
-    _VERSION_SPEC: Tuple[Version, Version, Set[Version]] = Version("0.0.1"), Version("0.0.1"), set()
-
-    # Notes: no read is available for AD5328
-    _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]] = {
-        LsiKindId.AD9082: lambda addr: f"/reg/0x{addr:04x}",
-        LsiKindId.ADRF6780: lambda addr: f"/reg/0x{addr:04x}",
-        LsiKindId.LMX2594: lambda addr: f"/reg/0x{addr:04x}",
-        LsiKindId.MIXERBOARD_GPIO: lambda addr: f"/0x{addr:04x}",
-        LsiKindId.PATHSELECTORBOARD_GPIO: lambda addr: "",
-        LsiKindId.AD7490: lambda addr: "/ctrl",
-        LsiKindId.POWERBOARD_PWM: lambda addr: f"/0x{addr:04x}",
-    }
-
-    _WRITE_REG_PATHS_AND_PAYLOADS: Mapping[LsiKindId, Callable[[int, int], Tuple[str, str]]] = {
-        LsiKindId.AD9082: lambda addr, value: (f"/reg/0x{addr:04x}", f"0x{value:02x}"),
-        LsiKindId.ADRF6780: lambda addr, value: (f"/reg/0x{addr:04x}", f"0x{value:04x}"),
-        LsiKindId.LMX2594: lambda addr, value: (f"/reg/0x{addr:04x}", f"0x{value:04x}"),
-        LsiKindId.AD5328: lambda addr, value: ("/any_wr", f"0x{((addr & 0xF) << 12) | (value & 0xFFF):04x}"),
-        LsiKindId.MIXERBOARD_GPIO: lambda addr, value: (f"/0x{addr:04x}", f"0x{value:04x}"),
-        LsiKindId.PATHSELECTORBOARD_GPIO: lambda addr, value: ("", f"0x{value:02x}"),
-        LsiKindId.AD7490: lambda addr, value: ("/ctrl", f"0x{value:04x}"),
-        LsiKindId.POWERBOARD_PWM: lambda addr, value: (f"/0x{addr:04x}", f"0x{value:04x}"),
-    }
-
-    def __init__(
-        self,
-        target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
-    ):
-        super().__init__(target_addr, target_port, timeout)
-
-    def read_boxtype(self) -> str:
-        # Notes: "v0.0.1" firmware doesn't implement read_boxtype API
-        return "quel1se-riken8"
-
-    def read_current_config(self) -> str:
-        # Notes: dummy functions
-        return ""
-
-    def write_current_config(self, cfg: str) -> None:
-        # Notes: dummy functions
-        logger.warning("config subsystem firmware doesn't support current_config API, just ignored")
-        return
-
-
-class ExstickgeCoapClientQuel1seRiken8Dev2(_ExstickgeCoapClientQuel1seRiken8Base):
-    _VERSION_SPEC: Tuple[Version, Version, Set[Version]] = Version("0.1.0"), Version("0.1.0"), set()
-
-    # Notes: no read is available for AD5328
-    _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]] = {
-        LsiKindId.AD9082: lambda addr: f"/reg/{addr:04x}",
-        LsiKindId.ADRF6780: lambda addr: f"/reg/{addr:04x}",
-        LsiKindId.LMX2594: lambda addr: f"/reg/{addr:04x}",
-        LsiKindId.MIXERBOARD_GPIO: lambda addr: f"/{addr:04x}",
-        LsiKindId.PATHSELECTORBOARD_GPIO: lambda addr: "",
-        LsiKindId.AD7490: lambda addr: "/ctrl",
-        LsiKindId.POWERBOARD_PWM: lambda addr: f"/{addr:04x}",
-    }
-
-    _WRITE_REG_PATHS_AND_PAYLOADS: Mapping[LsiKindId, Callable[[int, int], Tuple[str, str]]] = {
-        LsiKindId.AD9082: lambda addr, value: (f"/reg/{addr:04x}", f"{value:02x}"),
-        LsiKindId.ADRF6780: lambda addr, value: (f"/reg/{addr:04x}", f"{value:04x}"),
-        LsiKindId.LMX2594: lambda addr, value: (f"/reg/{addr:04x}", f"{value:04x}"),
-        LsiKindId.AD5328: lambda addr, value: ("/any_wr", f"{((addr & 0xF) << 12) | (value & 0xFFF):04x}"),
-        LsiKindId.MIXERBOARD_GPIO: lambda addr, value: (f"/{addr:04x}", f"{value:04x}"),
-        LsiKindId.PATHSELECTORBOARD_GPIO: lambda addr, value: ("", f"{value:02x}"),
-        LsiKindId.AD7490: lambda addr, value: ("/ctrl", f"{value:04x}"),
-        LsiKindId.POWERBOARD_PWM: lambda addr, value: (f"/{addr:04x}", f"{value:04x}"),
-    }
-
-    def __init__(
-        self,
-        target_addr: str,
-        target_port: int = _ExstickgeCoapClientBase.DEFAULT_PORT,
-        timeout: float = _ExstickgeCoapClientBase.DEFAULT_RESPONSE_TIMEOUT,
-    ):
-        super().__init__(target_addr, target_port, timeout)
-
-    def read_boxtype(self) -> str:
-        # Notes: "v0.1.0" firmware doesn't implement read_boxtype API
-        return "quel1se-riken8"
-
-    def read_current_config(self) -> str:
-        # Notes: dummy functions
-        return ""
-
-    def write_current_config(self, cfg: str) -> None:
-        # Notes: dummy functions
-        logger.warning("config subsystem firmware doesn't support current_config API, just ignored")
-        return
-
-
 class ExstickgeCoapClientQuel1seRiken8(_ExstickgeCoapClientQuel1seRiken8Base):
     _VERSION_SPEC: Tuple[Version, Version, Set[Version]] = Version("1.0.0"), Version("1.2.1"), set()
 
@@ -245,8 +151,6 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
     }
 
     _PROXY_CLASSES: Tuple[type, ...] = (
-        ExstickgeCoapClientQuel1seRiken8Dev1,
-        ExstickgeCoapClientQuel1seRiken8Dev2,
         ExstickgeCoapClientQuel1seRiken8,
         ExstickgeCoapClientQuel1seRiken8WithLock,
     )

@@ -69,8 +69,6 @@ from quel_ic_config.quel1se_fujitsu11_config_subsystem import (
 )
 from quel_ic_config.quel1se_riken8_config_subsystem import (
     ExstickgeCoapClientQuel1seRiken8,
-    ExstickgeCoapClientQuel1seRiken8Dev1,
-    ExstickgeCoapClientQuel1seRiken8Dev2,
     ExstickgeCoapClientQuel1seRiken8WithLock,
     Quel1seRiken8ConfigSubsystem,
     Quel1seRiken8DebugConfigSubsystem,
@@ -116,8 +114,6 @@ __all__ = (
     "Adrf6780RegNames",
     "Adrf6780LoSideband",
     "ExstickgeCoapClientAdda",
-    "ExstickgeCoapClientQuel1seRiken8Dev1",
-    "ExstickgeCoapClientQuel1seRiken8Dev2",
     "ExstickgeCoapClientQuel1seRiken8",
     "ExstickgeCoapClientQuel1seRiken8WithLock",
     "ExstickgeCoapClientQuel1seFujitsu11",
