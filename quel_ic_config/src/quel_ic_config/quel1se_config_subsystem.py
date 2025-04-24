@@ -33,6 +33,7 @@ class _Quel1seConfigSubsystemBase(
 
     _MXFE_IDXS: Set[int] = {0, 1}
     _LMX2594_OF_MXFES: Tuple[int, ...] = (0, 1)
+    _BOARDS_WITH_CPLD: tuple[Quel1seBoard, ...] = ()
 
     def __init__(
         self,
