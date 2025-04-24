@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Collection, Dict, Mapping, Set, Tuple, Union, cast
+from typing import Any, Callable, Collection, Dict, Mapping, Set, Tuple, Union
 
 from packaging.version import Version
 
@@ -377,41 +377,6 @@ class _Quel1seRiken8ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
         sender_limit_by_binding: bool = False,
     ):
         super().__init__(css_addr, boxtype, port, timeout, sender_limit_by_binding)
-
-    def configure_peripherals(
-        self,
-        param: Dict[str, Any],
-        *,
-        ignore_access_failure_of_adrf6780: Union[Collection[int], None] = None,
-        ignore_lock_failure_of_lmx2594: Union[Collection[int], None] = None,
-    ) -> None:
-        if ignore_access_failure_of_adrf6780 is None:
-            ignore_access_failure_of_adrf6780 = set()
-        if ignore_lock_failure_of_lmx2594 is None:
-            ignore_lock_failure_of_lmx2594 = set()
-
-        # Notes: close all RF switches at first
-        for i in (0, 1):
-            self.init_pathselectorboard_gpio(i, param["pathselectorboard_gpio"][i])
-
-        # Notes: release reset of CPLDs on all the peripheral board
-        proxy = cast(_ExstickgeCoapClientBase, self._proxy)
-        for board in self._BOARDS_WITH_CPLD:
-            if not proxy.read_board_active(board):
-                logger.info(f"releasing reset of board '{board.value}'")
-                proxy.write_board_active(board, True)
-            else:
-                logger.info(f"board '{board.value}' is already activated")
-
-        # Notes: initialize ICs on mixer board 0 for RF
-        self.init_ad5328(0, param["ad5328"][0])
-
-        for i in (0, 1):
-            proxy.write_reset(LsiKindId.ADRF6780, i, 1)
-            self.init_adrf6780(i, param["adrf6780"][i], ignore_id_mismatch=i in ignore_access_failure_of_adrf6780)
-
-        for i in (2, 3, 4):
-            self.init_lmx2594(i, param["lmx2594"][i], ignore_lock_failure=i in ignore_lock_failure_of_lmx2594)
 
 
 class Quel1seRiken8ConfigSubsystem(
