@@ -1,2 +1,3 @@
 graft quel_staging_tool/plain_bits/*
+prune quel_staging_tool/plain_bits/old
 graft quel_staging_tool/tcl_2020
