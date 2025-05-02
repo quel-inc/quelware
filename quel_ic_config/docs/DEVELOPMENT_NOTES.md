@@ -317,14 +317,9 @@ wss層に吸収してしまったので、実体としては wss層の一部と�
 近いうちに CI を立ち上げて自動的にテストが走るようになるが、それにしても、手元でテストをしたくなるだろう。
 現状、静的解析とユニットテストを用意しており、最低でもこの２つをパスしないコードは`main`へのマージは禁止である。
 
-### 依存リポジトリの配置について（要注意）
-quel_ic_config は、qube_master のPythonインターフェースに依存している。
-この依存は近い将来に不要になることが決まっているが、現状では `sugita_experimental`リポジトリと同じ階層に、`qube_master`リポジトリもクローンする必要がある。
-クローンしていないと、`quel_clock_master` のシンボリックリンクが解決できない状態になるので、`ls`を色付き表示している人はすぐに気づくはずだ。 
-
 ### 静的解析
 ```shell
-cd sugita_experimental/quel_ic_config
+cd quelware/quel_ic_config
 ./static_check.sh
 ```
 
