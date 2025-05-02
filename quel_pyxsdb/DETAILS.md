@@ -74,8 +74,8 @@ source your_venv
 pip install -U pip
 pip install build
 
-git clone git@github.com:quel-inc/sugita_experimental.git
-cd sugita_experimental/quel_pyxsdb
+git clone git@github.com:quel-inc/quelware.git
+cd quelware/quel_pyxsdb
 
 python -m build
 pip install dist/quel_pyxsdb-0.2.0-py3-none-any.whl

@@ -306,19 +306,9 @@ qube_master を取り込んで統一的なAPIとしてユーザに見せるべ�
 近いうちに CI を立ち上げて自動的にテストが走るようになるが、それにしても、手元でテストをしたくなるだろう。
 現状、静的解析とユニットテストを用意しており、最低でもこの２つをパスしないコードは`main`へのマージは禁止である。
 
-### 依存リポジトリの配置について（要注意）
-quel_ic_config は、qube_master のPythonインターフェースに依存している。
-なので、`sugita_experimental`リポジトリと同じ階層に、`qube_master`リポジトリもクローンする必要がある。
-クローンしていないと、`quel_clock_master` のシンボリックリンクが解決できない状態になるので、`ls`を色付き表示している人はすぐに気づくはずだ。 
-
-現状はutil内のアルファ版APIとテストスクリプトだけで依存しているが、いずれ、本体にも依存コードが入る。
-submodule で取り込んでもよかったのだが、本体に依存コードが入るタイミングで等価な機能のライブラリを`sugita_experimental`リポジトリ上で開発する予定である。
-feedback用のAPI実装との絡みがあることと、`quelware`リポジトリの構成をなるべく単純にしたかった、というあたりが理由である。
-なお、`quelware`リポジトリは変更後の構造を既に先取りしている。
-
 ### 静的解析
 ```shell
-cd sugita_experimental/quel_ic_config
+cd quelware/quel_ic_config
 ./static_check.sh
 ```
 

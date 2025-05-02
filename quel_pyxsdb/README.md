@@ -12,11 +12,11 @@ xsdbやhw_serverの詳細については [DETAILS.md](./DETAILS.md) を参照の
 
 
 ## パッケージのビルド
-github から sugita_experimental リポジトリをクローンした後に、次の手順でパッケージをビルドする。
+github から quelware リポジトリをクローンした後に、次の手順でパッケージをビルドする。
 以降では、リポジトリをクローンしたディレクトリを　${WORK} と呼ぶことにする。
 
 ```shell
-cd sugita_experimental/quel_pyxsdb
+cd quelware/quel_pyxsdb
 python3.9 -m build
 ```
 
@@ -44,13 +44,13 @@ sudo -i
 cd /opt/quel
 source xsdb_venv
 pip install -U pip
-pip install ${WORK}/sugita_experimental/quel_pyxsdb/dist/quel_pyxsdb-X.Y.Z-py3-none-any.whl
+pip install ${WORK}/quelware/quel_pyxsdb/dist/quel_pyxsdb-X.Y.Z-py3-none-any.whl
 deactivate
 exit
 ```
 
 ### サービスの登録
-/etc/systemd/system 以下に、${WORK}/sugita_experimental/pyxsct/service.examples 以下の4つのファイルをコピーし、足りない情報を追加する。
+/etc/systemd/system 以下に、${WORK}/quelware/quel_pyxsdb/service.examples 以下の4つのファイルをコピーし、足りない情報を追加する。
 
 ```
 [Unit]
