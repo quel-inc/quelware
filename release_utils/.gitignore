@@ -1,0 +1,4 @@
+requirements*.txt
+dependency_pkgs/
+dist/
+quelware_prebuilt.tgz
