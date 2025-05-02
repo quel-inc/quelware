@@ -24,3 +24,6 @@ e7awgsw と quel_clock_master が担っていた機能を代替する。
 
 ## quel_pyxsdb
 ファームウェアアップデートやFPGAのJTAG経由でのリセットなどを支援するためのライブラリ。
+
+## quel_cmod_scripting
+QuBE 及び QuEL-1 の恒温制御ファームウェアのシリアルインターフェースにアクセスするためのライブラリ。
