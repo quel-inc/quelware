@@ -15,3 +15,6 @@
 
 ## quel_staging_tool
 ファームウェアの配布用パッケージ。
+
+## quel_cmod_scripting
+QuBE 及び QuEL-1 の恒温制御ファームウェアのシリアルインターフェースにアクセスするためのライブラリ。
