@@ -1,2 +1,2 @@
-graft quel_staging_tool/plain_bits/*
+recursive-include quel_staging_tool *.py
 graft quel_staging_tool/tcl_2020

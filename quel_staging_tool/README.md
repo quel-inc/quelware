@@ -9,6 +9,9 @@ python -m build
 pip install dist/quel_staging_tool-x.y.z-py3-none-any.whl
 ```
 
+また、ファームウェアのイメージは別途ダウンロードが必要です。
+詳しくは [quel-firmwares](https://github.com/quel-inc/quel-firmwares) を参照してください。
+
 ## 準備
 以下のコマンドを実行するシェルでは、次のコマンドを実行して、Vivadoのパスを通しておく必要がある。
 ```
