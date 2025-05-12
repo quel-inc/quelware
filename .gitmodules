@@ -1,3 +1,0 @@
-[submodule "quel_firmwares"]
-	path = quel_firmwares
-	url = git@github.com:quel-inc/quel-firmwares.git

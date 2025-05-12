@@ -83,7 +83,7 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
         self._tmpdir = tempfile.TemporaryDirectory()
 
     def _bitdir_path(self) -> Path:
-        return Path(os.path.abspath(os.path.dirname(__file__))) / "plain_bits"
+        return get_valid_firmware_directory()
 
     def _tcldir_path(self) -> Path:
         return Path(os.path.abspath(os.path.dirname(__file__))) / "tcl_2020"
@@ -168,3 +168,19 @@ class QuelXilinxFpgaProgrammer(metaclass=ABCMeta):
             port = hwserver.port
 
         return run_vivado_batch(self._tcldir_path(), "dry_run.tcl", f"{host}:{port} {adapter_id}")
+
+
+def get_valid_firmware_directory() -> Path:
+    """
+    Checks for the existence of the firmware directory, "$XDG_DATA_HOME/quelware/firmwares".
+    Returns the valid firmware directory path if found.
+    """
+    if "XDG_DATA_HOME" in os.environ:
+        firmware_dir = Path(os.path.join(os.environ["XDG_DATA_HOME"], "quelware", "firmwares", "plain_bits"))
+    else:
+        firmware_dir = Path(os.path.join(os.path.expanduser("~"), ".local", "share", "quelware", "firmwares", "plain_bits"))
+
+    if not firmware_dir.exists():
+        raise FileNotFoundError(f"Firmware directory not found. Please ensure firmware have been installed.")
+
+    return firmware_dir

@@ -1,9 +1,2 @@
 recursive-include quel_staging_tool *.py
-prune quel_staging_tool/plain_bits
-graft quel_staging_tool/plain_bits/au50_simplemulti_20240125
-graft quel_staging_tool/plain_bits/au200_clockmaster_20240118
-graft quel_staging_tool/plain_bits/zephyr-exstickge_clkdisty_20240731
-graft quel_staging_tool/plain_bits/zephyr-exstickge_quel1se-fujitsu11-a_20240731
-graft quel_staging_tool/plain_bits/zephyr-exstickge_quel1se-fujitsu11-b_20240731
-graft quel_staging_tool/plain_bits/zephyr-exstickge_quel1se-riken8_20240731
-global-exclude *.ltx
+graft quel_staging_tool/tcl_2020
