@@ -124,9 +124,9 @@ CASES_QSYS = {
         "msg": r"(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is (.*) counts \(<= 256 counts\)",
     },
     "nominal_1": {
-        "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only.yaml --max_delta 1",
+        "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only.yaml --max_delta -1",
         "rc": 1,
-        "msg": r"(.*)FAILED SYNCHRONIZATION, delta of the time counters is (.*) counts \(> 1 counts\)",
+        "msg": r"(.*)FAILED SYNCHRONIZATION, delta of the time counters is (.*) counts \(> -1 counts\)",
     },
     "nominal_v2": {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only_v2.yaml --max_delta 256",
@@ -214,9 +214,9 @@ CASES_QSYN = {
         "msg": r"(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is (.*) counts \(<= 256 counts\)",
     },
     "nominal_1": {
-        "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only_v2.yaml --max_delta 1",
+        "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only_v2.yaml --max_delta -1",
         "rc": 1,
-        "msg": r"(.*)FAILED SYNCHRONIZATION, delta of the time counters is (.*) counts \(> 1 counts\)",
+        "msg": r"(.*)FAILED SYNCHRONIZATION, delta of the time counters is (.*) counts \(> -1 counts\)",
     },
     "no_clockmaster": {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_quel1only.yaml",
