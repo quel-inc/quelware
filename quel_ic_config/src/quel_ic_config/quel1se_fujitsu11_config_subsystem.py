@@ -58,6 +58,8 @@ class _ExstickgeCoapClientQuel1seFujitsu11Base(_ExstickgeCoapClientQuel1seTempct
         (LsiKindId.POWERBOARD_PWM, 0): "pwr/xbar/pwm",
     }
 
+    _AVAILABLE_BOARDS: Tuple[Quel1seBoard, ...] = (Quel1seBoard.POWER, Quel1seBoard.MIXER0, Quel1seBoard.MIXER1)
+
     _TEMPCTRL_AD7490_NAME: Tuple[str, ...] = ("adda", "pwr", "mx0", "mx1", "ps0a", "ps0b", "ps1a", "ps1b")
 
     def read_reset(self, kind: LsiKindId, idx: int) -> Union[int, None]:
@@ -155,8 +157,6 @@ class _Quel1seFujitsu11ConfigSubsystemBase(_Quel1seConfigSubsystemBase):
     _PROXY_CLASSES: Tuple[type, ...] = (ExstickgeCoapClientQuel1seFujitsu11,)
 
     _GROUPS: Set[int] = {0, 1}
-
-    _BOARDS_WITH_CPLD: tuple[Quel1seBoard, ...] = (Quel1seBoard.MIXER0, Quel1seBoard.MIXER1, Quel1seBoard.POWER)
 
     _DAC_IDX: Dict[Tuple[int, int], Tuple[int, int]] = {
         (0, 0): (0, 0),

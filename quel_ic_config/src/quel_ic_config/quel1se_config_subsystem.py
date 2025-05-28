@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any, Collection, Dict, Set, Tuple, Union, cast
 
-from quel_ic_config.exstickge_coap_client import Quel1seBoard, _ExstickgeCoapClientBase, get_exstickge_server_info
+from quel_ic_config.exstickge_coap_client import _ExstickgeCoapClientBase, get_exstickge_server_info
 from quel_ic_config.exstickge_proxy import LsiKindId
 from quel_ic_config.quel1_config_subsystem_common import (
     Quel1ConfigSubsystemAd5328Mixin,
@@ -33,7 +33,6 @@ class _Quel1seConfigSubsystemBase(
 
     _MXFE_IDXS: Set[int] = {0, 1}
     _LMX2594_OF_MXFES: Tuple[int, ...] = (0, 1)
-    _BOARDS_WITH_CPLD: tuple[Quel1seBoard, ...] = ()
 
     def __init__(
         self,
@@ -89,7 +88,7 @@ class _Quel1seConfigSubsystemBase(
 
         # Notes: release reset of CPLDs on all the peripheral board
         proxy = cast(_ExstickgeCoapClientBase, self._proxy)
-        for board in self._BOARDS_WITH_CPLD:
+        for board in proxy.available_boards_with_cpld:
             if not proxy.read_board_active(board):
                 logger.info(f"releasing reset of board '{board.value}'")
                 proxy.write_board_active(board, True)
