@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Sequence, Set, Tuple, Union
+from typing import Dict, List, Sequence, Tuple, Union
 
 import aiocoap
 import aiocoap.error
@@ -23,7 +23,7 @@ class Quel1seTempctrlState(str, Enum):
 
 
 class _ExstickgeCoapClientQuel1seTempctrlBase(_ExstickgeCoapClientBase):
-    _AVAILABLE_BOARDS: Set[Quel1seBoard]
+    _AVAILABLE_BOARDS: Tuple[Quel1seBoard, ...]
     _TEMPCTRL_AD7490_NAME: Tuple[str, ...]
 
     def read_tempctrl_loop_count(self) -> int:

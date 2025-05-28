@@ -520,7 +520,7 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
     _READ_REG_PATHS: Mapping[LsiKindId, Callable[[int], str]]
     _WRITE_REG_PATHS_AND_PAYLOADS: Mapping[LsiKindId, Callable[[int, int], Tuple[str, str]]]
 
-    _AVAILABLE_BOARDS: Set[Quel1seBoard]
+    _AVAILABLE_BOARDS: Tuple[Quel1seBoard, ...]
 
     _DATA_MASKS: Mapping[LsiKindId, int] = {
         LsiKindId.AD9082: 0xFF,
@@ -555,6 +555,10 @@ class _ExstickgeCoapClientBase(_ExstickgeProxyBase):
     @property
     def has_lock(self) -> bool:
         return self._core.has_lock
+
+    @property
+    def available_boards_with_cpld(self) -> Tuple[Quel1seBoard, ...]:
+        return self._AVAILABLE_BOARDS
 
     def _creating_core(self) -> AbstractSyncAsyncCoapClient:
         return SyncAsyncCoapClientWithDummyLock(target=self._target)

@@ -27,7 +27,7 @@ class ExstickgeCoapClientAdda(_ExstickgeCoapClientQuel1seTempctrlBase):
         (LsiKindId.AD7490, 0): "tmp/ad_tc0",
     }
 
-    _AVAILABLE_BOARDS: Set[Quel1seBoard] = set()
+    _AVAILABLE_BOARDS: Tuple[Quel1seBoard, ...] = ()
 
     _TEMPCTRL_AD7490_NAME: Tuple[str, ...] = ("adda",)
 
