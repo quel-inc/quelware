@@ -87,7 +87,7 @@ else
   pytest --log-cli-level WARNING --cov=quel_ic_config --cov=testlibs --cov-branch --cov-report=html \
     tests/without_devices \
     tests/with_devices/common tests/with_devices/quel1/common tests/with_devices/quel1/both_adcs --ignore=tests/with_devices/quel1/common/test_wave_generation_quel1.py \
-    tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawwss.py\
+    tests/with_devices/quel1se/common tests/with_devices/quel1se/riken8 --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_port.py --ignore=tests/with_devices/quel1se/riken8/test_wave_generation_quel1se_riken8_rawwss.py\
     tests/with_devices/nec --ignore=tests/with_devices/nec/test_wave_generation_quel1-nec.py \
     tests/with_devices/tempctrl/test_tempctrl_apis.py \
     tests/with_devices/quel1se/fujitsu11 2>&1 | tee "${test_log_dir}/std.txt"
