@@ -1,6 +1,7 @@
 [project]
 name = "quel_ic_config"
 version = "0.10.2"
+requires-python = ">=3.9"
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -35,9 +36,7 @@ quel1_stability_viewer = "quel_ic_config_cli.quel1_stability_viewer:cli_main"
 [project.optional-dependencies]
 dev = [
     "black",
-    "isort",
     "mypy",
-    "pyproject-flake8",
     "types-PyYAML",
     "pytest",
     "pytest-cov",
@@ -48,6 +47,7 @@ dev = [
     "quel_cmod_scripting >= 0.1.8",
     "quel_staging_tool >= 0.0.8",
     "quel_pyxsdb >= 0.2.0",
+    "ruff>=0.11.13",
 ]
 
 [build-system]
@@ -73,21 +73,33 @@ package-dir = {"" = "src"}
 "quel_ic_config_cli.settings" = ["*.json"]
 adi_ad9082_v170 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
-[tool.flake8]
-max-line-length = 120
-ignore = "E203,E704,W503,W605"
-
 [tool.black]
 line-length = 120
 target-version = ["py39"]
 
-[tool.isort]
-profile = "black"
-line_length = 120
-
 [tool.mypy]
 python_version = 3.9
+mypy_path = [
+    "../quel_inst_tool",
+    "../quel_cmod_scripting",
+    "../quel_pyxsdb",
+]
+check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = "matplotlib.*,aiocoap.*,ping3,ulid"
 ignore_missing_imports = true
+
+[tool.uv.sources]
+e7awghal = { path = "../e7awghal", editable = true }
+quel_inst_tool = { path = "../quel_inst_tool", editable = true }
+quel_cmod_scripting = { path = "../quel_cmod_scripting", editable = true }
+quel_staging_tool = { path = "../quel_staging_tool", editable = true }
+quel_pyxsdb = { path = "../quel_pyxsdb", editable = true }
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+ignore = ["E203", "W605", "E731", "E741"]
