@@ -1,0 +1,56 @@
+name: Checks for e7awghal (without devices)
+
+on:
+  pull_request:
+    paths:
+      - "e7awghal/**"
+  push:
+    branches:
+      - "main"
+      - "maintenance/**"
+jobs:
+  checks-and-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: e7awghal
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get install -y libgirepository-2.0-dev libcairo2-dev pkg-config python3-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install the project
+        run: uv sync --locked --extra dev
+
+      - name: Run linter
+        run: make lint
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        if: ${{ !cancelled() }}
+
+      - name: Check format
+        run: make format
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        if: ${{ !cancelled() }}
+
+      - name: Run typechecker
+        run: make typecheck
+        if: ${{ !cancelled() }}
+
+      - name: Run tests without device
+        run: |
+          sudo mkdir /run/quelware # for file lock
+          make test-without-device
+        if: ${{ !cancelled() }}
