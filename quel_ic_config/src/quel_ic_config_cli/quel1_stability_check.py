@@ -12,9 +12,10 @@ from typing import Any, Dict, Final, Optional, Set, Tuple, Type, Union
 import numpy as np
 import numpy.typing as npt
 import polars as pl
-
 from e7awghal import AwgParam, CapParam, CapSection, WaveChunk
 from quel_cmod_scripting import QuelCmod
+from quel_pyxsdb import get_jtagterminal_port
+
 from quel_ic_config import Quel1Box, Quel1BoxType, Quel1PortType, Quel1seAnyConfigSubsystem, Quel1Thermistor
 from quel_ic_config_cli.stability_data_models import (
     QUEL1_ACTUATORS,
@@ -25,7 +26,6 @@ from quel_ic_config_cli.stability_data_models import (
     get_tempctrlstatus_from_boxtype,
 )
 from quel_ic_config_utils import add_common_arguments, add_common_workaround_arguments, complete_ipaddrs
-from quel_pyxsdb import get_jtagterminal_port
 
 logger = logging.getLogger(__name__)
 

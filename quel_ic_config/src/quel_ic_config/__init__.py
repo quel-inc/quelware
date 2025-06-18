@@ -1,6 +1,7 @@
 import importlib.metadata
 
 from e7awghal import AwgParam, CapIqDataReader, CapParam, CapSection, E7FwType, WaveChunk
+
 from quel_ic_config.ad5328 import Ad5328ConfigHelper, Ad5328RegNames, Ad5328Regs
 from quel_ic_config.ad9082 import Ad9082JesdParam, ChipTemperatures, LinkStatus, NcoFtw
 from quel_ic_config.adrf6780 import Adrf6780ConfigHelper, Adrf6780LoSideband, Adrf6780RegNames, Adrf6780Regs

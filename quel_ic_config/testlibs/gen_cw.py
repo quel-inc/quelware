@@ -1,6 +1,7 @@
 from typing import Optional
 
 from e7awghal import AwgParam, WaveChunk
+
 from quel_ic_config.quel1_box import Quel1Box, Quel1PortType
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic
 from quel_ic_config.quel1_wave_subsystem import AbstractStartAwgunitsTask

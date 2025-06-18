@@ -8,10 +8,10 @@ from typing import Dict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
+from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
 
 from quel_ic_config.quel1_box import Quel1BoxIntrinsic
 from quel_ic_config.quel_config_common import Quel1BoxType, Quel1ConfigOption
-from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
 from testlibs.gen_cw import boxi_gen_cw
 from testlibs.register_cw import register_cw_to_all_lines
 from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise

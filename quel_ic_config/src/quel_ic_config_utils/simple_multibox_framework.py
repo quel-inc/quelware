@@ -4,8 +4,8 @@ from typing import Any, Final, Union, cast
 
 import numpy as np
 import numpy.typing as npt
-
 from e7awghal import AwgParam, CapIqDataReader, CapParam, CapSection, WaveChunk
+
 from quel_ic_config import (
     AbstractStartAwgunitsTask,
     BoxStartCapunitsByTriggerTask,

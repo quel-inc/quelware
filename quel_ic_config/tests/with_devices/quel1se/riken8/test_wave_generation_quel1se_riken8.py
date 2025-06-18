@@ -6,9 +6,9 @@ from typing import Dict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
+from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic, Quel1BoxType
-from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 from testlibs.gen_cw import boxi_gen_cw
 
 logger = logging.getLogger(__name__)

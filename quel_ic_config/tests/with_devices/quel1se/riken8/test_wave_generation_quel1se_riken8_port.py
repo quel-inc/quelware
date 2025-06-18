@@ -6,9 +6,9 @@ from typing import Tuple, Union
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
+from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 
 from quel_ic_config.quel1_box import Quel1BoxType
-from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 from testlibs.gen_cw import box_gen_cw
 
 logger = logging.getLogger(__name__)

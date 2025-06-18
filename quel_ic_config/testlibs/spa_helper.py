@@ -3,7 +3,6 @@ import socket
 from typing import Sequence
 
 import numpy as np
-
 from quel_inst_tool import (
     E440xb,
     E440xbTraceMode,

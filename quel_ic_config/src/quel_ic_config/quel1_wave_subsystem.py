@@ -11,7 +11,6 @@ from typing import Callable, Final, Generic, Optional, TypeVar, Union, cast
 
 import numpy as np
 import numpy.typing as npt
-
 from e7awghal import (
     AbstractCapCtrl,
     AbstractCapParam,

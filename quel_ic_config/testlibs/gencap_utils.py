@@ -1,6 +1,7 @@
 from collections.abc import Collection
 
 from e7awghal import AwgParam, CapParam, CapSection, WaveChunk
+
 from quel_ic_config.quel1_box_intrinsic import Quel1BoxIntrinsic
 
 

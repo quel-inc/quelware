@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, Final, List, Set, Tuple, Union
 
 import numpy as np
-
 from e7awghal import CapParam, CapSection, E7awgCaptureDataError
+
 from quel_ic_config.ad9082 import LinkStatus
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem

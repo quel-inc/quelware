@@ -6,9 +6,9 @@ from typing import Any, Generator
 
 import matplotlib as mpl
 import pytest
+from quel_inst_tool import SpectrumAnalyzer
 
 from quel_ic_config.quel1_box import Quel1Box, Quel1BoxType
-from quel_inst_tool import SpectrumAnalyzer
 from testlibs.register_cw import register_cw_to_all_ports
 from testlibs.spa_helper import init_e440xb, init_ms2xxxx, measure_floor_noise
 

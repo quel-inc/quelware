@@ -6,6 +6,7 @@ from ipaddress import ip_address
 from typing import Any, Final, Optional, cast
 
 from e7awghal import CapIqDataReader
+
 from quel_ic_config import QUEL1_BOXTYPE_ALIAS, Quel1BoxType, Quel1PortType
 from quel_ic_config_utils import (
     BoxPool,

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Collection, Dict, Sequence, Tuple, Union
 
 from e7awghal import E7FwType
+
 from quel_ic_config.e7resource_mapper import AbstractQuel1E7ResourceMapper, validate_configuration_integrity
 from quel_ic_config.linkupper import LinkupFpgaMxfe
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem

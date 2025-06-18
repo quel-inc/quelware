@@ -3,8 +3,8 @@ import sys
 from typing import Final
 
 import numpy as np
-
 from e7awghal import AwgParam, CapParam, CapSection, WaveChunk
+
 from quel_ic_config import Quel1Box, Quel1BoxType, Quel1PortType
 from quel_ic_config_utils import add_common_arguments, add_common_workaround_arguments, complete_ipaddrs, plot_iqs
 

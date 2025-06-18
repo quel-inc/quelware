@@ -7,8 +7,8 @@ from typing import Any, Callable, Collection, Dict, Final, Optional, Set, Tuple,
 
 import numpy as np
 import numpy.typing as npt
-
 from e7awghal import AwgParam, CapParam, E7FwType
+
 from quel_ic_config.box_lock import BoxLockError
 from quel_ic_config.e7resource_mapper import (
     AbstractQuel1E7ResourceMapper,

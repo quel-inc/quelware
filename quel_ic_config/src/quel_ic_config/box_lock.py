@@ -1,8 +1,7 @@
 from typing import Callable, TypeVar
 
-from typing_extensions import ParamSpec
-
 from e7awghal import BoxLockDelegationError
+from typing_extensions import ParamSpec
 
 _trancated_traceback_enable: bool = True
 

@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pytest
-
 from e7awghal import AwgParam, WaveChunk
-from quel_ic_config.quel1_box import Quel1BoxIntrinsic
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak, SpectrumAnalyzer
+
+from quel_ic_config.quel1_box import Quel1BoxIntrinsic
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")

@@ -4,6 +4,7 @@ from collections.abc import Collection
 from typing import Union
 
 from e7awghal import ClockmasterAu200Hal
+
 from quel_ic_config.box_lock import BoxLockError
 from quel_ic_config.exstickge_sock_client import FileLockKeeper
 from quel_ic_config.quel1_box import Quel1Box
