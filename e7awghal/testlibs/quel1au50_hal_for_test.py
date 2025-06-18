@@ -16,7 +16,8 @@ from e7awghal.quel1au50_hal import (
     _settings_seq_simplemulti,
 )
 from e7awghal.versionchecker import Quel1Au50HalVersionChecker
-from testlibs.awgctrl_with_hlapi import AwgCtrlHL, AwgUnitHL
+
+from testlibs.awgctrl_with_hlapi import AwgCtrlHL, AwgUnitHL  # isort: skip
 from testlibs.capunit_with_hlapi import CapUnitHL, CapUnitSimplifiedHL
 
 _settings_awg_common_for_test: dict[str, Any] = copy.deepcopy(_settings_awg_common)

@@ -1,9 +1,10 @@
 import logging
 import time
 
-from e7awghal import AbstractQuel1Au50Hal, create_quel1au50hal
 from quel_ic_config.quel1_box_intrinsic import _create_css_object
 from quel_ic_config.quel_config_common import Quel1BoxType
+
+from e7awghal import AbstractQuel1Au50Hal, create_quel1au50hal
 
 logger = logging.getLogger()
 
