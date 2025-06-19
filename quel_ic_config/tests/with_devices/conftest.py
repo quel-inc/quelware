@@ -182,7 +182,6 @@ TEST_SETTINGS_FUJITSU11B = (
 
 
 def make_topoutdir(param) -> Path:
-    mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
 
     dirpath = Path(param["image_path"]) / param["label"]
     if os.path.exists(dirpath):

@@ -2,7 +2,8 @@
 
 set -eu
 
-export PYTHONPATH=src:.
+export MPLBACKEND=agg
+export PYTHONPATH=.
 
 usage() {
   echo "Usage: $0 [ -r ]"

@@ -16,7 +16,6 @@ logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name
 
 
 def make_outdir(dirpath: Path):
-    mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
 
     os.makedirs(dirpath, exist_ok=True)
     return dirpath
