@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from typing import Tuple, Union
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pytest
 from quel_inst_tool import ExpectedSpectrumPeaks, MeasuredSpectrumPeak

@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Any, Generator
 
-import matplotlib as mpl
 import pytest
 from quel_inst_tool import SpectrumAnalyzer
 

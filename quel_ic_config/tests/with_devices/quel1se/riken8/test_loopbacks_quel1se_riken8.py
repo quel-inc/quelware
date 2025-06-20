@@ -3,7 +3,6 @@ import os
 from concurrent.futures import CancelledError
 from pathlib import Path
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest

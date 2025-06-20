@@ -4,7 +4,6 @@ from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Optional
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
