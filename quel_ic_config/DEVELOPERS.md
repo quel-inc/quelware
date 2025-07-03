@@ -15,6 +15,12 @@ Once `uv` is installed, navigate to the project root directory and run `uv sync`
 uv sync
 ```
 
+To include dependencies for development
+
+```shell
+uv sync --extra dev
+```
+
 ### Running Commands within the Virtual Environment
 
 You can execute commands or scripts within the virtual environment in two ways.
