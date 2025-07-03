@@ -24,6 +24,9 @@ format-py-check:
 lint:
 	@uv run ruff check $(py_target)
 
+fix-lint-errors:
+	@uv run ruff check --fix $(py_target)
+
 typecheck:
 	@uv run mypy src/quel_ic_config src/quel_ic_config_utils src/quel_ic_config_cli tests scripts
 
