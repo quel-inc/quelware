@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.2"
+version = "0.10.3"
 requires-python = ">=3.9"
 dependencies = [
     "packaging >= 23.2",
@@ -10,7 +10,7 @@ dependencies = [
     "aiocoap ~= 0.4.7",
     "python-ulid ~= 2.7.0",
     "flufl.lock ~= 8.1.0",
-    "e7awghal == 0.1.3",
+    "e7awghal > 0.1.3",
     "pybind11-stubgen ~= 2.5.1",
     "pandas ~= 2.2.3",
     "polars ~= 1.9.0",

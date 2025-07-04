@@ -1,5 +1,3 @@
-import importlib.metadata
-
 from e7awghal import AwgParam, CapIqDataReader, CapParam, CapSection, E7FwType, WaveChunk
 
 from quel_ic_config.ad5328 import Ad5328ConfigHelper, Ad5328RegNames, Ad5328Regs
@@ -98,7 +96,7 @@ from quel_ic_config.rfswitcharray import (
     RfSwitchArrayConfigHelper,
 )
 
-__version__ = importlib.metadata.version("quel_ic_config")
+__version__ = "0.10.3"
 
 __all__ = (
     "Ad5328",

@@ -469,7 +469,7 @@ wheels = [
 
 [[package]]
 name = "e7awghal"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "../e7awghal" }
 dependencies = [
     { name = "numpy" },
@@ -1610,7 +1610,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quel-ic-config"
-version = "0.10.2"
+version = "0.10.3"
 source = { editable = "." }
 dependencies = [
     { name = "aiocoap", version = "0.4.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1679,7 +1679,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quel-inst-tool"
-version = "0.2.10"
+version = "0.2.11"
 source = { editable = "../quel_inst_tool" }
 dependencies = [
     { name = "fastapi" },
@@ -1722,7 +1722,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quel-pyxsdb"
-version = "0.2.1"
+version = "0.2.1.post1"
 source = { editable = "../quel_pyxsdb" }
 
 [package.metadata]
@@ -1736,7 +1736,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quel-staging-tool"
-version = "0.2.9"
+version = "0.2.10"
 source = { editable = "../quel_staging_tool" }
 dependencies = [
     { name = "aiocoap", version = "0.4.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },

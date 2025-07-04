@@ -1,5 +1,14 @@
 # 更新リスト
 
+## v0.10.3 (Public Release)
+- uvによるパッケージ管理を導入。
+- quel1_parallel_linkupにignore_crc_error_of_mxfe等のオプションを追加。
+- Matplotlibのバックエンドの明示的な指定を排除。
+- 負周波数におけるNCOのFTW設定の不具合を修正。
+- quel1_dump_port_configオプションが正しく動作するように修正。
+- quel1_staging_toolで使用するファームウェアを別途配布する形式に変更。
+- 不要コード削除等のリファクタリング。
+
 ## v0.10.2 (Public Release)
 - quel1_parallel_link コマンドのバグ修正。
   - 対象装置で特定の異常が発生した際に、コマンドが異常終了する問題を解消。
