@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "quel_ic_config/**"
+      - "e7awghal/pyproject.toml"
+      - "e7awghal/uv.lock"
   push:
     branches:
       - "main"
