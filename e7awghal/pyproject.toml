@@ -15,8 +15,6 @@ dev = [
     "pytest",
     "pytest-cov",
     "matplotlib",
-    "pycairo",
-    "PyGObject",
     "quel_ic_config",
     "ruff>=0.11.13",
 ]
