@@ -1,5 +1,3 @@
-import importlib.metadata
-
 from e7awghal.abstract_cap import AbstractCapCtrl, AbstractCapParam, AbstractCapSection, AbstractCapUnit
 from e7awghal.awgctrl import AwgCtrl
 from e7awghal.awgunit import AwgUnit, AwgUnitCtrlReg, AwgUnitErrorReg, AwgUnitStatusReg
@@ -23,7 +21,7 @@ from e7awghal.simplemulti import SimplemultiAwgTriggers, SimplemultiSequencer
 from e7awghal.versionchecker import Quel1Au50HalVersionChecker
 from e7awghal.wavedata import AwgParam, WaveChunk
 
-__version__ = importlib.metadata.version("quel_ic_config")
+__version__ = "0.1.4"
 
 __all__ = (
     "E7awgHardwareError",

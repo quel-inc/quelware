@@ -1,6 +1,6 @@
 [project]
 name = "e7awghal"
-version = "0.1.3"
+version = "0.1.4"
 requires-python = ">=3.9"
 dependencies = [
     "numpy ~= 1.26.0",
