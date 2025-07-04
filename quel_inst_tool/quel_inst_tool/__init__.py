@@ -10,7 +10,7 @@ from quel_inst_tool.spectrum_analyzer import InstDevManager, SpectrumAnalyzer
 from quel_inst_tool.spectrum_peak import ExpectedSpectrumPeaks, MeasuredSpectrumPeak
 from quel_inst_tool.synthhd import SynthHDChannel, SynthHDMaster, SynthHDSweepParams
 
-__version__ = "0.2.9"
+__version__ = "0.2.11"
 
 __all__ = [
     "E4405b",
