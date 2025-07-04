@@ -1,26 +1,5 @@
 # Software for QuEL's Quantum Computing Control Systems
 
-## Getting Started
-
-### Cloning the Repository
-
-To clone this repository, run the following command:
-
-```
-git clone git@github.com:quel-inc/quelware-internal.git
-```
-
-To work with firmware images, you will need to check out `quel-firmware` directory, which is managed as a Git submodule.
-Before doing so, please make sure you have installed [Git LHS](http://git-lfs.com/) on your system.
-You can find the official installation instructions [here](https://github.com/git-lfs/git-lfs?utm_source=gitlfs_site&utm_medium=installation_link&utm_campaign=gitlfs#installing).
-
-To initialize and check out the submodules, please run:
-
-```
-git submodule update --init --recursive
-```
-
-
 ## Packages
 
 ### quel_ic_config
