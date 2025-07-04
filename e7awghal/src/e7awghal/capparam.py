@@ -85,7 +85,7 @@ def rfir_coeff_validation(
         raise ValueError("coefficients of real FIR filters must be one-dimensional ndarray of float")
 
     if v.shape[0] != 8:
-        raise ValueError("the length of coefficients of complex FIR filter must be 16")
+        raise ValueError("the length of coefficients of real FIR filter must be 8")
 
     if v.dtype == np.float64:
         v = v.astype(dtype=np.float32)
