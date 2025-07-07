@@ -1,3 +1,3 @@
 # e7awghal
 
-For developers, see [DEVELOPERS.md](./DEVELOPERS.md).
+HAL Library for e7awg.

@@ -1,12 +1,26 @@
 [project]
 name = "e7awghal"
-version = "0.1.4"
+version = "0.1.4.post1"
+authors = [
+    {name = "quelware Authors", email = "opensource@quel-inc.com"},
+]
+description = "HAL Library for e7awg"
+readme = "README.md"
 requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
 dependencies = [
     "numpy ~= 1.26.0",
     "scipy ~= 1.13.1",
     "pydantic ~= 2.4.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/quel-inc/quelware"
 
 [project.optional-dependencies]
 dev = [
