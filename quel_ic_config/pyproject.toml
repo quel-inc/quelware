@@ -1,7 +1,18 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.3"
+version = "0.10.3.post1"
+authors = [
+    {name = "quelware Authors", email = "opensource@quel-inc.com"},
+]
+description = "A host-side software intended for QuEL control devices"
+readme = "README.md"
 requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -16,6 +27,9 @@ dependencies = [
     "polars ~= 1.9.0",
     "matplotlib",
 ]
+
+[project.urls]
+Repository = "https://github.com/quel-inc/quelware"
 
 [project.scripts]
 quel1_linkup = "quel_ic_config_cli.cli:quel1_linkup"

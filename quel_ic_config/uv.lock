@@ -469,7 +469,7 @@ wheels = [
 
 [[package]]
 name = "e7awghal"
-version = "0.1.4"
+version = "0.1.4.post1"
 source = { editable = "../e7awghal" }
 dependencies = [
     { name = "numpy" },
@@ -1608,7 +1608,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "quel-ic-config"
-version = "0.10.3"
+version = "0.10.3.post1"
 source = { editable = "." }
 dependencies = [
     { name = "aiocoap", version = "0.4.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
