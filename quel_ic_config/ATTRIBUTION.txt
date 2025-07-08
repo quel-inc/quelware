@@ -1,0 +1,20 @@
+ATTRIBUTION
+
+This project is primarily distributed under the terms of the Apache License 2.0.
+A copy of the Apache License 2.0 is included in the LICENSE file in the root directory of this project.
+
+---
+
+Third-Party Proprietary Libraries
+
+This project incorporates certain proprietary software libraries provided by Analog Devices, Inc. (ADI).
+These ADI libraries are NOT covered by the Apache License 2.0 or any other open-source license associated with this project.
+
+The use, distribution, and any other interaction with these specific ADI libraries are governed by their own separate, proprietary licensing terms.
+
+The full licensing documentation for these Analog Devices, Inc. libraries can be found at the following location within this repository:
+
+./adi_ad9082_v170/ad9082_api/LICENSES.pdf
+
+Please review the terms and conditions in the above-referenced LICENSES.pdf file carefully, as they apply to your use of the ADI components.
+
