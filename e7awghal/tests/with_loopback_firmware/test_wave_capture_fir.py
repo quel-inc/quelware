@@ -38,12 +38,12 @@ OUTPUT_SETTING = {
     "wave_image_path": Path("./artifacts/dsp"),
 }
 
-# -150.0 MHz and -100 MHz can be choosen by complex FIR BPF but cannot be
+# -150.0 MHz and -100 MHz can be chosen by complex FIR BPF but cannot be
 # chosen by real FIR BPF after downsampling. This is because the -150 MHz and -100 MHz
 # are converted to -25 MHz and 25 MHz by downsampling, and the real FIR BPF cannot
 # separate these two frequencies.
 # On the other hand, 200 MHz and 230 MHz is hardly selected by complex FIR BPF since
-# the seperation is too small. However, real FIR BPF after downsampling can separate
+# the separation is too small. However, real FIR BPF after downsampling can separate
 # 200 MHz and 230 MHz.
 
 RO_FREQS: List[float] = [-150.0e6, -100.0e6, 200.0e6, 230.0e6]

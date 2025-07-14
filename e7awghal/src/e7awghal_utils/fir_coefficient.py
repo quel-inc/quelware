@@ -42,7 +42,7 @@ def complex_fir_bpf(
     # Multiply low-pass filter by complex exponential to shift its frequency response
     complex_coeff = coeff * complex_exp
 
-    return complex_coeff[::-1]  # reverse list to be argument for CaptureParam
+    return complex_coeff
 
 
 def real_fir_bpf(
@@ -98,7 +98,7 @@ def real_fir_bpf(
     n = np.arange(len(coeff))
     phase = np.dot(coeff, np.exp(-1j * 2.0 * np.pi * target_freq * n / sampling_freq))
 
-    return target_freq, np.arctan2(phase.imag, phase.real), coeff[::-1]  # reverse list to be argument for CaptureParam
+    return target_freq, np.arctan2(phase.imag, phase.real), coeff
 
 
 def _folded_frequency_by_decimation(frequency: float) -> float:

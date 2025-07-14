@@ -43,7 +43,7 @@ def cfir_coeff_validation(
 ) -> npt.NDArray[np.complex64]:
     if v is None:
         v = np.zeros(16, dtype=np.complex64)
-        v[15] = 1.0 + 0.0j
+        v[0] = 1.0 + 0.0j
     else:
         if not (
             isinstance(v, np.ndarray)
@@ -74,7 +74,7 @@ def rfir_coeff_validation(
 ) -> npt.NDArray[np.float32]:
     if v is None:
         v = np.zeros(8, dtype=np.float32)
-        v[7] = 1.0
+        v[0] = 1.0
     else:
         if v.dtype in (np.complex64, np.complex128):
             # Notes: to raise exception instead of warning irrespective of user's settings.

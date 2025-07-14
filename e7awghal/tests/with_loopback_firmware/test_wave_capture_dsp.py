@@ -152,18 +152,18 @@ def test_sum_range_decimated(proxy_au_cm_w):
 @pytest.mark.parametrize(
     ["coeff", "exponent_offset"],
     [
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex64), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex128), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float32), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 14),
         (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16384], dtype=np.complex64), 0),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 8192, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 1),
-        (np.array([4096, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 2),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5], dtype=np.complex64), 15),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1], dtype=np.complex64), 15),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1j], dtype=np.complex64), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32), 14),
+        (np.array([0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 14),
+        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex64), 14),
+        (np.array([16384, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 0),
+        (np.array([0, 0, 0, 0, 0, 0, 0, 8192, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 1),
+        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4096], dtype=np.complex64), 2),
+        (np.array([0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 15),
+        (np.array([-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 15),
+        (np.array([1j, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64), 14),
     ],
 )
 def test_cfir(proxy_au_cm_w, coeff, exponent_offset):
@@ -182,18 +182,18 @@ def test_cfir(proxy_au_cm_w, coeff, exponent_offset):
     nonzero_idx = np.argmax(np.abs(coeff))
     nonzero_tap = coeff[nonzero_idx]
     assert d00.shape == (1, 128)
-    assert (d00[0] == w[49 + nonzero_idx : 49 + 128 + nonzero_idx] * nonzero_tap).all()
+    assert (d00[0] == w[64 - nonzero_idx : 64 + 128 - nonzero_idx] * nonzero_tap).all()
 
 
 @pytest.mark.parametrize(
     ["coeff", "exponent_offset"],
     [
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex128), 15),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 15),
         (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 16),
         (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), -1),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex128), 12.5),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex128), 14),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.complex128), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 12.5),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex128), 14),
     ],
 )
 def test_cfir_abnormal(proxy_au_cm_w, coeff, exponent_offset):
@@ -210,11 +210,11 @@ def test_cfir_abnormal(proxy_au_cm_w, coeff, exponent_offset):
 @pytest.mark.parametrize(
     ["coeffs", "exponent_offset"],
     [
-        (np.array([[0, 0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0, 1]], dtype=np.float64), 14),
-        (np.array([[0, 0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 1, 0, 0]], dtype=np.float64), 14),
-        (np.array([[1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0, 0, 0]], dtype=np.float64), 14),
-        (np.array([[0, 0, 0, 0, 0, 0, 0, 16384], [0, 0, 0, 0, 0, 0, 0, 16384]], dtype=np.float64), 0),
-        (np.array([[0, 0, 0, 0, 0, 0, 0, -1], [0, 0, 0, 0, 0, 0, 0, -1]], dtype=np.float64), 15),
+        (np.array([[1, 0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0, 0, 0]], dtype=np.float64), 14),
+        (np.array([[0, 1, 0, 0, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0, 0, 0]], dtype=np.float64), 14),
+        (np.array([[0, 0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 1, 0, 0]], dtype=np.float64), 14),
+        (np.array([[16384, 0, 0, 0, 0, 0, 0, 0], [16384, 0, 0, 0, 0, 0, 0, 0]], dtype=np.float64), 0),
+        (np.array([[-1, 0, 0, 0, 0, 0, 0, 0], [-1, 0, 0, 0, 0, 0, 0, 0]], dtype=np.float64), 15),
     ],
 )
 def test_rfirs(proxy_au_cm_w, coeffs, exponent_offset):
@@ -243,56 +243,56 @@ def test_rfirs(proxy_au_cm_w, coeffs, exponent_offset):
 
     nonzero_idx0 = np.argmax(np.abs(coeffs[0]))
     nonzero_tap0 = coeffs[0][nonzero_idx0]
-    assert (d00[0].real == w[pos0 + 57 + nonzero_idx0 : pos0 + 57 + 128 + nonzero_idx0].real * nonzero_tap0).all()
+    assert (d00[0].real == w[pos0 + 64 - nonzero_idx0 : pos0 + 64 + 128 - nonzero_idx0].real * nonzero_tap0).all()
 
     nonzero_idx1 = np.argmax(np.abs(coeffs[1]))
     nonzero_tap1 = coeffs[1][nonzero_idx1]
-    assert (d00[0].imag == w[pos0 + 57 + nonzero_idx1 : pos0 + 57 + 128 + nonzero_idx1].imag * nonzero_tap1).all()
+    assert (d00[0].imag == w[pos0 + 64 - nonzero_idx1 : pos0 + 64 + 128 - nonzero_idx1].imag * nonzero_tap1).all()
 
 
 @pytest.mark.parametrize(
     ["coeff_r", "coeff_i", "exponent_offset"],
     [
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 0.5], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([0.5, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             15,
         ),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 0.5], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([0.5, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             15,
         ),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             2.5,
         ),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             -1,
         ),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1j], dtype=np.complex64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([1j, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             14,
         ),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1j], dtype=np.complex64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1j, 0, 0, 0, 0, 0, 0, 0], dtype=np.complex64),
             14,
         ),
-        (np.array([0, 0, 0, 0, 0, 0, 1], dtype=np.float64), np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0], dtype=np.float64), np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64), 14),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             14,
         ),
-        (np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64), np.array([0, 0, 0, 0, 0, 0, 1], dtype=np.float64), 14),
+        (np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64), np.array([1, 0, 0, 0, 0, 0, 0], dtype=np.float64), 14),
         (
-            np.array([0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
-            np.array([0, 0, 0, 0, 0, 0, 0, 0, 1], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
+            np.array([1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.float64),
             14,
         ),
     ],

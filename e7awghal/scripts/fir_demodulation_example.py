@@ -60,7 +60,7 @@ def plot_waveform(
 def get_transfer_function(
     coeffs: Union[npt.NDArray[np.float32], npt.NDArray[np.complex64]], sampling_freq: float
 ) -> Dict[str, npt.NDArray[np.float64]]:
-    w, h = freqz(coeffs[::-1], worN=4096, whole=True)
+    w, h = freqz(coeffs, worN=4096, whole=True)
     phase_response = np.angle(h)
     bias = round(np.mean(phase_response) / (2 * np.pi))
     #  w is converted from [0, 2*pi] to [-pi, pi] for frequency vector to be in ascending order
@@ -226,13 +226,13 @@ def draw_time_responses(
         dtype=np.float64,
     )
 
-    cfiltered = lfilter(complex_coeffs[::-1], [1.0], np.exp(1j * 2.0 * np.pi * freq * time_array))
+    cfiltered = lfilter(complex_coeffs, [1.0], np.exp(1j * 2.0 * np.pi * freq * time_array))
     plot_waveform(axs[0], time_array, cfiltered, title="CFIR")
     if not without_decimation:
         cfiltered = cfiltered[::DECIMATION_RATE]
         time_array = time_array[::DECIMATION_RATE]
 
-    rfiltered = lfilter(real_coeffs[::-1], [1.0], cfiltered)
+    rfiltered = lfilter(real_coeffs, [1.0], cfiltered)
     plot_waveform(axs[1], time_array, rfiltered, title="RFIR")
 
     if table_for_demodulation is not None:

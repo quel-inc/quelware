@@ -292,7 +292,7 @@ class _CapParamCfirRegFile(BaseModel, validate_assignment=True):
 
     @classmethod
     def fromcapparam(cls, cp: AbstractCapParam[CapSection]) -> "_CapParamCfirRegFile":
-        v = cp.complexfir_coeff
+        v = cp.complexfir_coeff[::-1]
         vv = np.round(v * (1 << cp.complexfir_exponent_offset))  # TODO: check this is ok or not
         r = cls(real=vv.real, imag=vv.imag)
         return r
@@ -324,8 +324,8 @@ class _CapParamRfirsRegFile(BaseModel, validate_assignment=True):
     @classmethod
     def fromcapparam(cls, cp: AbstractCapParam[CapSection]) -> "_CapParamRfirsRegFile":
         r = cls(
-            real=np.round(cp.realfirs_real_coeff * (1 << cp.realfirs_exponent_offset)),
-            imag=np.round(cp.realfirs_imag_coeff * (1 << cp.realfirs_exponent_offset)),
+            real=np.round(cp.realfirs_real_coeff[::-1] * (1 << cp.realfirs_exponent_offset)),
+            imag=np.round(cp.realfirs_imag_coeff[::-1] * (1 << cp.realfirs_exponent_offset)),
         )
         return r
 
