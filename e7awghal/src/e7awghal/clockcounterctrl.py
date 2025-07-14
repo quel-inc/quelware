@@ -61,7 +61,7 @@ class ClockcounterCtrl:
         val = np.frombuffer(rpl.payload, dtype=np.dtype(">u8"))
         if self._sysref_latch:
             logger.debug(f"{self.__class__.__name__}:read_counter --> {val[0]:08x}, {val[1]:08x}")
-            return val[0], val[1]
+            return int(val[0]), int(val[1])
         else:
             logger.debug(f"{self.__class__.__name__}:read_counter --> {val[0]:08x}")
-            return val[0], None
+            return int(val[0]), None
