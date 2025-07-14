@@ -147,9 +147,9 @@ def test_cfir(proxy_au_cm_w):
             if peak_idx == max_idx:
                 continue
             if abs(abs(f[peak_idx] - f[max_idx]) - 50e6) < abs(f[1] - f[0]):
-                assert p[peak_idx] / p[max_idx] < 0.2  # seperation between-150 MHz and -100 MHz
+                assert p[peak_idx] / p[max_idx] < 0.2  # separation between-150 MHz and -100 MHz
             elif abs(abs(f[peak_idx] - f[max_idx]) - 30e6) < abs(f[1] - f[0]):
-                assert p[peak_idx] / p[max_idx] < 0.6  # seperation between 200 MHz and 230 MHz
+                assert p[peak_idx] / p[max_idx] < 0.6  # separation between 200 MHz and 230 MHz
             else:
                 assert p[peak_idx] / p[max_idx] < 2e-2
 
@@ -208,7 +208,7 @@ def test_rfir(proxy_au_cm_w):
         # phases are obtained with demodulation since fft includes phase offset.
         t = np.linspace(0, RO_DURATION, int(RO_DURATION / DT / DECIMATION_RATE), endpoint=False, dtype=np.float32)
         iq = np.sum(d00[0] * np.exp(-1j * 2.0 * np.pi * folded_freqs[i] * t))
-        # check if detected phase shift matches the expected wthin 1 degree.
+        # check if detected phase shift matches the expected within 1 degree.
         assert abs(np.arctan2(iq.imag, iq.real) - phase_shifts[i]) < np.pi / 180.0
 
         plt.cla()
@@ -221,14 +221,14 @@ def test_rfir(proxy_au_cm_w):
         p = abs(np.fft.fft(d00[0]))
         f = np.fft.fftfreq(len(p), DECIMATION_RATE * DT)
 
-        # seperation between -150 MHz and -100 MHz does not improve by real FIR BPF but other seperation improves
+        # separation between -150 MHz and -100 MHz does not improve by real FIR BPF but other separation improves
         for idx in peak_indices:
             if idx == peak_indices[i]:
                 continue
             if abs(f[idx] + f[peak_indices[i]]) < abs(f[1] - f[0]):
-                assert p[idx] / p[peak_indices[i]] < 0.2  # seperation between -150 MHz and -100 MHz
+                assert p[idx] / p[peak_indices[i]] < 0.2  # separation between -150 MHz and -100 MHz
             elif abs(abs(f[idx] - f[peak_indices[i]]) - 30e6) < abs(f[1] - f[0]):
-                assert p[idx] / p[peak_indices[i]] < 1e-1  # seperation between 200 MHz and 230 MHz
+                assert p[idx] / p[peak_indices[i]] < 1e-1  # separation between 200 MHz and 230 MHz
             elif abs(abs(f[idx] - f[peak_indices[i]]) - 5e6) < abs(f[1] - f[0]):
                 continue
             else:
