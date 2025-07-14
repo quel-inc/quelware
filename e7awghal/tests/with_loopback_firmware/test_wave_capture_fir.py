@@ -53,7 +53,7 @@ PASS_BAND_WIDTH: Final[float] = 25.0e6
 
 
 def make_outdir(label: str):
-    mpl.use("Gtk3Agg")  # TODO: reconsider where to execute.
+    mpl.use("Agg")  # TODO: reconsider where to execute.
 
     dirpath = OUTPUT_SETTING["wave_image_path"] / label
     if os.path.exists(dirpath):
