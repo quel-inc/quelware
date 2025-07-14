@@ -53,7 +53,7 @@ python_version = 3.9
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "matplotlib.*,aiocoap.*,ping3,ulid,e7awgsw.*,quel_clock_master.*,scipy.*"
+module = "matplotlib.*,aiocoap.*,ulid,scipy.*"
 ignore_missing_imports = true
 
 [tool.uv.sources]

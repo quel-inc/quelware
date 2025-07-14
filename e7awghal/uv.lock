@@ -1387,7 +1387,6 @@ requires-dist = [
     { name = "packaging", specifier = ">=23.2" },
     { name = "pandas", specifier = "~=2.2.3" },
     { name = "pandas-stubs", marker = "extra == 'dev'" },
-    { name = "ping3", marker = "extra == 'dev'", specifier = "~=4.0.4" },
     { name = "polars", specifier = "~=1.9.0" },
     { name = "pybind11", marker = "extra == 'dev'", specifier = "~=2.13.6" },
     { name = "pybind11-stubgen", specifier = "~=2.5.1" },
