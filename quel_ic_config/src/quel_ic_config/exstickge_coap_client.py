@@ -7,6 +7,7 @@ import threading
 import time
 from abc import ABCMeta, abstractmethod
 from enum import Enum
+from itertools import cycle
 from pathlib import Path
 from typing import Any, Callable, Final, Mapping, Set, Tuple, Union
 from weakref import WeakSet
@@ -195,7 +196,7 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
     async def _take_lock(self, context, with_token: bool) -> None: ...
 
     @abstractmethod
-    async def _keep_lock(self, context) -> None: ...
+    async def _keep_lock(self, context) -> bool: ...
 
     @abstractmethod
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool: ...
@@ -219,7 +220,9 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
                     context = await aiocoap.Context.create_client_context()
                     self._request_to_init_context = False
 
-                await self._keep_lock(context)
+                if not (await self._keep_lock(context)):
+                    logger.info(f"fails to keep lock of {self._target[0]}")
+                    break
 
                 req = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: self._request_queue.get(timeout=self._looping_timeout)
@@ -279,9 +282,10 @@ class SyncAsyncCoapClientWithDummyLock(AbstractSyncAsyncCoapClient):
         self._locked = True  # Notes: not locked, actually.
         # Notes: do not invoke self._register_self() here, it is meaningless and harmful.
 
-    async def _keep_lock(self, context) -> None:
+    async def _keep_lock(self, context) -> bool:
         if not self._locked:
             await self._take_lock(context, False)
+        return True
 
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         self._release_lock_body()
@@ -310,6 +314,7 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
 
     _DEFAULT_LOCK_EXPIRATION: Final[float] = 15.0  # [s]
     _FLOCK_TIMEOUT: int = 5  # [s]
+    _KILL_CHECK_PERIOD: int = 10  # cycles
 
     def __init__(
         self,
@@ -320,9 +325,10 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
         super().__init__(target=target, looping_timeout=looping_timeout)
         if not lock_directory.is_dir():
             raise RuntimeError(f"lock directory '{lock_directory}' is unavailable")
-        self._lockobj: fl.Lock = fl.Lock(
-            lockfile=str(lock_directory / self._target[0]), lifetime=int(self._DEFAULT_LOCK_EXPIRATION)
-        )
+        self._lockfile: str = str(lock_directory / self._target[0])
+        self._lockobj: fl.Lock = fl.Lock(lockfile=self._lockfile, lifetime=int(self._DEFAULT_LOCK_EXPIRATION))
+        self._killfile: str = f"{self._lockobj.claimfile}" + ".kill"
+        self._kill_check_counter = cycle([True] + (self._KILL_CHECK_PERIOD - 1) * [False])
 
     async def _take_lock(self, context, with_token: bool) -> None:
         self._lock_timestamp = time.perf_counter()  # no next chance to take a lock.
@@ -334,15 +340,25 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
         except fl.TimeOutError:
             logger.error(f"failed to acquire lock of {self._target[0]}")
 
-    async def _keep_lock(self, context) -> None:
+    async def _keep_lock(self, context) -> bool:
         if self._lock_timestamp == 0.0:
             await self._take_lock(context, False)
         else:
+            if next(self._kill_check_counter):
+                if self._check_if_killfile_exists():
+                    logger.info(f"Cancelled to refresh lock of {self._target[0]} due to the killfile.")
+                    return False
+
             try:
                 self._lockobj.refresh()
                 self._lock_timestamp = time.perf_counter()
             except fl.NotLockedError:
-                pass
+                logger.error(f"failed to refresh lock of {self._target[0]}")
+                return False
+        return True
+
+    def _check_if_killfile_exists(self) -> bool:
+        return os.path.exists(self._killfile)
 
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         self._release_lock_body()
@@ -429,7 +445,7 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
                 self._locked = False
                 raise RuntimeError(f"failed to extend the lock of {self._target[0]}")
 
-    async def _keep_lock(self, context) -> None:
+    async def _keep_lock(self, context) -> bool:
         if self._lock_timestamp == 0.0:
             try:
                 await self._take_lock(context, with_key=True)
@@ -444,6 +460,7 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
                 if cur - self._lock_timestamp >= self._LOCK_REACQUIRE_PERIOD:
                     # Notes: just extending a lock
                     await self._take_lock(context, with_key=False)
+        return True
 
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         if key is None:

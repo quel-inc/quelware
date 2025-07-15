@@ -1,10 +1,12 @@
 import atexit
 import logging
+import os
 import socket
 import struct
 import threading
 import time
 from abc import ABCMeta, abstractmethod
+from itertools import cycle
 from pathlib import Path
 from typing import Final, Mapping, Tuple, Union
 from weakref import WeakSet
@@ -145,6 +147,7 @@ class DummyLockKeeper(AbstractLockKeeper):
 class FileLockKeeper(AbstractLockKeeper):
     _DEFAULT_LOCK_EXPIRATION = 15.0  # [s]
     _FLOCK_TIMEOUT: int = 5  # [s]
+    _KILL_CHECK_PERIOD: int = 10
 
     def __init__(
         self,
@@ -156,9 +159,11 @@ class FileLockKeeper(AbstractLockKeeper):
         super().__init__(target=target, loop_wait=loop_wait)
         if not lock_directory.is_dir():
             raise RuntimeError(f"lock directory '{lock_directory}' is unavailable")
-        self._lockobj: fl.Lock = fl.Lock(
-            lockfile=str(lock_directory / self._target[0]), lifetime=int(self._DEFAULT_LOCK_EXPIRATION)
-        )
+        self._lockfile: str = str(lock_directory / self._target[0])
+        self._lockobj: fl.Lock = fl.Lock(lockfile=self._lockfile, lifetime=int(self._DEFAULT_LOCK_EXPIRATION))
+
+        self._killfile: str = f"{self._lockobj.claimfile}" + ".kill"
+        self._kill_check_counter = cycle([True] + (self._KILL_CHECK_PERIOD - 1) * [False])
 
     @property
     def has_lock(self) -> bool:
@@ -178,12 +183,20 @@ class FileLockKeeper(AbstractLockKeeper):
             return False
 
     def _keep_lock(self) -> bool:
+        if next(self._kill_check_counter):
+            if self._check_if_killfile_exists():
+                logger.info(f"Cancelled to refresh lock of {self._target[0]} due to the killfile.")
+                return False
+
         try:
             self._lockobj.refresh()
-            return True
         except Exception as e:
             logger.warning(e)
             return False
+        return True
+
+    def _check_if_killfile_exists(self) -> bool:
+        return os.path.exists(self._killfile)
 
     def _release_lock(self) -> None:
         try:

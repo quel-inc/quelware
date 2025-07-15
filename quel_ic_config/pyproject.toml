@@ -46,6 +46,7 @@ quel1se_riken8_check_all_internal_loopbacks = "quel_ic_config_cli.quel1se_check_
 quel1_check_all_internal_loopbacks = "quel_ic_config_cli.quel1_check_all_internal_loopbacks:main"
 quel1_stability_check = "quel_ic_config_cli.quel1_stability_check:cli_main"
 quel1_stability_viewer = "quel_ic_config_cli.quel1_stability_viewer:cli_main"
+quel_filelock_manager = "quel_ic_config_cli.filelock_manager:main"
 
 [project.optional-dependencies]
 dev = [
