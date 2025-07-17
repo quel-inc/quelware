@@ -1,0 +1,211 @@
+name: Build wheels and source distributions
+
+on: [workflow_dispatch]
+
+jobs:
+  build-quel_ic_config-wheel:
+    name: Build wheels of quel_ic_config ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["cp39", "cp310", "cp311", "cp312", "cp313"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_ic_config
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.0.1
+        with:
+          package-dir: quel_ic_config
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-manylinux_x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_ic_config-${{ matrix.python }}
+          path: ./wheelhouse/*.whl
+          retention-days: 3
+
+  build-quel_ic_config-source:
+    name: Build source distribution of quel_ic_config ${{ matrix.python }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_ic_config
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        working-directory: quel_ic_config
+        run: |
+          pip install build
+          python -m build --sdist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_ic_config_source
+          path: |
+            ./quel_ic_config/dist/*
+          retention-days: 3
+
+  build-e7awghal:
+    name: Build e7awghal
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: e7awghal
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        working-directory: e7awghal
+        run: |
+          pip install build
+          python -m build .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e7awghal
+          path: |
+            ./e7awghal/dist/*
+          retention-days: 3
+
+  build-quel_inst_tool:
+    name: Build quel_inst_tool
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_inst_tool
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        working-directory: quel_inst_tool
+        run: |
+          pip install build
+          python -m build .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_inst_tool
+          path: ./quel_inst_tool/dist/*
+          retention-days: 3
+
+  build-quel_pyxsdb:
+    name: Build quel_pyxsdb
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_pyxsdb
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        working-directory: quel_pyxsdb
+        run: |
+          pip install build
+          python -m build .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_pyxsdb
+          path: ./quel_pyxsdb/dist/*
+          retention-days: 3
+
+  build-quel_staging_tool:
+    name: Build quel_staging_tool
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_staging_tool
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build
+        working-directory: quel_staging_tool
+        run: |
+          pip install build
+          python -m build .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_staging_tool
+          path: ./quel_staging_tool/dist/*
+          retention-days: 3
+
+  build-quel_cmod_scripting:
+    name: Build quel_cmod_scripting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: quel_cmod_scripting
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Build wheels
+        working-directory: quel_cmod_scripting
+        run: |
+          pip install build
+          python -m build .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quel_cmod_scripting
+          path: ./quel_cmod_scripting/dist/*
+          retention-days: 3
+
+  merge-artifacts:
+    needs:
+      - build-quel_ic_config-wheel
+      - build-quel_ic_config-source
+      - build-e7awghal
+      - build-quel_inst_tool
+      - build-quel_pyxsdb
+      - build-quel_staging_tool
+      - build-quel_cmod_scripting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload Merged One
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: ./dist/*
+          retention-days: 60
+
