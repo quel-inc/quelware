@@ -35,9 +35,13 @@ if [ "$(is_venv)" != "VENV" ]; then
     exit 1
 fi
 
-test_log_dir="artifacts/logs"
+timestamp="$(date '+%Y%m%dT%H%M%S' --utc)Z"
+export QUEL_TESTING_ARTIFACTS_DIR="artifacts/${timestamp}_${TOX_ENV_NAME:-unknownenv}"
+
+output_dir="${QUEL_TESTING_ARTIFACTS_DIR}"
+
+test_log_dir="${output_dir}/logs"
 mkdir -p "${test_log_dir}"
-rm -f "${test_log_dir}/*.txt"
 
 echo "rebooting 074 and 157"
 helpers/powercycle_quel_ci_env.sh 074 157
@@ -113,3 +117,5 @@ else
     tests/with_devices/tempctrl/test_tempctrl_apis.py \
     tests/with_devices/quel1se/fujitsu11 2>&1 | tee "${test_log_dir}/std.txt"
 fi
+
+mv htmlcov ${output_dir} # "htmlcov" directory is created by pytest-cov

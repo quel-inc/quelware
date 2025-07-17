@@ -13,6 +13,9 @@ from testlibs.spa_helper import init_e440xb, init_ms2xxxx, measure_floor_noise
 
 logger = logging.getLogger(__name__)
 
+if (artifacts_path := os.getenv("QUEL_TESTING_ARTIFACTS_DIR")) is None:
+    artifacts_path = "./artifacts"
+
 TEST_SETTINGS_MS2720T1 = (
     {
         "spa_type": "MS2XXXX",
@@ -43,7 +46,7 @@ TEST_SETTINGS_QUEL1 = (
             "unavailable": [],
             "via_monitor_out": [],
         },
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 0,
         "linkup": False,
     },
@@ -63,7 +66,7 @@ TEST_SETTINGS_QUEL1 = (
             "unavailable": [],
             "via_monitor_out": [],
         },
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 0,
         "linkup": False,
     },
@@ -87,7 +90,7 @@ TEST_SETTINGS_QUEL1 = (
             "unavailable": [],
             "via_monitor_out": [],
         },
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 9,
         "linkup": False,
     },
@@ -96,7 +99,7 @@ TEST_SETTINGS_QUEL1 = (
 TEST_SETTINGS_E4405B = (
     {
         "spa_type": "E4405B",
-        "spectrum_image_path": "./artifacts/spectrum-060",
+        "spectrum_image_path": f"{artifacts_path}/spectrum-060",
         "max_background_noise": -55.0,
         "spa_parameters": {
             "freq_center": 8.5e9,
@@ -124,7 +127,7 @@ TEST_SETTINGS_RIKEN8 = (
             "unavailable": [],
             "via_monitor_out": [],
         },
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 0,
         "linkup": False,
     },
@@ -148,7 +151,7 @@ TEST_SETTINGS_FUJITSU11A = (
             "via_monitor_out": [],
         },
         "spa_type": "",
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 0,
         "linkup": False,
     },
@@ -173,7 +176,7 @@ TEST_SETTINGS_FUJITSU11B = (
             "via_monitor_out": [],
         },
         "spa_type": "",
-        "image_path": "./artifacts",
+        "image_path": artifacts_path,
         "relative_loss": 0,
         "linkup": False,
     },

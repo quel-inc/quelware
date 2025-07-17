@@ -18,6 +18,8 @@ from testlibs.spa_helper import init_ms2xxxx, measure_floor_noise
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
+if (artifacts_path := os.getenv("QUEL_TESTING_ARTIFACTS_DIR")) is None:
+    artifacts_path = "./artifacts"
 
 TEST_SETTINGS = (
     {
@@ -57,7 +59,7 @@ TEST_SETTINGS = (
         # "spa_name": "ms2090-1",
         # "spa_parameters": {},
         # "max_background_noise": -65.0,
-        "spectrum_image_path": "./artifacts/spectrum-017",
+        "spectrum_image_path": f"{artifacts_path}/spectrum-017",
         "relative_loss": 0,
     },
 )

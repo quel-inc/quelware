@@ -11,8 +11,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-license = "Apache-2.0"
-license-files = ["LICEN[CS]E*"]
+license = {file = "LICENSE"}
 dependencies = [
     "packaging >= 23.2",
     "numpy ~= 1.26.0",
@@ -117,3 +116,17 @@ target-version = "py39"
 
 [tool.ruff.lint]
 ignore = ["E203", "W605", "E731", "E741"]
+
+[tool.tox]
+env_list = ["3.9", "3.10", "3.11", "3.12"]
+requires = ["tox>=4.0", "tox-uv"]
+
+[tool.tox.env_run_base]
+isolated_build = true
+allowlist_externals = ["bash"]
+deps = [
+    ".[dev]"
+]
+commands = [["bash", "./runtest_std.sh"]]
+set_env = { TOX_ENV_NAME = "{envname}" }
+
