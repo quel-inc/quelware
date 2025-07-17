@@ -129,27 +129,27 @@ source test_venv/bin/activate
 pip install -U pip
 ```
 
-### リポジトリの取得
+### インストール
+次のコマンドによってインストールできる。
+```
+pip install quel_ic_config
+```
+
+### 開発者向け依存パッケージを含めたインストール
 リポジトリのクローンがまだであれば、適当な作業ディレクトリに移動の後、次のコマンドで本リポジトリをクローンし、quel_ic_config ディレクトリに移動する。
 ```shell
 git clone git@github.com:quel-inc/quelware.git
 cd quelware/quel_ic_config
 ```
+もし古いバージョンが必要な場合は、対応するブランチにswitchすること。
 
-### コンパイル済みパッケージの取得と展開
-次のコマンドを実行すると、 コンパイル済みのパッケージをリポジトリの[リリースページ](https://github.com/quel-inc/quelware/releases/)から自動で取得する。
-```shell
-./download_prebuilt.sh
-tar xfv quelware_prebuilt.tgz  
+そして次のコマンドを実行することで、開発者向けの依存パッケージをインストールできる。
+```
+pip install ../quel_inst_tool ../quel_pyxsdb ../quel_staging_tool ../quel_cmod_scripting quel_ic_config[dev]
 ```
 
-`wget` コマンドが無い場合には事前にインストールするか、手動でのダウンロードをすることになる。
-```shell
-sudo apt install wget
-```
-
-### インストール
-今後は、全ての制御装置ファームウェアに対応した単一のパッケージを配布するので、これまでのような装置のファームウェアの種類によって、パッケージ
+#### ファームウェアによる差異について
+v0.10以降では、全ての制御装置ファームウェアに対応した単一のパッケージを配布するので、これまでのような装置のファームウェアの種類によって、パッケージ
 を選択する必要はない。
 とはいうものの、現状、quelware-0.10.x が対応しているファームウェアはSIMPLEMULTI_STANDARDの1種類だけである。
 古いSIMPLEMULTI_CLASSICのファームウェアはサポート中止であり、また、ベータ版配布のFEEDBACK_EARLYファームウェアは、一時的にサポートを停止している。
@@ -172,15 +172,7 @@ quel1_firmware_version --boxtype xxxxx --ipaddr_wss 10.1.0.yyy
 もし、SIMPLEMULTI_CLASSICのファームウェアをインストールしている機体は、従来の0.8.x系のquelwareで使用するか、あるいは、ファームウェアのアップデートが必要である。
 
 #### `SIMPLEMULTI_STANDARD`の場合
-次のコマンドでパッケージをインストールする。
-```shell
-pip install -r requirements.txt
-```
-
-ファームウェアアップデートツールなどの開発用のツール群が必要な場合や、quel_ic_config本体のリビルドをしたい場合には、こちらをインストールするのが便利である。
-```text
-pip install -r requirements_dev.txt
-```
+上記のインストール手順に沿ってインストールしていただければよい。
 
 #### `FEEDBACK_EARLY`の場合
 FEEDBACK_EARLY版のファームウェアはベータ版として配布しているが、コマンドシーケンサ周辺がSIMPLEMULTI_STANDARDファームウェアと互換性がない。
@@ -196,7 +188,6 @@ pip install build
 python -m build
 ```
 パッケージファイルは、`dist/quel_ic_config-X.Y.Z-cp39-cp39-linux_x86_64.whl` (X,Y,Z は実際にはバージョン番号になる) という名前で作成される。
-バージョン番号を振り直した場合には、`requirements*.txt` の内容と齟齬が生じるので注意して頂きたい。
 
 ## シェルコマンドを使ってみる
 quel_ic_config のパッケージにはいくつかの便利なシェルコマンドが入っており、仮想環境から使用できる。
