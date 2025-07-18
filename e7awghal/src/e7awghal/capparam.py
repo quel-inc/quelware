@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from collections.abc import Sequence
 from typing import Annotated, Literal, Union, cast
@@ -35,23 +37,21 @@ SumRange = Annotated[
 ]
 
 
+def _cfir_coeff_default_factory() -> CfirCoeff:
+    v = np.zeros(16, dtype=np.complex64)
+    v[0] = 1.0 + 0.0j
+    return v
+
+
 def cfir_coeff_validation(
-    v: Union[
-        npt.NDArray[np.complex128], npt.NDArray[np.complex64], npt.NDArray[np.float64], npt.NDArray[np.float32], None
-    ],
+    v: Union[npt.NDArray[np.complex128], npt.NDArray[np.complex64], npt.NDArray[np.float64], npt.NDArray[np.float32]],
     info: ValidationInfo,
 ) -> npt.NDArray[np.complex64]:
-    if v is None:
-        v = np.zeros(16, dtype=np.complex64)
-        v[0] = 1.0 + 0.0j
-    else:
-        if not (
-            isinstance(v, np.ndarray)
-            and v.dtype in (np.complex128, np.complex64, np.float64, np.float32)
-            and v.ndim == 1
-        ):
-            raise ValueError("coefficients of complex FIR filter must be one-dimensional ndarray of complex")
-        v = v.astype(np.complex64)  # Notes: copying it even when the given v is np.complex64.
+    if not (
+        isinstance(v, np.ndarray) and v.dtype in (np.complex128, np.complex64, np.float64, np.float32) and v.ndim == 1
+    ):
+        raise ValueError("coefficients of complex FIR filter must be one-dimensional ndarray of complex")
+    v = v.astype(np.complex64)  # Notes: copying it even when the given v is np.complex64.
 
     if v.shape[0] != 16:
         raise ValueError("the length of coefficients of complex FIR filter must be 16")
@@ -69,17 +69,19 @@ CfirCoeff = Annotated[
 ]
 
 
+def _rfir_coeff_default_factory() -> RfirCoeff:
+    v = np.zeros(8, dtype=np.float32)
+    v[0] = 1.0
+    return v
+
+
 def rfir_coeff_validation(
-    v: Union[npt.NDArray[np.float64], npt.NDArray[np.float32], None], info: ValidationInfo
+    v: Union[npt.NDArray[np.float64], npt.NDArray[np.float32]], info: ValidationInfo
 ) -> npt.NDArray[np.float32]:
-    if v is None:
-        v = np.zeros(8, dtype=np.float32)
-        v[0] = 1.0
-    else:
-        if v.dtype in (np.complex64, np.complex128):
-            # Notes: to raise exception instead of warning irrespective of user's settings.
-            raise ValueError("coefficients of real FIR filters must be one-dimensional ndarray of float")
-        v = v.astype(dtype=np.float32)
+    if v.dtype in (np.complex64, np.complex128):
+        # Notes: to raise exception instead of warning irrespective of user's settings.
+        raise ValueError("coefficients of real FIR filters must be one-dimensional ndarray of float")
+    v = v.astype(dtype=np.float32)
 
     if not (isinstance(v, np.ndarray) and v.dtype in (np.float64, np.float32) and v.ndim == 1):
         raise ValueError("coefficients of real FIR filters must be one-dimensional ndarray of float")
@@ -103,15 +105,16 @@ RfirCoeff = Annotated[
 ]
 
 
+def _window_coeff_default_factory() -> WindowCoeff:
+    return np.array([1.0 + 0.0j], dtype=np.complex128)
+
+
 def window_coeff_validation(
-    v: Union[npt.NDArray[np.complex128], npt.NDArray[np.float64], None], info: ValidationInfo
+    v: Union[npt.NDArray[np.complex128], npt.NDArray[np.float64]], info: ValidationInfo
 ) -> npt.NDArray[np.complex128]:
-    if v is None:
-        v = np.array([1.0 + 0.0j], dtype=np.complex128)
-    else:
-        if not (isinstance(v, np.ndarray) and v.dtype in (np.complex128, np.float64) and v.ndim == 1):
-            raise ValueError("coefficients of window function must be one-dimensional ndarray of complex128")
-        v = v.astype(np.complex128)
+    if not (isinstance(v, np.ndarray) and v.dtype in (np.complex128, np.float64) and v.ndim == 1):
+        raise ValueError("coefficients of window function must be one-dimensional ndarray of complex128")
+    v = v.astype(np.complex128)
 
     if not (1 <= v.shape[0] <= 2048):
         raise ValueError("the length of coefficients of window function must be betweeb 1 and 2048")
@@ -198,14 +201,14 @@ class _BaseCapParam(BaseModel, validate_assignment=True, extra="forbid"):
 class CapParamSimple(_BaseCapParam):
     complexfir_enable: Literal[False] = Field(default=False)
     complexfir_exponent_offset: Literal[14] = Field(default=14)
-    complexfir_coeff: CfirCoeff = Field(default=None, validate_default=True)
+    complexfir_coeff: CfirCoeff = Field(default_factory=_cfir_coeff_default_factory, validate_default=True)
     decimation_enable: Literal[False] = Field(default=False)
     realfirs_enable: Literal[False] = Field(default=False)
     realfirs_exponent_offset: Literal[14] = Field(default=14)
-    realfirs_real_coeff: RfirCoeff = Field(default=None, validate_default=True)
-    realfirs_imag_coeff: RfirCoeff = Field(default=None, validate_default=True)
+    realfirs_real_coeff: RfirCoeff = Field(default_factory=_rfir_coeff_default_factory, validate_default=True)
+    realfirs_imag_coeff: RfirCoeff = Field(default_factory=_rfir_coeff_default_factory, validate_default=True)
     window_enable: Literal[False] = Field(default=False)
-    window_coeff: WindowCoeff = Field(default=None, validate_default=True)
+    window_coeff: WindowCoeff = Field(default_factory=_window_coeff_default_factory, validate_default=True)
     sum_enable: Literal[False] = Field(default=False, frozen=True)
     sum_range: SumRange = Field(default=(0x0000_0000, 0xFFFF_FFFF), validate_default=True, frozen=True)
     integration_enable: Literal[False] = Field(default=False)
@@ -216,14 +219,14 @@ class CapParamSimple(_BaseCapParam):
 class CapParam(_BaseCapParam):
     complexfir_enable: bool = Field(default=False)
     complexfir_exponent_offset: int = Field(default=14, ge=0, le=15)
-    complexfir_coeff: CfirCoeff = Field(default=None, validate_default=True)
+    complexfir_coeff: CfirCoeff = Field(default_factory=_cfir_coeff_default_factory, validate_default=True)
     decimation_enable: bool = Field(default=False)
     realfirs_enable: bool = Field(default=False)
     realfirs_exponent_offset: int = Field(default=14, ge=0, le=15)
-    realfirs_real_coeff: RfirCoeff = Field(default=None, validate_default=True)
-    realfirs_imag_coeff: RfirCoeff = Field(default=None, validate_default=True)
+    realfirs_real_coeff: RfirCoeff = Field(default_factory=_rfir_coeff_default_factory, validate_default=True)
+    realfirs_imag_coeff: RfirCoeff = Field(default_factory=_rfir_coeff_default_factory, validate_default=True)
     window_enable: bool = Field(default=False)
-    window_coeff: WindowCoeff = Field(default=None, validate_default=True)
+    window_coeff: WindowCoeff = Field(default_factory=_window_coeff_default_factory, validate_default=True)
     sum_enable: bool = Field(default=False)
     sum_range: SumRange = Field(default=(0x0000_0000, 0xFFFF_FFFF), validate_default=True)
     integration_enable: bool = Field(default=False)

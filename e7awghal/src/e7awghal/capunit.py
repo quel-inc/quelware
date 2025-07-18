@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import logging
 import time
@@ -263,8 +265,8 @@ class _CapParamSectionRegFile(BaseModel, validate_assignment=True):
         return r
 
 
-def _zerolist(n: int) -> list[float]:
-    return [0.0 for _ in range(n)]
+def _zerolist(n: int) -> list[int]:
+    return [0 for _ in range(n)]
 
 
 class _CapParamCfirRegFile(BaseModel, validate_assignment=True):
@@ -366,11 +368,11 @@ class _CapParamWindowRegFile(BaseModel, validate_assignment=True):
         return r
 
 
-def classification_paramhalf_validation(
-    v: Optional[npt.NDArray[np.float32]], info: ValidationInfo
-) -> npt.NDArray[np.float32]:
-    if v is None:
-        v = np.array((0, 32767, 0), dtype=np.float32)
+def _classification_paramhalf_default_factory() -> ClassificationRegFileHalf:
+    return np.array((0, 32767, 0), dtype=np.float32)
+
+
+def classification_paramhalf_validation(v: npt.NDArray[np.float32], info: ValidationInfo) -> npt.NDArray[np.float32]:
     if not (isinstance(v, np.ndarray) and v.dtype == np.float32 and v.ndim == 1 and v.shape[0] == 3):
         raise TypeError("invalid classification parameter")
 
@@ -390,8 +392,12 @@ ClassificationRegFileHalf = Annotated[
 
 
 class _CapParamClassificationRegFile(BaseModel, validate_assignment=True):
-    p0: ClassificationRegFileHalf = Field(default=None, validate_default=True)
-    p1: ClassificationRegFileHalf = Field(default=None, validate_default=True)
+    p0: ClassificationRegFileHalf = Field(
+        default_factory=_classification_paramhalf_default_factory, validate_default=True
+    )
+    p1: ClassificationRegFileHalf = Field(
+        default_factory=_classification_paramhalf_default_factory, validate_default=True
+    )
 
     def build(self) -> npt.NDArray[np.uint32]:
         t = np.array(np.hstack((self.p0, self.p1)), dtype=np.float32)
