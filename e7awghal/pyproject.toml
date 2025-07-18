@@ -16,7 +16,7 @@ license-files = ["LICEN[CS]E*"]
 dependencies = [
     "numpy ~= 1.26.0",
     "scipy ~= 1.13.1",
-    "pydantic ~= 2.4.0",
+    "pydantic ~= 2.4",
 ]
 
 [project.urls]
