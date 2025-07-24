@@ -69,13 +69,9 @@ def test_unlocked_lock(ipaddr_wss, boxtype):
     with pytest.raises(BoxLockError):
         t1 = box1.get_current_timecounter()  # Notes: raises here!
         assert t1 > t0
-    if boxtype.is_quel1se():
-        rfsw1 = box1.dump_rfswitches()  # Notes: non-sideeffect access to css is allowed for QuEL-1 SE.
+    with pytest.raises(BoxLockError):
+        rfsw1 = box1.dump_rfswitches()  # Notes: raises here!
         assert rfsw0 == rfsw1
-    else:
-        with pytest.raises(BoxLockError):
-            rfsw1 = box1.dump_rfswitches()  # Notes: raises here for QuEL-1.
-            assert rfsw0 == rfsw1
     del box1
 
 

@@ -207,6 +207,7 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
     async def _async_main(self):
         context = await aiocoap.Context.create_client_context()
 
+        is_first_loop = True
         while True:
             try:
                 if self._old_recovery_key is not None:
@@ -220,9 +221,10 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
                     context = await aiocoap.Context.create_client_context()
                     self._request_to_init_context = False
 
-                if not (await self._keep_lock(context)):
-                    logger.info(f"fails to keep lock of {self._target[0]}")
-                    break
+                if is_first_loop or self.has_lock:
+                    if not (await self._keep_lock(context)):
+                        logger.info(f"fails to keep lock of {self._target[0]}")
+                        await self._release_lock(context)
 
                 req = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: self._request_queue.get(timeout=self._looping_timeout)
@@ -239,6 +241,8 @@ class AbstractSyncAsyncCoapClient(threading.Thread, metaclass=ABCMeta):
             except queue.Empty:
                 # Notes: timeout is set to avoid blocking
                 pass
+            finally:
+                is_first_loop = False
 
         # Notes: executed only when Box object is explicitly deleted.
         logger.info(f"quitting main loop of {self.__class__.__name__} of {self._target[0]}")
@@ -343,7 +347,7 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
     async def _keep_lock(self, context) -> bool:
         if self._lock_timestamp == 0.0:
             await self._take_lock(context, False)
-        else:
+        elif self.has_lock:
             if next(self._kill_check_counter):
                 if self._check_if_killfile_exists():
                     logger.info(f"Cancelled to refresh lock of {self._target[0]} due to the killfile.")
@@ -355,7 +359,7 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
             except fl.NotLockedError:
                 logger.error(f"failed to refresh lock of {self._target[0]}")
                 return False
-        return True
+        return self.has_lock
 
     def _check_if_killfile_exists(self) -> bool:
         return os.path.exists(self._killfile)
@@ -365,14 +369,11 @@ class SyncAsyncCoapClientWithFileLock(AbstractSyncAsyncCoapClient):
         return True
 
     def _release_lock_body(self) -> None:
-        try:
-            self._lockobj.unlock()
-            self._locked = False
-        except fl.NotLockedError:
-            pass
+        self._lockobj.unlock(unconditionally=True)
+        self._locked = False
 
     def _check_lock_at_host(self, data: Any) -> bool:
-        return self.has_lock or data["code"] == aiocoap.GET
+        return self.has_lock
 
     def _cleanup(self):
         self._release_lock_body()
@@ -460,7 +461,7 @@ class SyncAsyncCoapClientWithDeviceLock(AbstractSyncAsyncCoapClient):
                 if cur - self._lock_timestamp >= self._LOCK_REACQUIRE_PERIOD:
                     # Notes: just extending a lock
                     await self._take_lock(context, with_key=False)
-        return True
+        return self._locked
 
     async def _release_lock(self, context, key: Union[ulid.ULID, None] = None) -> bool:
         if key is None:
