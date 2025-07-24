@@ -1,6 +1,6 @@
 [project]
 name = "quel_ic_config"
-version = "0.10.3.post1"
+version = "0.10.4"
 authors = [
     {name = "quelware Authors", email = "opensource@quel-inc.com"},
 ]

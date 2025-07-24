@@ -1,6 +1,6 @@
 [project]
 name = "e7awghal"
-version = "0.1.4.post1"
+version = "0.1.5"
 authors = [
     {name = "quelware Authors", email = "opensource@quel-inc.com"},
 ]
