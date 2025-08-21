@@ -305,10 +305,7 @@ class Quel1Box:
         Quel1BoxType.QuEL1SE_FUJITSU11_TypeB: _LOOPBACK_QuEL1SE_FUJITSU11_TypeB,
     }
 
-    __slots__ = (
-        "_dev",
-        "_boxtype",
-    )
+    __slots__ = ("_dev", "_boxtype", "_name")
 
     @classmethod
     @guarded_by_box_lock
@@ -320,6 +317,7 @@ class Quel1Box:
         ipaddr_css: Union[str, None] = None,
         boxtype: Quel1BoxType,
         skip_init: bool = False,
+        name: Optional[str] = None,
         **options: Collection[int],
     ) -> "Quel1Box":
         """create QuEL box objects
@@ -330,13 +328,14 @@ class Quel1Box:
         :param config_root: root path of config setting files to read (optional)
         :param config_options: a collection of config options (optional)
         :param skip_init: skip calling box.initialization(), just for debugging.
+        :param name: user-definable name for identification purposes.
         :param ignore_crc_error_of_mxfe: a list of MxFEs whose CRC error of the datalink is ignored. (optional)
         :param ignore_access_failure_of_adrf6780: a list of ADRF6780 whose communication faiulre via SPI bus is
                                                   dismissed (optional)
         :param ignore_lock_failure_of_lmx2594: a list of LMX2594 whose lock failure is ignored (optional)
         :param ignore_extraordinary_converter_select_of_mxfe: a list of MxFEs whose unusual converter mapping is
                                                               dismissed (optional)
-        :return: SimpleBox objects
+        :return: a Quel1Box object
         """
         css, wss, rmap = create_css_wss_rmap(
             ipaddr_wss=ipaddr_wss,
@@ -344,7 +343,7 @@ class Quel1Box:
             ipaddr_css=ipaddr_css,
             boxtype=boxtype,
         )
-        box = Quel1Box(css=css, wss=wss, rmap=rmap, linkupper=None, **options)
+        box = Quel1Box(css=css, wss=wss, rmap=rmap, linkupper=None, name=name, **options)
         if not skip_init:
             box.initialize()
         return box
@@ -356,15 +355,27 @@ class Quel1Box:
         wss: Quel1WaveSubsystem,
         rmap: AbstractQuel1E7ResourceMapper,
         linkupper: Union[LinkupFpgaMxfe, None] = None,
+        name: Optional[str] = None,
         **options: Collection[int],
     ):
         self._dev = Quel1BoxIntrinsic(css=css, wss=wss, rmap=rmap, linkupper=linkupper, **options)
         self._boxtype = css.boxtype
         if self._boxtype not in self._PORT2LINE:
             raise ValueError(f"unsupported boxtype; {self._boxtype}")
+        if name is None:
+            name = f"{self._dev._wss.ipaddr_wss}:{self.boxtype}"
+        self._name = name
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}:{self._dev._wss.ipaddr_wss}:{self.boxtype}>"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, name: str):
+        self._name = name
 
     @property
     def css(self) -> Quel1AnyConfigSubsystem:
