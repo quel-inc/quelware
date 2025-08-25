@@ -30,6 +30,22 @@ logger = logging.getLogger(__name__)
 Quel1PortType = Union[int, Tuple[int, int]]
 
 
+def parse_port_str(port_name: str) -> Quel1PortType:
+    try:
+        return int(port_name)
+    except ValueError:
+        pass
+    try:
+        if not (port_name.startswith("(") and port_name.endswith(")")):
+            raise ValueError("invalid format: missing parentheses")
+        parts = port_name[1:-1].split(",")
+        if len(parts) != 2:
+            raise ValueError("invalid format: requires exactly two elements")
+        return (int(parts[0]), int(parts[1]))
+    except ValueError as e:
+        raise ValueError(f"unexpected name of port: '{port_name}'") from e
+
+
 class BoxStartCapunitsNowTask(
     AbstractCancellableTaskWrapper[
         dict[tuple[int, int], CapIqDataReader], dict[tuple[Quel1PortType, int], CapIqDataReader]
@@ -608,19 +624,8 @@ class Quel1Box:
             self.config_runit(port, runit=runit, **runit_conf)
         self.config_port(port, **port_conf)
 
-    def _parse_port_str(self, port_name: str) -> Quel1PortType:
-        port_idx: Union[Quel1PortType, None] = None
-        if type(port_name) is str:
-            if port_name.isdigit():
-                port_idx = int(port_name)
-            elif port_name[0] == "(" and port_name[-1] == ")":
-                splitted = port_name[1:-1].split(",")
-                if len(splitted) == 2 and splitted[0].strip().isdigit() and splitted[1].strip().isdigit():
-                    port_idx = (int(splitted[0]), int(splitted[1]))
-
-        if port_idx is None or port_idx not in self._PORT2LINE[self._boxtype]:
-            raise ValueError(f"unexpected name of port: '{port_name}'")
-        return port_idx
+    def is_valid_port(self, port: Quel1PortType) -> bool:
+        return port in self._PORT2LINE[self._boxtype]
 
     def _parse_channel_conf(self, cfg0: Dict[str, Any]) -> Dict[int, Any]:
         cfg1: Dict[int, Any] = {}
@@ -634,7 +639,9 @@ class Quel1Box:
     def _parse_ports_conf(self, cfg0: Dict[str, Dict[str, Any]]) -> Dict[Quel1PortType, Dict[str, Any]]:
         cfg1: Dict[Quel1PortType, Dict[str, Any]] = {}
         for pname, pcfg in cfg0.items():
-            pidx = self._parse_port_str(pname)
+            pidx = parse_port_str(pname)
+            if not self.is_valid_port(pidx):
+                raise ValueError(f"Invalid port: '{pidx}'")
             cfg1[pidx] = {}
             for k, v in pcfg.items():
                 if k in {"channels", "runits"}:

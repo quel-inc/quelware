@@ -17,7 +17,13 @@ from quel_ic_config.pathselectorboard_gpio import (
 )
 from quel_ic_config.powerboard_pwm import PowerboardPwmConfigHelper, PowerboardPwmRegs, PowerboardPwmRegsName
 from quel_ic_config.quel1_any_config_subsystem import Quel1AnyConfigSubsystem, Quel1seAnyConfigSubsystem
-from quel_ic_config.quel1_box import BoxStartCapunitsByTriggerTask, BoxStartCapunitsNowTask, Quel1Box, Quel1PortType
+from quel_ic_config.quel1_box import (
+    BoxStartCapunitsByTriggerTask,
+    BoxStartCapunitsNowTask,
+    Quel1Box,
+    Quel1PortType,
+    parse_port_str,
+)
 from quel_ic_config.quel1_box_intrinsic import (
     BoxIntrinsicStartCapunitsByTriggerTask,
     BoxIntrinsicStartCapunitsNowTask,
@@ -198,6 +204,7 @@ __all__ = (
     "BoxIntrinsicStartCapunitsNowTask",
     "BoxIntrinsicStartCapunitsByTriggerTask",
     "Quel1PortType",
+    "parse_port_str",
     "Quel1Box",
     "Quel1ConfigLoader",
     "BoxStartCapunitsNowTask",
