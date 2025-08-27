@@ -34,4 +34,4 @@ test-without-devices:
 	@uv run pytest tests/without_devices
 
 test-multi-environment:
-	@uvx run tox
+	@uvx tox
