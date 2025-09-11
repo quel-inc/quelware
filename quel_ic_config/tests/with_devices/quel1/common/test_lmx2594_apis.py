@@ -4,15 +4,15 @@ import pytest
 
 from quel_ic_config.quel1_config_subsystem import QubeConfigSubsystem
 from quel_ic_config.quel_config_common import Quel1BoxType
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_lo_mult(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_lo_mult(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False
@@ -31,10 +31,9 @@ def test_lo_mult(fixtures1):
             assert css.get_lo_multiplier(group, line) == mult[line]
 
 
-def test_divider(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_divider(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False

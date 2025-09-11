@@ -3,15 +3,15 @@ import logging
 import pytest
 
 from quel_ic_config.quel1_config_subsystem import QubeConfigSubsystem
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_all_temperatures(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_all_temperatures(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False
@@ -28,19 +28,11 @@ def _is_near_enough(x, y):
     return abs(x - y) < 2.15e-5 * 2
 
 
-@pytest.mark.parametrize(
-    ("mxfe", "fractional_mode"),
-    [
-        (0, True),
-        (0, False),
-        (1, True),
-        (1, False),
-    ],
-)
-def test_nco_set_get(mxfe, fractional_mode, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+@pytest.mark.parametrize("mxfe", [0, 1])
+@pytest.mark.parametrize("fractional_mode", [True, False])
+def test_nco_set_get(mxfe, fractional_mode, boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False
@@ -90,35 +82,11 @@ def test_nco_set_get(mxfe, fractional_mode, fixtures1):
         assert ftw == adc_fnco_ftws[i]
 
 
-@pytest.mark.parametrize(
-    ("mxfe", "fsc"),
-    [
-        (0, -1),
-        (0, 0),
-        (0, 3000),
-        (0, 7000),
-        (0, 20000),
-        (0, 40000),
-        (0, 40001),
-        (0, 40520),
-        (0, 40527),
-        (0, 90000),
-        (1, -1),
-        (1, 0),
-        (1, 3000),
-        (1, 7000),
-        (1, 20000),
-        (1, 40000),
-        (1, 40001),
-        (1, 40520),
-        (1, 40527),
-        (1, 90000),
-    ],
-)
-def test_fsc_get(mxfe, fsc, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+@pytest.mark.parametrize("mxfe", [0, 1])
+@pytest.mark.parametrize("fsc", [-1, 0, 3000, 7000, 20000, 40000, 40001, 40520, 40527, 90000])
+def test_fsc_get(mxfe, fsc, boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False
@@ -141,17 +109,10 @@ def test_fsc_get(mxfe, fsc, fixtures1):
             assert abs(fsc_r - fsc) < 41
 
 
-@pytest.mark.parametrize(
-    ("mxfe",),
-    [
-        (0,),
-        (1,),
-    ],
-)
-def test_get_interpolation_rate(mxfe, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+@pytest.mark.parametrize("mxfe", [0, 1])
+def test_get_interpolation_rate(mxfe, boxtype, box_provider):
+    box = box_provider.get_box_from_type(boxtype)
     css = box.css
     if not isinstance(css, QubeConfigSubsystem):
         assert False

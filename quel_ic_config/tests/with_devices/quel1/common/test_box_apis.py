@@ -1,17 +1,20 @@
+# mypy: disable-error-code="arg-type"
 import logging
 from typing import Collection
 
 import pytest
-from boxdump_quel1a_01 import a1, a1d, a1df, a1f, a2d, a2df
+
+from tests.with_devices.conftest import BoxProvider
+
+from .boxdump_quel1a_01 import a1, a1d, a1df, a1f, a2d, a2df
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_config_box_intrinsic_read_and_write(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_intrinsic_read_and_write(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box._dev.dump_box()["lines"]
     assert box._dev.config_validate_box(config)
@@ -19,10 +22,9 @@ def test_config_box_intrinsic_read_and_write(fixtures1):
     box._dev.config_box(config)
 
 
-def test_config_box_intrinsic_mismatch(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_intrinsic_mismatch(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box._dev.dump_box()["lines"]
     config[(1, 0)]["cnco_freq"] = 314159
@@ -33,10 +35,9 @@ def test_config_box_intrinsic_mismatch(fixtures1):
     assert not box._dev.config_validate_box(config)
 
 
-def test_config_box_intrinsic_inconsistent(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_intrinsic_inconsistent(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box._dev.dump_box()["lines"]
     if (0, "r") not in config:
@@ -47,10 +48,9 @@ def test_config_box_intrinsic_inconsistent(fixtures1):
         box._dev.config_box(config)
 
 
-def test_config_box_validation(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_validation(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box.dump_box()["ports"]
     assert box.config_validate_box(config)
@@ -58,10 +58,9 @@ def test_config_box_validation(fixtures1):
     box.config_box(config)
 
 
-def test_config_box_mismatch(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_mismatch(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box.dump_box()["ports"]
     config[1]["cnco_freq"] = 314159  # Notes: Readin for QuEL-1,
@@ -71,10 +70,9 @@ def test_config_box_mismatch(fixtures1):
     assert not box.config_validate_box(config)
 
 
-def test_config_box_inconsistent(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_box_inconsistent(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box.dump_box()["ports"]
     if box.boxtype == "quel1-a":
@@ -92,10 +90,9 @@ def test_config_box_inconsistent(fixtures1):
         box.config_box(config)
 
 
-def test_invalid_port(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_invalid_port(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype == "quel1-b":
         with pytest.raises(ValueError, match="invalid port of quel1-b: #00"):
@@ -105,6 +102,7 @@ def test_invalid_port(fixtures1):
         box.config_box({20: {"lo_freq": 12e9}})
 
 
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
 @pytest.mark.parametrize(
     (
         "boxtypes",
@@ -151,10 +149,10 @@ def test_invalid_port(fixtures1):
         ),
     ],
 )
-def test_config_box_basic(boxtypes: Collection[str], for_box: bool, dual_modulus_nco: bool, config, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+def test_config_box_basic(
+    boxtypes: Collection[str], for_box: bool, dual_modulus_nco: bool, config, boxtype, box_provider: BoxProvider
+):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype in boxtypes:
         box.css.allow_dual_modulus_nco = dual_modulus_nco
@@ -167,19 +165,17 @@ def test_config_box_basic(boxtypes: Collection[str], for_box: bool, dual_modulus
         pytest.skip("TBA.")
 
 
-def test_config_rfswitch_basic(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_rfswitch_basic(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     rc = box.dump_rfswitches()
     box.config_rfswitches(rc)
 
 
-def test_config_rfswitch_invalid(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050", "staging-060"}:
-        pytest.skip()
+@pytest.mark.parametrize("boxtype", ["quel1-a", "quel1-b"])
+def test_config_rfswitch_invalid(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype == "quel1-a":
         with pytest.raises(ValueError, match="invalid configuration of an input switch: block"):

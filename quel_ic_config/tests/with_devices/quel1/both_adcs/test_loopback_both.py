@@ -9,6 +9,7 @@ import pytest
 
 from testlibs.easy_capture import boxi_easy_capture
 from testlibs.gen_cw import boxi_gen_cw
+from tests.with_devices.conftest import BoxProvider, prepare_artifact_dir
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -69,11 +70,10 @@ def test_monitor_loopback(
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
     sideband: str,
-    fixtures1,
+    box_provider: BoxProvider,
 ):
-    box, params, topdirpath = fixtures1
-    if params["label"] not in {"staging-074"}:
-        pytest.skip()
+    box = box_provider.get_box_from_type("quel1-a")
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "monitor_loopbck")
 
@@ -159,11 +159,10 @@ def test_read_loopback(
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
     sideband: str,
-    fixtures1,
+    box_provider: BoxProvider,
 ):
-    box, params, topdirpath = fixtures1
-    if params["label"] not in {"staging-074"}:
-        pytest.skip()
+    box = box_provider.get_box_from_type("quel1-a")
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "read_loopbck")
 

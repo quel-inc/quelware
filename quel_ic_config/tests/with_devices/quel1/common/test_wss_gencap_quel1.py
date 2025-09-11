@@ -18,15 +18,14 @@ from testlibs.gencap_utils import (
     config_awgs_gen_seconds,
     config_caps_cap_now_seconds,
 )
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_awg_normal(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_normal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -59,10 +58,8 @@ def test_awg_normal(fixtures1):
         (2.5,),
     ],
 )
-def test_awg_timeout(timeout, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_timeout(timeout, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -92,10 +89,8 @@ def test_awg_timeout(timeout, fixtures1):
         (2.0,),
     ],
 )
-def test_awg_cancelled(sleep_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_cancelled(sleep_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -120,10 +115,8 @@ def test_awg_cancelled(sleep_time: float, fixtures1):
         (1.5,),
     ],
 )
-def test_awg_busy(sleep_time, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_busy(sleep_time, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -152,10 +145,8 @@ def test_awg_busy(sleep_time, fixtures1):
         (1.5,),
     ],
 )
-def test_awg_busy_no_wait_starting(sleep_time, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_busy_no_wait_starting(sleep_time, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -173,10 +164,8 @@ def test_awg_busy_no_wait_starting(sleep_time, fixtures1):
     assert task_0.result() is None
 
 
-def test_cap_normal(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_cap_normal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -221,10 +210,8 @@ def test_cap_normal(fixtures1):
         (2.5,),
     ],
 )
-def test_cap_timeout(timeout, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_cap_timeout(timeout, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -258,10 +245,8 @@ def test_cap_timeout(timeout, fixtures1):
         (2.5,),
     ],
 )
-def test_cap_cancelled(sleep_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_cap_cancelled(sleep_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -292,10 +277,8 @@ def test_cap_cancelled(sleep_time: float, fixtures1):
     ["sleep_time"],
     [(0.25,), (0.75,), (1.25,), (2.50,)],
 )
-def test_captrig_normal_and_timeout(sleep_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_captrig_normal_and_timeout(sleep_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -362,10 +345,8 @@ def test_captrig_normal_and_timeout(sleep_time: float, fixtures1):
     ["sleep_time"],
     [(0.05,), (0.0,), (0.25,), (0.75,), (1.25,), (2.50,)],  # non-first 0.0 can cancel future before starting.
 )
-def test_captrig_cancel_before_and_after_trigger(sleep_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_captrig_cancel_before_and_after_trigger(sleep_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -417,10 +398,8 @@ def test_captrig_cancel_before_and_after_trigger(sleep_time: float, fixtures1):
     ["connect"],
     [({(0, "r", 0)},), ({(1, "r", 3)},)],
 )
-def test_captrig_partial_trigger_failure(connect: list[tuple[int, str, int]], fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_captrig_partial_trigger_failure(connect: list[tuple[int, str, int]], box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -465,10 +444,8 @@ def test_captrig_partial_trigger_failure(connect: list[tuple[int, str, int]], fi
     ["delta_second"],
     [(2,), (4,)],
 )
-def test_awgtimed_normal(delta_second: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_normal(delta_second: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -505,10 +482,8 @@ def test_awgtimed_normal(delta_second: float, fixtures1):
     ["sleep_time"],
     [(0.25,), (0.55,), (0.65,), (0.75,), (0.85,), (0.95,), (1.05,), (1.15,), (1.25,), (1.35,), (1.45,), (1.75,)],
 )
-def test_awgtimed_cancel(sleep_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_cancel(sleep_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -543,10 +518,8 @@ def test_awgtimed_cancel(sleep_time: float, fixtures1):
     ["scheduled_time"],
     [(2,), (5,), (10,), (30,), (100,), (300,)],
 )
-def test_awgtimed_cancel_far(scheduled_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_cancel_far(scheduled_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -586,10 +559,8 @@ def test_awgtimed_cancel_far(scheduled_time: float, fixtures1):
         (1.5,),
     ],
 )
-def test_awgtimed_busy(schedule_time, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_busy(schedule_time, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -616,10 +587,8 @@ def test_awgtimed_busy(schedule_time, fixtures1):
         (0.01,),
     ],
 )
-def test_awgtimed_past(schedule_time, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_past(schedule_time, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -638,10 +607,8 @@ def test_awgtimed_past(schedule_time, fixtures1):
     ["schedule_time"],
     [(0.25,), (0.75,), (1.50,), (2.50,)],
 )
-def test_captimed_normal_and_timeout(schedule_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_captimed_normal_and_timeout(schedule_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)

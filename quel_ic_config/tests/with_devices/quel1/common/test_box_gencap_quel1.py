@@ -13,15 +13,15 @@ from testlibs.gencap_utils import (
     config_awgs_gen_seconds,
     config_caps_cap_now_seconds,
 )
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_awg_normal(fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awg_normal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
+
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -51,10 +51,8 @@ def test_awg_normal(fixtures1):
     ["delta_second"],
     [(2,), (4,)],
 )
-def test_awgtimed_normal(delta_second: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_awgtimed_normal(delta_second: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)
@@ -92,10 +90,8 @@ def test_awgtimed_normal(delta_second: float, fixtures1):
     ["schedule_time"],
     [(0.25,), (8.0,)],
 )
-def test_captimed_normal_and_timeout(schedule_time: float, fixtures1):
-    box, params, dpath = fixtures1
-    if params["label"] not in {"staging-050"}:
-        pytest.skip()
+def test_captimed_normal_and_timeout(schedule_time: float, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1-a")
     boxi = box._dev
     config_lines(boxi)
     config_rlines(boxi)

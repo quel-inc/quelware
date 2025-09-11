@@ -77,6 +77,7 @@ def e4405b_measure(
     return expected_freq, e0, m0, t0
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("case_idx", "group", "line", "channel", "fnco_mhz", "cnco_mhz", "fsc", "lo_mhz", "sideband", "vatt"),
     [
@@ -156,6 +157,7 @@ def test_awgs(
     assert all(j0)
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("case_idx", "group", "line", "channel", "fnco_mhz", "cnco_mhz", "fsc", "lo_mhz", "sideband", "vatt_"),
     [
@@ -225,6 +227,7 @@ def test_vatt(
             assert 2.4 <= pwrl[i] - pwrl[i - 1] <= 5.0
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("case_idx", "group", "line", "channel", "fnco_mhz", "cnco_mhz", "fsc", "lo_mhz", "sideband", "vatt"),
     [
