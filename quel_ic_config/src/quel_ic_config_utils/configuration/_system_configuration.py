@@ -24,6 +24,7 @@ class Box(BaseModel):
     ignore_crc_error_of_mxfe: set[int] = Field(default=set())
     ignore_access_failure_of_adrf6780: set[int] = Field(default=set())
     ignore_lock_failure_of_lmx2594: set[int] = Field(default=set())
+    marks: set[str] = Field(default=set())
 
 
 class SystemConfiguration(BaseModel):
@@ -95,12 +96,12 @@ def get_boxes_in_parallel(conf_boxes: Iterable[Box]) -> Iterator[qi.Quel1Box]:
 def reconnect_and_get_link_status(
     box: qi.Quel1Box,
     background_noise_threshold: Optional[float] = None,
-    ignore_all_crc_errors=False,
+    ignore_crc_error_of_mxfe: Optional[Collection[int]] = None,
 ) -> dict[Any, bool]:
     logger.info(f"Starting to reconnect to {box.name}.")
     status = box.reconnect(
         background_noise_threshold=background_noise_threshold,
-        ignore_crc_error_of_mxfe=box.css.get_all_mxfes() if ignore_all_crc_errors else None,
+        ignore_crc_error_of_mxfe=ignore_crc_error_of_mxfe,
         ignore_invalid_linkstatus=True,
     )
     logger.info(f"Finishing to reconnect to {box.name}.")
@@ -121,7 +122,7 @@ def reconnect_and_get_link_status_in_parallel(
                 reconnect_and_get_link_status,
                 box,
                 background_noise_threshold,
-                ignore_all_crc_errors,
+                (0, 1) if ignore_all_crc_errors else None,
             ): box
             for box in _boxes
         }
