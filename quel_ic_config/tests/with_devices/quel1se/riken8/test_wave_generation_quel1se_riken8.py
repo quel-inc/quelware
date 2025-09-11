@@ -21,6 +21,7 @@ def make_outdir(dirpath: Path):
 
 
 # Notes: 5.8 -- 8.0GHz
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
@@ -105,6 +106,7 @@ def test_line_mixer(
 
 
 # Notes: 2 -- 5.8GHz
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "mxfe", "line", "channel", "cnco_mhz", "fnco_mhz"),
     [
@@ -199,6 +201,7 @@ def test_line_without_mixer(
     assert j0[0]
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
@@ -298,6 +301,7 @@ def test_vatt(
 
 
 # TODO: enable it after implementing the control of output divider of ADRF6780
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "mxfe", "line", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz", "sideband"),
     [

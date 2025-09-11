@@ -1,69 +1,66 @@
+import ipaddress
 import logging
 
 import pytest
 
 from quel_ic_config.exstickge_coap_client import _ExstickgeCoapClientBase, get_exstickge_server_info
 from testlibs.create_css_proxy import create_proxy
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
+def _find_ipaddr_css(box_provider: BoxProvider, boxtype: str) -> str:
+    for boxconf in box_provider.find_boxconf_from_type(boxtype):
+        if "queltest_exclude_from_css_test" in boxconf.marks:
+            continue
+        return str(ipaddress.IPv4Address(int(boxconf.ipaddr) + 0x00_04_00_00))
+    else:
+        raise ValueError(f"target box with type '{boxtype}' not found.")
+
+
 DEVICE_SETTINGS = (
     {
-        "label": "staging-094",
-        "config": {
-            "ipaddr_css": "10.5.0.94",
-        },
-        "expected": {
-            "boxtype": "quel1se-riken8",
-            "version": {"v1.2.1", "v1.3.0"},
-        },
+        "boxtype": "quel1se-riken8",
+        "expected_versions": {"v1.2.1", "v1.3.0"},
     },
     {
-        "label": "staging-157",
-        "config": {
-            "ipaddr_css": "10.5.0.157",
-        },
-        "expected": {
-            "boxtype": "quel1se-fujitsu11-a",
-            "version": {"v1.2.1"},
-        },
+        "boxtype": "quel1se-fujitsu11-a",
+        "expected_versions": {"v1.2.1"},
     },
 )
 
 
 @pytest.mark.parametrize(
-    ("param0",),
+    list(DEVICE_SETTINGS[0].keys()),
     [
-        (DEVICE_SETTINGS[0],),
-        (DEVICE_SETTINGS[1],),
+        list(DEVICE_SETTINGS[0].values()),
+        list(DEVICE_SETTINGS[1].values()),
     ],
 )
-def test_basic(param0):
-    proxy = create_proxy(param0["config"]["ipaddr_css"])
-    expected = param0["expected"]
+def test_basic(box_provider: BoxProvider, boxtype, expected_versions):
+    ipaddr_css = _find_ipaddr_css(box_provider, boxtype)
+    proxy = create_proxy(ipaddr_css)
 
     if not isinstance(proxy, _ExstickgeCoapClientBase):
         assert False, "unexpected type of the proxy object"
 
-    assert proxy.read_boxtype() in expected["boxtype"]
+    assert proxy.read_boxtype() in boxtype
     # TODO: add more test which doesn't disrupt the link status.
 
     del proxy
 
 
 @pytest.mark.parametrize(
-    ("param0",),
+    list(DEVICE_SETTINGS[0].keys()),
     [
-        (DEVICE_SETTINGS[0],),
-        (DEVICE_SETTINGS[1],),
+        list(DEVICE_SETTINGS[0].values()),
+        list(DEVICE_SETTINGS[1].values()),
     ],
 )
-def test_with_coap_server(param0):
-    config = param0["config"]
-    expected = param0["expected"]
-
-    is_coap, version, _ = get_exstickge_server_info(config["ipaddr_css"])
+def test_with_coap_server(box_provider: BoxProvider, boxtype, expected_versions):
+    ipaddr_css = _find_ipaddr_css(box_provider, boxtype)
+    is_coap, version, _ = get_exstickge_server_info(ipaddr_css)
     assert is_coap
-    assert version in expected["version"]
+    assert version in expected_versions

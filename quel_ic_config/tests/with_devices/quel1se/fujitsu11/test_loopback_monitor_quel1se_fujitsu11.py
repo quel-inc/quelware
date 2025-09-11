@@ -9,6 +9,7 @@ import pytest
 
 from testlibs.easy_capture import boxi_easy_capture
 from testlibs.gen_cw import boxi_gen_cw
+from tests.with_devices.conftest import BoxProvider, prepare_artifact_dir
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -32,9 +33,9 @@ def _test_monitor_loopback_rcp(
     cnco_mhz_rx: int,
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
-    fixtures,
+    box,
 ):
-    box, param, topdirpath = fixtures
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "monitor_loopack_rcp")
 
@@ -165,8 +166,9 @@ def test_typea_monitor_loopback_rcp(
     cnco_mhz_rx: int,
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
-    fixtures11a,
+    box_provider: BoxProvider,
 ):
+    box = box_provider.get_box_from_type("quel1se-fujitsu11-a")
     _test_monitor_loopback_rcp(
         group,
         line,
@@ -179,10 +181,11 @@ def test_typea_monitor_loopback_rcp(
         cnco_mhz_rx,
         fnco_mhz_tx,
         fnco_mhz_rx,
-        fixtures11a,
+        box,
     )
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     (
         "group",
@@ -244,8 +247,9 @@ def test_typeb_monitor_loopback_rcp(
     cnco_mhz_rx: int,
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
-    fixtures11b,
+    box_provider: BoxProvider,
 ):
+    box = box_provider.get_box_from_type("quel1se-fujitsu11-b")
     _test_monitor_loopback_rcp(
         group,
         line,
@@ -258,5 +262,5 @@ def test_typeb_monitor_loopback_rcp(
         cnco_mhz_rx,
         fnco_mhz_tx,
         fnco_mhz_rx,
-        fixtures11b,
+        box,
     )

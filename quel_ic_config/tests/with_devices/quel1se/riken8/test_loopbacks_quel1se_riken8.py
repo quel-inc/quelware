@@ -9,6 +9,7 @@ import pytest
 
 from testlibs.easy_capture import boxi_easy_capture
 from testlibs.gen_cw import boxi_gen_cw
+from tests.with_devices.conftest import BoxProvider, prepare_artifact_dir
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
@@ -47,9 +48,10 @@ def test_monitor_loopback_cf(
     cnco_mhz_rx: int,
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
-    fixtures8,
+    box_provider: BoxProvider,
 ):
-    box, param, topdirpath = fixtures8
+    box = box_provider.get_box_from_type("quel1se-riken8")
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "monitor_loopback_cf")
 
@@ -144,9 +146,10 @@ def test_monitor_loopback_rp(
     cnco_mhz_rx: int,
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
-    fixtures8,
+    box_provider: BoxProvider,
 ):
-    box, param, topdirpath = fixtures8
+    box = box_provider.get_box_from_type("quel1se-riken8")
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "monitor_loopback_rp")
 
@@ -228,9 +231,10 @@ def test_read_loopback(
     fnco_mhz_tx: int,
     fnco_mhz_rx: int,
     sideband: str,
-    fixtures8,
+    box_provider: BoxProvider,
 ):
-    box, param, topdirpath = fixtures8
+    box = box_provider.get_box_from_type("quel1se-riken8")
+    topdirpath = prepare_artifact_dir(box.name)
     boxi = box._dev
     outdir = make_outdir(topdirpath / "read_loopback")
 

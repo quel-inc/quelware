@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 import json
 import logging
 import os.path as osp
@@ -7,12 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.with_devices.conftest import BoxProvider
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_just_run_apis(fixtures8):
-    box, params, dpath = fixtures8
+def test_just_run_apis(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     box.initialize_all_awgunits()
 
@@ -53,38 +56,38 @@ def test_just_run_apis(fixtures8):
     for g in (0, 1):
         box.deactivate_monitor_loop(g)
         assert not box.is_loopedback_monitor(g)
-    for p, conf in box.dump_rfswitches().items():
-        if p in {4, 10}:
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {4, 10}:
             assert conf == "open"
 
     for g in (0, 1):
         box.activate_monitor_loop(g)
         assert box.is_loopedback_monitor(g)
-    for p, conf in box.dump_rfswitches().items():
-        if p in {4, 10}:
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {4, 10}:
             assert conf == "loop"
 
     box.pass_all_output_ports()
-    for p, conf in box.dump_rfswitches().items():
-        if p in {2, 3, 6, 7, 8, 9}:  # Notes: 1 is excluded since it is a copy of port-#0
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {2, 3, 6, 7, 8, 9}:  # Notes: 1 is excluded since it is a copy of port-#0
             assert conf == "pass"
-        elif p == 0:
+        elif pt == 0:
             assert conf == "open"
-    for p in (1, 2, 3, 6, 7, 8, 9):
-        assert box.dump_rfswitch(p) == "pass"
+    for pt in (1, 2, 3, 6, 7, 8, 9):
+        assert box.dump_rfswitch(pt) == "pass"
 
     box.block_all_output_ports()
-    for p, conf in box.dump_rfswitches().items():
-        if p in {2, 3, 6, 7, 8, 9}:  # Notes: 1 is excluded since it is a copy of port-#0
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {2, 3, 6, 7, 8, 9}:  # Notes: 1 is excluded since it is a copy of port-#0
             assert conf == "block"
-        elif p == 0:
+        elif pt == 0:
             assert conf == "loop"
-    for p in (1, 2, 3, 6, 7, 8, 9):
-        assert box.dump_rfswitch(p) == "block"
+    for pt in (1, 2, 3, 6, 7, 8, 9):
+        assert box.dump_rfswitch(pt) == "block"
 
 
-def test_config_fsc(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_fsc(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         for i in range(12000, 12100):
@@ -99,8 +102,8 @@ def test_config_fsc(fixtures8):
     ("conffilename", "ports_only"),
     [("outports.json", True), ("full.json", False), ("mxfes.json", False)],
 )
-def test_config_box_json(conffilename, ports_only, fixtures8):
-    box, params, dpath = fixtures8
+def test_config_box_json(conffilename, ports_only, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         conf0path = Path(osp.dirname(__file__)) / "settings" / conffilename
@@ -143,8 +146,8 @@ def test_config_box_json(conffilename, ports_only, fixtures8):
         ("ports_wrong_1.json", "unexpected name of port: 'hoge'"),
     ],
 )
-def test_config_box_json_wrong(conffilename, msg, fixtures8):
-    box, params, dpath = fixtures8
+def test_config_box_json_wrong(conffilename, msg, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         conf0path = Path(osp.dirname(__file__)) / "settings" / conffilename
@@ -154,8 +157,8 @@ def test_config_box_json_wrong(conffilename, msg, fixtures8):
         pytest.skip()
 
 
-def test_config_box_abnormal(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_box_abnormal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         assert not box.config_validate_box({6: {"non-existent": 999}})
@@ -219,8 +222,8 @@ def test_config_box_abnormal(fixtures8):
         pytest.skip()
 
 
-def test_config_port(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_port(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     box.config_port((1, 0), fullscale_current=10000)
     assert box.dump_port((1, 0))["fullscale_current"] == 10010  # due to the quantization
@@ -231,8 +234,8 @@ def test_config_port(fixtures8):
     assert box.dump_port(1)["fullscale_current"] == 19995  # due to the quantization
 
 
-def test_config_port_abnormal(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_port_abnormal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         with pytest.raises(ValueError, match="no DAC is available for the input port-#00"):
@@ -249,8 +252,8 @@ def test_config_port_abnormal(fixtures8):
         pytest.skip()
 
 
-def test_config_rfswitches_abnormal(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_rfswitches_abnormal(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         with pytest.raises(ValueError, match="malformed port: 'non-existent'"):
@@ -271,8 +274,8 @@ def test_config_rfswitches_abnormal(fixtures8):
         pytest.skip()
 
 
-def test_config_box_mismatch(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_box_mismatch(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     config = box.dump_box()["ports"]
     config[1]["cnco_freq"] = 314159  # Notes: Readout for QuEL-1 SE.
@@ -282,8 +285,8 @@ def test_config_box_mismatch(fixtures8):
     assert not box.config_validate_box(config)
 
 
-def test_config_box_inconsistent(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_box_inconsistent(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     config = box.dump_box()["ports"]
     if box.boxtype in {"quel1se-riken8", "x-quel1se-riken8"}:
@@ -296,22 +299,22 @@ def test_config_box_inconsistent(fixtures8):
         box.config_box(config)
 
 
-def test_invalid_port(fixtures8):
-    box, params, dpath = fixtures8
+def test_invalid_port(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     with pytest.raises(ValueError, match=f"invalid port of {box.boxtype}: #20"):
         box.config_box({20: {"lo_freq": 12e9}})
 
 
-def test_config_rfswitch_basic(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_rfswitch_basic(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     rc = box.dump_rfswitches()
     box.config_rfswitches(rc)
 
 
-def test_config_rfswitch_invalid(fixtures8):
-    box, params, dpath = fixtures8
+def test_config_rfswitch_invalid(box_provider: BoxProvider):
+    box = box_provider.get_box_from_type("quel1se-riken8")
 
     if box.boxtype == "quel1se-riken8":
         with pytest.raises(ValueError, match="invalid configuration of an input switch: block"):

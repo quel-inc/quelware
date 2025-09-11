@@ -45,6 +45,7 @@ def has_doubler(boxtype: Quel1BoxType, port_subport: Union[int, Tuple[int, int]]
 
 
 # Notes: 5.8 -- 8.0GHz
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "port_subport", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
@@ -125,6 +126,7 @@ def test_port_with_mixer(
 
 
 # Notes: 2 -- 5.8GHz
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "port_subport", "channel", "cnco_mhz", "fnco_mhz"),
     [

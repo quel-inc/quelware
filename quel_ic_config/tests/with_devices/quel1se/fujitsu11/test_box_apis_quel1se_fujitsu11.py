@@ -1,3 +1,4 @@
+# mypy: disable-error-code="arg-type"
 import json
 import logging
 import os.path as osp
@@ -7,20 +8,15 @@ from pathlib import Path
 
 import pytest
 
+from tests.with_devices.conftest import BoxProvider
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
 
-def test_just_run_apis_typea(fixtures11a):
-    _test_just_run_apis(fixtures11a)
-
-
-def test_just_run_apis_typeb(fixtures11b):
-    _test_just_run_apis(fixtures11b)
-
-
-def _test_just_run_apis(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_just_run_apis(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     box.initialize_all_awgunits()
 
@@ -67,46 +63,46 @@ def _test_just_run_apis(fixtures):
     for g in (0, 1):
         box.deactivate_monitor_loop(g)
         assert not box.is_loopedback_monitor(g)
-    for p, conf in box.dump_rfswitches().items():
-        if p in {5, 12}:
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {5, 12}:
             assert conf == "open"
 
     for g in (0, 1):
         box.activate_monitor_loop(g)
         assert box.is_loopedback_monitor(g)
-    for p, conf in box.dump_rfswitches().items():
-        if p in {5, 12}:
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {5, 12}:
             assert conf == "loop"
 
     box.pass_all_output_ports()
-    for p, conf in box.dump_rfswitches().items():
-        if p in {2, 3, 4, 9, 10, 11}:  # Notes: #01 and #08 is excluded since it is a copy of #00 and #07, respectively.
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {
+            2,
+            3,
+            4,
+            9,
+            10,
+            11,
+        }:  # Notes: #01 and #08 is excluded since it is a copy of #00 and #07, respectively.
             assert conf == "pass"
-        elif p in {0, 7}:
+        elif pt in {0, 7}:
             assert conf == "open"
-    for p in (2, 3, 4, 9, 10, 11):
-        assert box.dump_rfswitch(p) == "pass"
+    for pt in (2, 3, 4, 9, 10, 11):
+        assert box.dump_rfswitch(pt) == "pass"
 
     box.block_all_output_ports()
-    for p, conf in box.dump_rfswitches().items():
-        if p in {2, 3, 4, 9, 10, 11}:  # Notes: 1 is excluded since it is a copy of port-#0
+    for pt, conf in box.dump_rfswitches().items():
+        if pt in {2, 3, 4, 9, 10, 11}:  # Notes: 1 is excluded since it is a copy of port-#0
             assert conf == "block"
-        elif p in {0, 7}:
+        elif pt in {0, 7}:
             assert conf == "loop"
-    for p in (2, 3, 4, 9, 10, 11):
-        assert box.dump_rfswitch(p) == "block"
+    for pt in (2, 3, 4, 9, 10, 11):
+        assert box.dump_rfswitch(pt) == "block"
 
 
-def test_config_fsc_typea(fixtures11a):
-    _test_config_fsc(fixtures11a)
-
-
-def test_config_fsc_typeb(fixtures11b):
-    _test_config_fsc(fixtures11b)
-
-
-def _test_config_fsc(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_fsc(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     for i in range(12000, 12100):
         box.config_box({8: {"fullscale_current": i}})
@@ -114,6 +110,7 @@ def _test_config_fsc(fixtures):
     box.config_box({8: {"fullscale_current": 40527}})
 
 
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a"])
 @pytest.mark.parametrize(
     ("conffilename", "ports_only"),
     [
@@ -122,12 +119,8 @@ def _test_config_fsc(fixtures):
         # ("mxfes.json", False)
     ],
 )
-def test_config_box_json_typea(conffilename, ports_only, fixtures11a):
-    _test_config_box_json(conffilename, ports_only, fixtures11a)
-
-
-def _test_config_box_json(conffilename, ports_only, fixtures):
-    box, param, topdirpath = fixtures
+def test_config_box_json(conffilename, ports_only, boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
         conf0path = Path(osp.dirname(__file__)) / "settings" / conffilename
@@ -183,16 +176,9 @@ def test_config_box_json_wrong(conffilename, msg, box):
 """
 
 
-def test_config_box_abnormal_typea(fixtures11a):
-    _test_config_box_abnormal(fixtures11a)
-
-
-def test_config_box_abnormal_typeb(fixtures11b):
-    _test_config_box_abnormal(fixtures11b)
-
-
-def _test_config_box_abnormal(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_box_abnormal(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     assert not box.config_validate_box({8: {"non-existent": 999}})
 
@@ -271,16 +257,9 @@ def _test_config_box_abnormal(fixtures):
             box.config_box({7: {"vatt": 0xC00}})
 
 
-def test_config_port_typea(fixtures11a):
-    _test_config_port(fixtures11a)
-
-
-def test_config_port_typeb(fixtures11b):
-    _test_config_port(fixtures11b)
-
-
-def _test_config_port(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_port(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     box.config_port((1, 0), fullscale_current=10000)
     assert box.dump_port((1, 0))["fullscale_current"] == 10010  # due to the quantization
@@ -291,16 +270,9 @@ def _test_config_port(fixtures):
     assert box.dump_port(1)["fullscale_current"] == 19995  # due to the quantization
 
 
-def test_config_port_abnormal_typea(fixtures11a):
-    _test_config_port_abnormal(fixtures11a)
-
-
-def test_config_port_abnormal_typeb(fixtures11b):
-    _test_config_port_abnormal(fixtures11b)
-
-
-def _test_config_port_abnormal(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_port_abnormal(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
         with pytest.raises(ValueError, match="no DAC is available for the input port-#00"):
@@ -312,16 +284,9 @@ def _test_config_port_abnormal(fixtures):
         box.config_port("hoge", vatt=0xC00)  # type: ignore
 
 
-def test_config_rfswitches_abnormal_typea(fixtures11a):
-    _test_config_rfswitches_abnormal(fixtures11a)
-
-
-def test_config_rfswitches_abnormal_typeb(fixtures11b):
-    _test_config_rfswitches_abnormal(fixtures11b)
-
-
-def _test_config_rfswitches_abnormal(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_rfswitches_abnormal(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     with pytest.raises(ValueError, match="malformed port: 'non-existent'"):
         box.config_rfswitches({"non-existent": "invalid"})  # type: ignore
@@ -340,16 +305,9 @@ def _test_config_rfswitches_abnormal(fixtures):
         box.config_rfswitches({2: "loop"})
 
 
-def test_config_box_mismatch_typea(fixtures11a):
-    _test_config_box_mismatch(fixtures11a)
-
-
-def test_config_box_mismatch_typeb(fixtures11b):
-    _test_config_box_mismatch(fixtures11b)
-
-
-def _test_config_box_mismatch(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_box_mismatch(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box.dump_box()["ports"]
     config[1]["cnco_freq"] = 314159  # Notes: Readout for QuEL-1 SE.
@@ -357,16 +315,9 @@ def _test_config_box_mismatch(fixtures):
     assert not box.config_validate_box(config)
 
 
-def test_config_box_inconsistent_typea(fixtures11a):
-    _test_config_box_inconsistent(fixtures11a)
-
-
-def test_config_box_inconsistent_typeb(fixtures11b):
-    _test_config_box_inconsistent(fixtures11b)
-
-
-def _test_config_box_inconsistent(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_box_inconsistent(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     config = box.dump_box()["ports"]
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
@@ -382,46 +333,25 @@ def _test_config_box_inconsistent(fixtures):
         box.config_box(config)
 
 
-def test_invalid_port_typea(fixtures11a):
-    _test_invalid_port(fixtures11a)
-
-
-def test_invalid_port_typeb(fixtures11b):
-    _test_invalid_port(fixtures11b)
-
-
-def _test_invalid_port(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_invalid_port(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     with pytest.raises(ValueError, match=f"invalid port of {box.boxtype}: #20"):
         box.config_box({20: {"lo_freq": 12e9}})
 
 
-def test_config_rfswitch_basic_typea(fixtures11a):
-    _test_config_rfswitch_basic(fixtures11a)
-
-
-def test_config_rfswitch_basic_typeb(fixtures11b):
-    _test_config_rfswitch_basic(fixtures11b)
-
-
-def _test_config_rfswitch_basic(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_rfswitch_basic(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     rc = box.dump_rfswitches()
     box.config_rfswitches(rc)
 
 
-def test_config_rfswitch_invalid_typea(fixtures11a):
-    _test_config_rfswitch_invalid(fixtures11a)
-
-
-def test_config_rfswitch_invalid_typeb(fixtures11b):
-    _test_config_rfswitch_invalid(fixtures11b)
-
-
-def _test_config_rfswitch_invalid(fixtures):
-    box, param, topdirpath = fixtures
+@pytest.mark.parametrize("boxtype", ["quel1se-fujitsu11-a", "quel1se-fujitsu11-b"])
+def test_config_rfswitch_invalid(boxtype, box_provider: BoxProvider):
+    box = box_provider.get_box_from_type(boxtype)
 
     if box.boxtype in {"quel1se-fujitsu11-a", "x-quel1se-fujitsu11-a"}:
         with pytest.raises(ValueError, match="invalid configuration of an input switch: block"):
