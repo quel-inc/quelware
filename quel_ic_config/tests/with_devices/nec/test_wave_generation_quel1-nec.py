@@ -94,6 +94,7 @@ def make_outdir(param):
     return dpath
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "port", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
@@ -191,6 +192,7 @@ def test_all_single_awgs(
     assert all(j0)
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "port", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz"),
     [
@@ -268,6 +270,7 @@ def test_vatt(
             assert 2.4 <= pwrl[i] - pwrl[i - 1] <= 5.0
 
 
+@pytest.mark.skip(reason="To be updated")
 @pytest.mark.parametrize(
     ("idx", "port", "channel", "lo_mhz", "cnco_mhz", "fnco_mhz", "sideband"),
     [

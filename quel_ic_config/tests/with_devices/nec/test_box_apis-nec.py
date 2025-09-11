@@ -2,43 +2,19 @@ import logging
 
 import pytest
 
-from quel_ic_config.quel1_box import Quel1Box
 from quel_ic_config.quel1_config_subsystem_common import NoRfSwitchError
-from quel_ic_config.quel_config_common import Quel1BoxType
+from tests.with_devices.conftest import BoxProvider
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="{asctime} [{levelname:.4}] {name}: {message}", style="{")
 
+
+@pytest.fixture(scope="module")
+def box(box_provider: BoxProvider):
+    return box_provider.get_box_from_type("quel1-nec")
+
+
 # Notes: to be merged into test cases in 'common' directory.
-
-TEST_SETTINGS = (
-    {
-        "box_config": {
-            "ipaddr_wss": "10.1.0.80",
-            "ipaddr_sss": "10.2.0.80",
-            "ipaddr_css": "10.5.0.80",
-            "boxtype": Quel1BoxType.fromstr("quel1-nec"),
-        },
-        "linkup_config": {
-            "config_root": None,
-            "config_options": (),
-        },
-    },
-)
-
-
-@pytest.fixture(scope="module", params=TEST_SETTINGS)
-def box(request) -> Quel1Box:
-    param0 = request.param
-
-    # TODO: write something to modify boxtype.
-
-    box = Quel1Box.create(**param0["box_config"], ignore_crc_error_of_mxfe={0, 1})
-    box.reconnect()
-    for mxfe_idx, status in box.link_status().items():
-        if not status:
-            raise RuntimeError(f"test is not ready for {param0['box_config']['ipaddr_wss']}:mxfe-{mxfe_idx}")
-    return box
 
 
 def test_config_box_intrinsic_read_and_write(box):
