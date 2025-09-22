@@ -1,10 +1,10 @@
-from quel_ic_config_utils.common_arguments import (
+from .common_arguments import (
     add_common_arguments,
     add_common_workaround_arguments,
     complete_ipaddrs,
 )
-from quel_ic_config_utils.plot_iqs import plot_iqs
-from quel_ic_config_utils.simple_multibox_framework import (
+from .plot_iqs import plot_iqs
+from .simple_multibox_framework import (
     BoxPool,
     BoxSettingType,
     VportSettingType,

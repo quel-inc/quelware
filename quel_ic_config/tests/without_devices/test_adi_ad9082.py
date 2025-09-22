@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from pydantic.v1.utils import deep_update
@@ -8,10 +9,12 @@ from pydantic.v1.utils import deep_update
 import adi_ad9082_v170 as adi_ad9082
 from quel_ic_config.ad9082 import Ad9082Config, Ad9082Mixin
 
-with open("src/quel_ic_config/settings/quel-1/ad9082.json") as f:
+qi_root = Path(__file__).parent.parent.parent
+
+with open(qi_root / "src/quel_ic_config/settings/quel-1/ad9082.json") as f:
     function_setting: Dict[str, Any] = json.load(f)
 
-with open("src/quel_ic_config/settings/quel-1/ad9082_dac_channel_assign_for_mxfe0.json") as f:
+with open(qi_root / "src/quel_ic_config/settings/quel-1/ad9082_dac_channel_assign_for_mxfe0.json") as f:
     function_setting_additional: Dict[str, Any] = json.load(f)
 
 

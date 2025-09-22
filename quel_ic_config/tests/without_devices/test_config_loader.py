@@ -15,6 +15,8 @@ from quel_ic_config import (
 from quel_ic_config.exstickge_sock_client import _ExstickgeSockClientBase
 from quel_ic_config.quel1_config_loader import Quel1ConfigLoader
 
+qi_root = Path(__file__).parent.parent.parent
+
 
 def _remove_comments(settings: Dict[str, Any]) -> Dict[str, Any]:
     s1: Dict[str, Any] = {}
@@ -34,7 +36,7 @@ def _load_settings_reference(boxtype: Quel1BoxType, config_options: Set[Quel1Con
     NUM_AD5328 = 1
     NUM_GPIO = 1
 
-    _config_path = Path("src/quel_ic_config/settings")
+    _config_path = Path(qi_root / "src/quel_ic_config/settings")
 
     # Notes: boxtype_main is defined in the class implementing loader, because it determines proxy objects to create
     #        independently of the configuration file.
@@ -222,7 +224,7 @@ def test_config_loader(boxtype: Quel1BoxType, features: Set[Quel1Feature], confi
         config_options=config_options,
         features=features,
         config_filename=qco.get_default_config_filename(),
-        config_rootpath=Path("src/quel_ic_config/settings"),
+        config_rootpath=Path(qi_root / "src/quel_ic_config/settings"),
     )
     target = ql.load_config()
     del target["meta"]

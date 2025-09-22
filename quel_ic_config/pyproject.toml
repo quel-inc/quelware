@@ -71,14 +71,6 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = [
-    "quel_ic_config",
-    "quel_ic_config.settings",
-    "adi_ad9082_v170",
-    "quel_ic_config_cli",
-    "quel_ic_config_cli.settings",
-    "quel_ic_config_utils"
-]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
