@@ -21,9 +21,6 @@ e7awgsw と quel_clock_master が担っていた機能を代替する。
 ### quel_staging_tool
 ファームウェアの配布用パッケージ。
 
-### quel_inst_tool
-自動テストでスペクトラムアナライザなどの測定装置を使用するためのライブラリ。
-
 ### quel_pyxsdb
 ファームウェアアップデートやFPGAのJTAG経由でのリセットなどを支援するためのライブラリ。
 

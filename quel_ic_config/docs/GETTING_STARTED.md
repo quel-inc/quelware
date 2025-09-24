@@ -145,7 +145,7 @@ cd quelware/quel_ic_config
 
 そして次のコマンドを実行することで、開発者向けの依存パッケージをインストールできる。
 ```
-pip install ../quel_inst_tool ../quel_pyxsdb ../quel_staging_tool ../quel_cmod_scripting quel_ic_config[dev]
+pip install ../quel_pyxsdb ../quel_staging_tool ../quel_cmod_scripting quel_ic_config[dev]
 ```
 
 #### ファームウェアによる差異について

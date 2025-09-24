@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -1454,7 +1454,6 @@ requires-dist = [
     { name = "python-ulid", specifier = "~=2.7.0" },
     { name = "pyyaml", specifier = "~=6.0.1" },
     { name = "quel-cmod-scripting", marker = "extra == 'dev'", editable = "../quel_cmod_scripting" },
-    { name = "quel-inst-tool", marker = "extra == 'dev'", editable = "../quel_inst_tool" },
     { name = "quel-pyxsdb", marker = "extra == 'dev'", editable = "../quel_pyxsdb" },
     { name = "quel-staging-tool", marker = "extra == 'dev'", editable = "../quel_staging_tool" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11.13" },

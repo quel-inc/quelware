@@ -7,43 +7,14 @@ from typing import Generator, Union
 
 import pytest
 import yaml
-from quel_inst_tool import SpectrumAnalyzer
 
 from quel_ic_config.quel1_box import Quel1Box, Quel1BoxType
 from quel_ic_config_utils import configuration
 from testlibs.register_cw import register_cw_to_all_ports
-from testlibs.spa_helper import init_e440xb, init_ms2xxxx, measure_floor_noise
 
 logger = logging.getLogger(__name__)
 
 artifacts_path = str(os.getenv("QUEL_TESTING_ARTIFACTS_DIR", "./artifacts"))
-
-TEST_SETTINGS_MS2720T1 = (
-    {
-        "spa_type": "MS2XXXX",
-        "spa_name": "ms2720t-1",
-        "spa_parameters": {
-            "freq_center": 5e9,
-            "freq_span": 8e9,
-            "resolution_bandwidth": 1e4,
-        },
-        "max_background_noise": -50.0,
-    },
-)
-
-TEST_SETTINGS_E4405B = (
-    {
-        "spa_type": "E4405B",
-        "spectrum_image_path": f"{artifacts_path}/spectrum-060",
-        "max_background_noise": -55.0,
-        "spa_parameters": {
-            "freq_center": 8.5e9,
-            "freq_span": 6e9,
-            "resolution_bandwidth": 3e4,
-            "sweep_points": 4001,
-        },
-    },
-)
 
 
 def make_topoutdir(param) -> Path:
@@ -57,42 +28,6 @@ def make_topoutdir(param) -> Path:
 def prepare_artifact_dir(label: str) -> Path:
     dirpath = Path(artifacts_path) / label
     return dirpath
-
-
-def make_spa_fixture(param0):
-    if param0["spa_type"] == "MS2XXXX":
-        spa: SpectrumAnalyzer = init_ms2xxxx(param0["spa_name"], **param0["spa_parameters"])
-    elif param0["spa_type"] == "E4405B":
-        spa = init_e440xb("E4405B")
-    else:
-        # Notes: to be added by need.
-        assert False
-
-    if spa:
-        max_noise = measure_floor_noise(spa)
-        assert max_noise < param0["max_background_noise"]
-
-    return spa
-
-
-@pytest.fixture(scope="session", params=TEST_SETTINGS_MS2720T1)
-def fixture_ms2720t1(
-    request,
-) -> Generator[SpectrumAnalyzer, None, None]:
-    param0 = request.param
-    spa = make_spa_fixture(param0)
-    yield spa
-    del spa
-
-
-@pytest.fixture(scope="session", params=TEST_SETTINGS_E4405B)
-def fixture_e4405b(
-    request,
-) -> Generator[SpectrumAnalyzer, None, None]:
-    param0 = request.param
-    spa = make_spa_fixture(param0)
-    yield spa
-    del spa
 
 
 def pytest_addoption(parser):
