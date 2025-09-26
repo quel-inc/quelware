@@ -3,6 +3,7 @@ from .common_arguments import (
     add_common_workaround_arguments,
     complete_ipaddrs,
 )
+from .modified_config import modified_config
 from .plot_iqs import plot_iqs
 from .simple_multibox_framework import (
     BoxPool,
@@ -28,4 +29,5 @@ __all__ = (
     "calc_angle",
     "find_chunks",
     "single_schedule",
+    "modified_config",
 )
