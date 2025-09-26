@@ -25,6 +25,7 @@ dependencies = [
     "pandas ~= 2.2.3",
     "polars ~= 1.9.0",
     "matplotlib",
+    "typer>=0.16.1",
 ]
 
 [project.urls]
@@ -90,7 +91,7 @@ mypy_path = [
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = "matplotlib.*,aiocoap.*,ulid"
+module = "matplotlib.*,aiocoap.*,ulid,scipy.*"
 ignore_missing_imports = true
 
 [tool.uv.sources]
