@@ -1,4 +1,4 @@
-py_target = src tests testlibs scripts
+py_target = src tests testlibs scripts examples
 
 .PHONY: validate-json format-cpp format-cpp-check format-py format-py-check lint typecheck test-without-devices
 validate-json:
