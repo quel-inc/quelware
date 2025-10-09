@@ -81,6 +81,8 @@ def get_boxes(conf_boxes: Iterable[Box]) -> Iterator[qi.Quel1Box]:
 def get_boxes_in_parallel(conf_boxes: Iterable[Box]) -> Iterator[qi.Quel1Box]:
     boxes: list[qi.Quel1Box] = []
     _conf_boxes = list(conf_boxes)
+    if len(_conf_boxes) == 0:
+        return iter([])
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(_conf_boxes)) as executer:
         future_to_conf_box = {executer.submit(get_boxes, [conf_box]): conf_box for conf_box in _conf_boxes}
         for future in concurrent.futures.as_completed(future_to_conf_box):
