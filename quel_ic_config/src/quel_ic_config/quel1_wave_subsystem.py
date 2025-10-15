@@ -374,15 +374,6 @@ class StartAwgunitsNowTask(AbstractStartAwgunitsTask):
             else:
                 return False
 
-    def _check_done_callback(self) -> bool:
-        with self._awgctrl.lock:
-            if self._awgctrl.are_done_all(self._hwidxs):
-                self._clear_done_all()
-                self._awgctrl.check_error(self._hwidxs)
-                return True
-            else:
-                return False
-
 
 class StartAwgunitsTimedTask(AbstractStartAwgunitsTask):
     _TRIGGER_SETTABLE_MARGIN: Final[float] = 0.05  # [s]
