@@ -75,8 +75,11 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
+"quel_ic_config" = ["py.typed"]
 "quel_ic_config.settings" = ["*.json", "quel-1/*.json", "quel-1se/*.json"]
+"quel_ic_config_cli" = ["py.typed"]
 "quel_ic_config_cli.settings" = ["*.json"]
+"quel_ic_config_utils" = ["py.typed"]
 adi_ad9082_v170 = ["*.pyi", "py.typed", "LICENSES.pdf"]
 
 [tool.black]
