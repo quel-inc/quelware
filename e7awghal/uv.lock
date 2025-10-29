@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -1455,7 +1455,7 @@ wheels = [
 
 [[package]]
 name = "quel-ic-config"
-version = "0.10.4"
+version = "0.10.5"
 source = { editable = "../quel_ic_config" }
 dependencies = [
     { name = "aiocoap", version = "0.4.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
