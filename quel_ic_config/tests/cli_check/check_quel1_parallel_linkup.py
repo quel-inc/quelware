@@ -1,8 +1,9 @@
 import logging
 import os
+from pathlib import Path
 import re
 import subprocess
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 logger = logging.getLogger(os.path.basename(__file__))
 
@@ -174,7 +175,7 @@ CASES_QSYS = {
             "--ignore_unavailable --max_delta 256"
         ),
         "rc": 0,
-        "msg": "(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is 0 counts \(<= 256 counts\)",
+        "msg": r"(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is 0 counts \(<= 256 counts\)",
     },
     "noex_boxes_only": {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_nonexistent_boxes_only.yaml --max_delta 256",
@@ -197,7 +198,7 @@ CASES_QSYS = {
     "wrong_boxtype_igunav": {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_wrong_boxtype.yaml --ignore_unavailable",
         "rc": 0,
-        "msg": "(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is (.*) counts \(<= 256 counts\)",
+        "msg": r"(.*)SUCCESSFUL SYNCHRONIZATION, delta of the time counters is (.*) counts \(<= 256 counts\)",
     },
     "wrong_boxtype_v2": {
         "args": "--conf tests/cli_check/conf_files/quel_ci_env_with_wrong_boxtype_v2.yaml",
@@ -231,7 +232,7 @@ CASES_QSYN = {
 }
 
 
-def run_tests(cmd: str, cases: dict[str, dict[str, Any]]) -> tuple[int, int]:
+def run_tests(cmd: str, cases: dict[str, dict[str, Any]], working_directory: Optional[str] = None) -> tuple[int, int]:
     n_success: int = 0
     n_failure: int = 0
     for label, c in cases.items():
@@ -239,7 +240,7 @@ def run_tests(cmd: str, cases: dict[str, dict[str, Any]]) -> tuple[int, int]:
         args = [cmd]
         args.extend(c["args"].split())
         logger.debug(f"{cmdlbl:40s}: executing '{' '.join(args)}'")
-        p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=working_directory)
         rc = p.returncode
         is_success = True
         if rc != c["rc"]:
@@ -276,23 +277,25 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
+    qi_root = str(Path(__file__).parent.parent.parent)
+
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
     if args.skip_qplu:
         n_s0, n_f0 = 0, 0
     else:
-        n_s0, n_f0 = run_tests("quel1_parallel_linkup", CASES_QPLU)
+        n_s0, n_f0 = run_tests("quel1_parallel_linkup", CASES_QPLU, working_directory=qi_root)
 
     if args.skip_qsys:
         n_s1, n_f1 = 0, 0
     else:
-        n_s1, n_f1 = run_tests("quel1_syncstatus", CASES_QSYS)
+        n_s1, n_f1 = run_tests("quel1_syncstatus", CASES_QSYS, working_directory=qi_root)
 
     if args.skip_qsyn:
         n_s2, n_f2 = 0, 0
     else:
-        n_s2, n_f2 = run_tests("quel1_sync", CASES_QSYN)
+        n_s2, n_f2 = run_tests("quel1_sync", CASES_QSYN, working_directory=qi_root)
 
     logger.info(f"** quel1_parallel_linkup: {n_s0} success, {n_f0} failure")
     logger.info(f"** quel1_syncstatus: {n_s1} success, {n_f1} failure")
