@@ -17,7 +17,7 @@ dependencies = [
     "numpy ~= 1.26.0",
     "pydantic ~= 2.4",
     "pyyaml ~= 6.0.1",
-    "aiocoap ~= 0.4.7",
+    "aiocoap >= 0.4.7, < 0.4.16",
     "python-ulid ~= 2.7.0",
     "flufl.lock ~= 8.1.0",
     "e7awghal > 0.1.3",

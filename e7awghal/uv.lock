@@ -1477,7 +1477,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiocoap", specifier = "~=0.4.7" },
+    { name = "aiocoap", specifier = ">=0.4.7,<0.4.16" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "e7awghal", editable = "." },
     { name = "flufl-lock", specifier = "~=8.1.0" },
