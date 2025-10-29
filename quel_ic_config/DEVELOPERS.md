@@ -2,6 +2,8 @@
 
 This guide provides essential information for setting up your development environment.
 
+You can find an explanation of the development and design policies in [this document](./docs/DEVELOPMENT_NOTES.md).
+
 ## Setting Up Your Environment with `uv`
 
 We use **`uv`** for dependency management and virtual environment creation.

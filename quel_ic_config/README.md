@@ -2,4 +2,7 @@
 
 A host-side software intended for QuEL control devices.
 
-- **Getting Started:** https://github.com/quel-inc/quelware/blob/main/quel_ic_config/docs/GETTING_STARTED.md
+## docs
+
+- [Getting Started](./docs/GETTING_STARTED.md)
+- [Developer's Guide](./DEVELOPERS.md)

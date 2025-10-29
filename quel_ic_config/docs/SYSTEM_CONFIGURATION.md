@@ -21,5 +21,6 @@ boxes:
   - ...
 ```
 
-This file is searched for in `$XDG_CONFIG_HOME/quelware/sysconf.yaml`. The environment variable `$XDG_CONFIG_HOME` typically defaults to `~/.config`.
+This file is searched for in `$XDG_CONFIG_HOME/quelware/sysconf.yaml`.
+The environment variable `$XDG_CONFIG_HOME` typically defaults to `~/.config`.
 If you place this file in the default location, some commands will use it by default, even without a specified path.
