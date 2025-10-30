@@ -1,0 +1,53 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.10.5] - 2025-10-30
+
+### Added
+
+- `deskew_tools`, tools for skew adjustments.
+- `quel_config_ports` command.
+- `modified_config`.
+- Utility to measure SNR.
+- Interface definition for delay measurement.
+- A module to parse and use system configuration file.
+
+### Changed
+
+- Updated aiocoap version constraint to specify `<0.4.16`.
+- Minor adjustments in packaging and tests.
+
+### Removed
+
+- Removed files for in-house tests.
+
+## [0.10.4] - 2025-07-30
+
+### Added
+
+- `quel_filelock_manager`, a CLI command to handle file locks.
+- An attribution file for third-party licenses.
+- A workflow to build wheels and source distributions.
+
+### Changed
+
+- Relaxed version constraints of dependencies.
+- Improved test environment.
+
+### Removed
+
+- Downloader for pre-built packages. Please use the PyPI repository or cloned source files instead. 
+- Old scripts for building packages (release_utils).
+
+### Fixed
+
+- Flipped order in coefficients of CFIR and RFIRs.
+- Inappropriate type hint in `read_counter()`.
+
+## Older
+
+You can see logs for older changes in ./UPDATE.md
