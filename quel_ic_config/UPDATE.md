@@ -1,5 +1,8 @@
 # 更新リスト
 
+## v0.8.15 (Public Release)
+- ADCのNCOのFTW設定の不具合を修正。
+
 ## v0.8.14 (Public Release)
 - quel1_parallel_linkupにignore_crc_error_of_mxfe等のオプションを追加。
 - Matplotlibのバックエンドの明示的な指定を排除。
