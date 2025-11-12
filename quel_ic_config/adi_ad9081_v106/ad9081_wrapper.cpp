@@ -626,25 +626,25 @@ PYBIND11_MODULE(adi_ad9081_v106, m) {
   m.def("adc_ddc_coarse_nco_ftw_set", [](adi_ad9081_device_t *device,
                                          uint8_t cddcs, nco_ftw_t *nco_ftw) {
     return adi_ad9081_adc_ddc_coarse_nco_ftw_set(
-        device, cddcs, nco_ftw->ftw, nco_ftw->modulus_a, nco_ftw->delta_b);
+        device, cddcs, nco_ftw->ftw, nco_ftw->delta_b, nco_ftw->modulus_a);
   });
   m.def("adc_ddc_coarse_nco_ftw_get",
         [](adi_ad9081_device_t *device, uint8_t cddc, nco_ftw_t *nco_ftw) {
           return adi_ad9081_adc_ddc_coarse_nco_ftw_get(
-              device, cddc, &(nco_ftw->ftw), &(nco_ftw->modulus_a),
-              &(nco_ftw->delta_b));
+              device, cddc, &(nco_ftw->ftw), &(nco_ftw->delta_b),
+              &(nco_ftw->modulus_a));
         });
   m.def("adc_ddc_fine_nco_mode_set", &adi_ad9081_adc_ddc_fine_nco_mode_set);
   m.def("adc_ddc_fine_nco_ftw_set", [](adi_ad9081_device_t *device,
                                        uint8_t fddcs, nco_ftw_t *nco_ftw) {
     return adi_ad9081_adc_ddc_fine_nco_ftw_set(
-        device, fddcs, nco_ftw->ftw, nco_ftw->modulus_a, nco_ftw->delta_b);
+        device, fddcs, nco_ftw->ftw, nco_ftw->delta_b, nco_ftw->modulus_a);
   });
   m.def("adc_ddc_fine_nco_ftw_get",
         [](adi_ad9081_device_t *device, uint8_t fddc, nco_ftw_t *nco_ftw) {
           return adi_ad9081_adc_ddc_fine_nco_ftw_get(
-              device, fddc, &(nco_ftw->ftw), &(nco_ftw->modulus_a),
-              &(nco_ftw->delta_b));
+              device, fddc, &(nco_ftw->ftw), &(nco_ftw->delta_b),
+              &(nco_ftw->modulus_a));
         });
   m.def("adc_ddc_coarse_select_set", &adi_ad9081_adc_ddc_coarse_select_set);
   m.def("adc_ddc_fine_select_set", &adi_ad9081_adc_ddc_fine_select_set);
