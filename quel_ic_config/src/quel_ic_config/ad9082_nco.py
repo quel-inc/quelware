@@ -16,13 +16,14 @@ class AbstractNcoFtw(BaseModel):
     enable_fraction: bool = Field(default=True)
 
     @model_validator(mode="after")
-    def check_numerator(self):
+    def check_numerator(self) -> Self:
         if self.enable_fraction:
             if self.delta_b >= self.modulus_a:
                 raise ValueError("improper fraction is not allowed")
         else:
             if not (self.delta_b == 0 and self.modulus_a == 1):
                 raise ValueError("delta_b and modulus_a must be 0 and 1 when fractional mode is disabled")
+        return self
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AbstractNcoFtw):
