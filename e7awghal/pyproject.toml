@@ -14,7 +14,7 @@ classifiers = [
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
-    "numpy >= 1.26.0, < 2.0",
+    "numpy >= 1.26.0, < 3.0",
     "scipy >= 1.13.1",
     "pydantic >= 2.0",
 ]

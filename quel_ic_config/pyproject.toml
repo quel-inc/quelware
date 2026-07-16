@@ -14,7 +14,7 @@ classifiers = [
 license = {file = "LICENSE"}
 dependencies = [
     "packaging >= 23.2",
-    "numpy >= 1.26.0, < 2.0",
+    "numpy >= 1.26.0, < 3.0",
     "pydantic >= 2.0",
     "pyyaml >= 6.0.1",
     "aiocoap >= 0.4.7",
