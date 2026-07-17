@@ -48,7 +48,7 @@ bits_to_check = {
 
 
 @pytest.mark.parametrize(
-    "idx,",
+    "idx",
     [reg for reg in Lmx2594Regs],
 )
 def test_bitfield(idx: int):

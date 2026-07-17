@@ -80,7 +80,7 @@ bits_to_check_qube_grouped = {
 
 
 @pytest.mark.parametrize(
-    "idx,",
+    "idx",
     [reg for reg in Quel1TypeARfSwitchRegs],
 )
 def test_bitfield_quel1_a(idx: int):
@@ -99,7 +99,7 @@ def test_bitfield_quel1_a(idx: int):
 
 
 @pytest.mark.parametrize(
-    "idx,",
+    "idx",
     [reg for reg in Quel1TypeBRfSwitchRegs],
 )
 def test_bitfield_quel1_b(idx: int):
@@ -118,7 +118,7 @@ def test_bitfield_quel1_b(idx: int):
 
 
 @pytest.mark.parametrize(
-    "idx,",
+    "idx",
     [reg for reg in QubeRfSwitchRegs],
 )
 def test_bitfield_qube(idx: int):
