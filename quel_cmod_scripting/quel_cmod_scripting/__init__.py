@@ -5,6 +5,6 @@ from quel_cmod_scripting.quel1_cmod import (
     SwitchControlCmod,
 )
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 
 __all__ = ["QuelCmod", "FanControlCmod", "SwitchControlCmod", "QuelCmodAbstract"]
